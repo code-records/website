@@ -1,0 +1,22 @@
+{
+  "title": {
+    "message": "dev",
+    "description": "The title in the navbar"
+  },
+  "logo.alt": {
+    "message": "dev Logo",
+    "description": "The alt text of navbar logo"
+  },
+  "item.label.用户指南": {
+    "message": "用户指南",
+    "description": "Navbar item with label 用户指南"
+  },
+  "item.label.生图画廊": {
+    "message": "生图画廊",
+    "description": "Navbar item with label 生图画廊"
+  },
+  "item.label.主站": {
+    "message": "主站",
+    "description": "Navbar item with label 主站"
+  }
+}

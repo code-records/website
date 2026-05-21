@@ -1,0 +1,260 @@
+/* ========================================
+   Preview Panel — Docusaurus-style Markdown Rendering
+   Replicates Infima's typography for WYSIWYG preview
+   ======================================== */
+
+.markdown-body {
+    --ifm-font-family-base: system-ui, -apple-system, "Segoe UI", Roboto, Ubuntu,
+        Cantarell, "Noto Sans", sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
+    --ifm-font-family-monospace: SFMono-Regular, Menlo, Monaco, Consolas,
+        "Liberation Mono", "Courier New", monospace;
+    --ifm-color-primary: #FF5033;
+    --ifm-leading: 1.25rem;
+    --ifm-code-background: #f6f7f8;
+    --ifm-code-border-radius: 0.4rem;
+    --ifm-pre-background: #282c34;
+    --ifm-table-border-color: #dadde1;
+    --ifm-blockquote-border-color: #dadde1;
+
+    font-family: var(--ifm-font-family-base);
+    font-size: 16px;
+    line-height: 1.65;
+    color: #1c1e21;
+    word-wrap: break-word;
+}
+
+/* Clearfix */
+.markdown-body::before,
+.markdown-body::after {
+    content: "";
+    display: table;
+}
+.markdown-body::after {
+    clear: both;
+}
+
+/* Headings */
+.markdown-body h1,
+.markdown-body h2,
+.markdown-body h3,
+.markdown-body h4,
+.markdown-body h5,
+.markdown-body h6 {
+    color: #1c1e21;
+    font-weight: 700;
+    line-height: 1.25;
+    margin-top: 0;
+    margin-bottom: 1rem;
+}
+
+.markdown-body h1 {
+    font-size: 2rem;
+    margin-bottom: calc(1.25 * var(--ifm-leading));
+}
+
+.markdown-body h1:first-child {
+    font-size: 2.5rem;
+}
+
+.markdown-body h2 {
+    font-size: 1.5rem;
+    margin-top: calc(2 * var(--ifm-leading));
+    padding-bottom: 0.3rem;
+    border-bottom: 1px solid #eaecef;
+}
+
+.markdown-body h3 {
+    font-size: 1.25rem;
+    margin-top: calc(1.5 * var(--ifm-leading));
+}
+
+.markdown-body h4 {
+    font-size: 1rem;
+    margin-top: calc(1.25 * var(--ifm-leading));
+}
+
+.markdown-body h5 { font-size: 0.875rem; }
+.markdown-body h6 { font-size: 0.85rem; color: #606770; }
+
+/* Paragraphs & content */
+.markdown-body p {
+    margin: 0 0 var(--ifm-leading);
+}
+
+.markdown-body > *:last-child {
+    margin-bottom: 0 !important;
+}
+
+/* Links */
+.markdown-body a {
+    color: var(--ifm-color-primary);
+    text-decoration: none;
+    transition: color 0.2s;
+}
+.markdown-body a:hover {
+    color: #E6482E;
+    text-decoration: underline;
+}
+
+/* Strong & Emphasis */
+.markdown-body strong { font-weight: 700; }
+.markdown-body em { font-style: italic; }
+
+/* Images */
+.markdown-body img {
+    max-width: 100%;
+    height: auto;
+    border-radius: 4px;
+    margin: 0.5rem 0;
+}
+
+/* Lists */
+.markdown-body ul,
+.markdown-body ol {
+    padding-left: 2rem;
+    margin: 0 0 var(--ifm-leading);
+}
+.markdown-body li {
+    word-wrap: break-word;
+}
+.markdown-body li + li {
+    margin-top: 0.25rem;
+}
+.markdown-body li > p {
+    margin-top: 1rem;
+}
+.markdown-body ul ul,
+.markdown-body ul ol,
+.markdown-body ol ul,
+.markdown-body ol ol {
+    margin-top: 0.25rem;
+    margin-bottom: 0;
+}
+
+/* Inline code */
+.markdown-body code {
+    background-color: var(--ifm-code-background);
+    border: 0.1rem solid rgba(0, 0, 0, 0.08);
+    border-radius: var(--ifm-code-border-radius);
+    font-family: var(--ifm-font-family-monospace);
+    font-size: 90%;
+    padding: 0.1rem 0.4rem;
+    vertical-align: middle;
+}
+
+/* Code blocks */
+.markdown-body pre {
+    background-color: var(--ifm-pre-background);
+    border-radius: var(--ifm-code-border-radius);
+    color: #abb2bf;
+    font-family: var(--ifm-font-family-monospace);
+    font-size: 90%;
+    line-height: 1.5;
+    margin: 0 0 var(--ifm-leading);
+    overflow: auto;
+    padding: 1rem 1.2rem;
+}
+.markdown-body pre code {
+    background-color: transparent;
+    border: none;
+    font-size: 100%;
+    line-height: inherit;
+    padding: 0;
+    color: inherit;
+}
+
+/* Blockquotes */
+.markdown-body blockquote {
+    border-left: 4px solid var(--ifm-blockquote-border-color);
+    margin: 0 0 var(--ifm-leading);
+    padding: 0.5rem 1rem;
+    color: #606770;
+    background: #f9fafb;
+    border-radius: 0 var(--ifm-code-border-radius) var(--ifm-code-border-radius) 0;
+}
+.markdown-body blockquote > :last-child {
+    margin-bottom: 0;
+}
+.markdown-body blockquote > :first-child {
+    margin-top: 0;
+}
+
+/* Horizontal rules */
+.markdown-body hr {
+    border: 0;
+    border-top: 1px solid #eaecef;
+    margin: 2rem 0;
+}
+
+/* Tables */
+.markdown-body table {
+    border-collapse: collapse;
+    display: block;
+    margin-bottom: var(--ifm-leading);
+    overflow: auto;
+    width: max-content;
+    max-width: 100%;
+}
+.markdown-body table thead tr {
+    border-bottom: 2px solid var(--ifm-table-border-color);
+}
+.markdown-body table tr {
+    background-color: #fff;
+    border-top: 1px solid var(--ifm-table-border-color);
+}
+.markdown-body table tr:nth-child(2n) {
+    background-color: #f6f8fa;
+}
+.markdown-body table th,
+.markdown-body table td {
+    border: 1px solid var(--ifm-table-border-color);
+    padding: 0.75rem;
+}
+.markdown-body table th {
+    background-color: #f6f8fa;
+    font-weight: 600;
+}
+
+/* Details/Summary */
+.markdown-body details {
+    border: 1px solid #eaecef;
+    border-radius: var(--ifm-code-border-radius);
+    padding: 0 1rem;
+    margin-bottom: var(--ifm-leading);
+}
+.markdown-body details summary {
+    font-weight: 600;
+    padding: 0.75rem 0;
+    cursor: pointer;
+    user-select: none;
+}
+.markdown-body details[open] summary {
+    margin-bottom: 0.5rem;
+    border-bottom: 1px solid #eaecef;
+    padding-bottom: 0.75rem;
+}
+
+/* KBD */
+.markdown-body kbd {
+    background-color: #fff;
+    border: 1px solid #ccd0d5;
+    border-radius: 0.2rem;
+    box-shadow: inset 0 -1px 0 #ccd0d5;
+    color: #444950;
+    font-family: var(--ifm-font-family-monospace);
+    font-size: 80%;
+    padding: 0.15rem 0.4rem;
+}
+
+/* Admonitions (Docusaurus-style) */
+.markdown-body .admonition {
+    margin-bottom: var(--ifm-leading);
+    border-radius: var(--ifm-code-border-radius);
+    padding: 1rem 1.2rem;
+    border-left: 5px solid;
+}
+.markdown-body .admonition-note { border-color: #606770; background: #f5f6f7; }
+.markdown-body .admonition-tip { border-color: #00a400; background: #e6f6e6; }
+.markdown-body .admonition-info { border-color: #54c7ec; background: #edf9fd; }
+.markdown-body .admonition-warning { border-color: #ffba00; background: #fff8e6; }
+.markdown-body .admonition-danger { border-color: #fa383e; background: #ffebec; }

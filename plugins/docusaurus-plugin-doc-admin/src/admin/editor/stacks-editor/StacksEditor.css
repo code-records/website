@@ -1,0 +1,214 @@
+/* ========================================
+   StacksEditor 组件样式
+   用于覆盖 @stackoverflow/stacks-editor 库的默认样式
+   ======================================== */
+
+.stacks-editor-container {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    width: 100%;
+    background: #fff;
+}
+
+/* 工具栏阴影效果 - 使用伪元素实现 */
+.stacks-editor-container .js-editor-menu::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: -62px;
+    height: 62px;
+    background: radial-gradient(50% 50% at 50% 45%, rgba(0, 0, 0, 0.15) -200%, transparent 115%);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.1s;
+}
+
+/* 滚动时显示阴影 */
+.stacks-editor-container .js-editor-menu.is-stuck::after {
+    opacity: 1;
+}
+
+/* 隐藏编辑器顶部的问号 (帮助) 按钮 */
+.stacks-editor-container .js-help-link {
+    display: none !important;
+}
+
+/* The resizable wrapper */
+.stacks-editor-container .s-editor-resizable {
+    flex: 1 !important;
+    height: 100% !important;
+    display: flex !important;
+    flex-direction: column !important;
+}
+
+.stacks-editor-container .s-editor-resizable-content {
+    flex: 1 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    height: 100% !important;
+}
+
+.stacks-editor-container .js-stacks-editor-container {
+    flex: 1 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    height: 100% !important;
+}
+
+/* The textarea/content area - 统一滚动条 */
+.stacks-editor-container .s-textarea,
+.stacks-editor-container .js-editor {
+    flex: 1 !important;
+    height: 100% !important;
+    max-height: 100% !important;
+    max-width: none !important;
+    width: 100% !important;
+    border: none !important;
+    border-radius: 0 !important;
+    resize: none !important;
+    overflow-y: auto !important;
+    /* 父容器统一滚动 */
+    overflow-x: hidden !important;
+    display: block !important;
+}
+
+/* Remove max-width constraints on the content area */
+.stacks-editor-container .ProseMirror {
+    max-width: none !important;
+    width: 100% !important;
+    min-height: calc(100% - 48px) !important;
+    /* 至少填满容器 */
+    height: auto !important;
+    overflow: visible !important;
+    /* 内容区不滚动，由父容器滚动 */
+    padding: 16px;
+    background: #fff !important;
+}
+
+/* 移除 Markdown 模式下 pre/code 的多余 padding */
+.stacks-editor-container .ProseMirror>code,
+.stacks-editor-container .ProseMirror>pre {
+    background-color: inherit;
+    border-radius: 0;
+    margin: 0;
+    max-height: unset;
+    padding: 0;
+    width: auto;
+    word-wrap: break-word;
+    white-space: pre-wrap;
+}
+
+/* Make the code block fill the entire editor height */
+/* so clicking anywhere in the editor area focuses the input */
+/* 强制所有代码相关元素使用白色背景 */
+.stacks-editor-container .ProseMirror .s-code-block.markdown,
+.stacks-editor-container .ProseMirror pre.s-code-block,
+.stacks-editor-container .ProseMirror pre,
+.stacks-editor-container .ProseMirror code,
+.stacks-editor-container pre,
+.stacks-editor-container code,
+.stacks-editor-container textarea {
+    min-height: 100% !important;
+    height: auto !important;
+    margin: 0 !important;
+    background: #fff !important;
+    background-color: #fff !important;
+    border: none !important;
+}
+
+/* 覆盖 StacksEditor 的 CSS 变量和 highlight 背景 */
+.stacks-editor-container,
+.stacks-editor-container * {
+    --highlight-bg: #fff !important;
+    --_cb-line-numbers-bg: #fff !important;
+}
+
+/* 覆盖 Markdown 模式下的代码块样式 */
+.stacks-editor-container .js-editor pre,
+.stacks-editor-container .js-editor code,
+.stacks-editor-container .js-editor .ProseMirror-widget,
+.admin .stacks-editor-container pre,
+.admin .stacks-editor-container code,
+.admin .stacks-editor-container .js-editor {
+    background: #fff !important;
+    background-color: #fff !important;
+}
+
+.stacks-editor-container .s-editor-preview {
+    max-width: none !important;
+    width: 100% !important;
+    flex: 1 !important;
+    height: 100% !important;
+}
+
+/* ========================================
+   工具栏排序控件样式
+   ======================================== */
+
+/* 包裹容器 - 放在工具栏 right side */
+.toolbar-sort-wrapper {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    padding-right: 8px;
+}
+
+.toolbar-sort-control {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 2px 6px;
+    background: #f3f4f6;
+    border-radius: 6px;
+    border: 1px solid #e5e7eb;
+    transition: all 0.2s;
+}
+
+.toolbar-sort-control:hover {
+    border-color: #d1d5db;
+    background: #e5e7eb;
+}
+
+.toolbar-sort-control .codicon {
+    font-size: 14px !important;
+    color: #4b5563;
+}
+
+.toolbar-sort-input {
+    width: 32px;
+    padding: 0;
+    border: none;
+    background: transparent;
+    font-size: 13px;
+    font-weight: 600;
+    color: #111827;
+    text-align: center;
+    outline: none;
+    font-family: inherit;
+}
+
+.toolbar-sort-input::placeholder {
+    color: #9ca3af;
+    font-weight: 400;
+}
+
+/* 暗色模式 */
+@media (prefers-color-scheme: dark) {
+    .toolbar-sort-label {
+        color: #9ca3af;
+    }
+
+    .toolbar-sort-input {
+        background: #374151;
+        border-color: #4b5563;
+        color: #e5e7eb;
+    }
+
+    .toolbar-sort-input:focus {
+        border-color: #60a5fa;
+        box-shadow: 0 0 0 2px rgba(96, 165, 250, 0.2);
+    }
+}

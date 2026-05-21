@@ -1,0 +1,118 @@
+/* Admin CSS — Minimal residual styles (non-Tailwind) */
+
+:root {
+    --admin-primary-color: #FF5033;
+    --admin-primary-rgb: 255, 80, 51;
+    --admin-primary-dark: #E6452B;
+    --admin-primary-light: #FFF2F0;
+    --admin-border-color: #e0e2e5;
+}
+
+/* Keyframe Animations */
+@keyframes badge-pulse {
+    0% { transform: scale(0.8); opacity: 0.5; }
+    100% { transform: scale(2.4); opacity: 0; }
+}
+@keyframes toast-in {
+    from { transform: translateY(-20px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+}
+@keyframes toast-out {
+    to { transform: translateY(-20px); opacity: 0; }
+}
+@keyframes floating {
+    0% { transform: translate(0, 0) scale(1); }
+    33% { transform: translate(30px, 50px) scale(1.1); }
+    66% { transform: translate(-20px, 30px) scale(0.9); }
+    100% { transform: translate(0, 0) scale(1); }
+}
+@keyframes preview-pulse {
+    0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(var(--admin-primary-rgb), 0.7); }
+    70% { transform: scale(1); box-shadow: 0 0 0 6px rgba(var(--admin-primary-rgb), 0); }
+    100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(var(--admin-primary-rgb), 0); }
+}
+@keyframes rotate-spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+@keyframes flash-hint {
+    0%, 100% { opacity: 0.8; }
+    50% { opacity: 1; transform: scale(1.02); }
+}
+@keyframes fadeIn {
+    from { opacity: 0; transform: scale(0.98); }
+    to { opacity: 1; transform: scale(1); }
+}
+@keyframes modalIn {
+    from { opacity: 0; transform: translateY(-20px) scale(0.95); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* Global admin icon sizing */
+.admin .codicon { font-size: 18px !important; }
+
+/* Badge processing pulse */
+.badge-processing::after {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; width: 100%; height: 100%;
+    border-radius: 50%;
+    border: 1px solid #1890ff;
+    animation: badge-pulse 1.2s infinite ease-in-out;
+}
+
+/* Number input spinner removal */
+.no-spinner::-webkit-outer-spin-button,
+.no-spinner::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    appearance: none;
+    margin: 0;
+}
+.no-spinner[type=number] {
+    -moz-appearance: textfield;
+    appearance: textfield;
+}
+
+/* Monaco Editor */
+.invisible { visibility: hidden !important; }
+
+/* Resizer drag mask */
+.resizer-dragging .resizer-panel::after {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    z-index: 100;
+}
+.resizer-dragging .resizer-panel {
+    position: relative;
+    pointer-events: none;
+}
+
+/* FileTree drop indicators */
+.tree-node::after {
+    content: '';
+    position: absolute;
+    left: -1px; right: -1px;
+    height: 2px;
+    background-color: transparent;
+    pointer-events: none;
+    z-index: 10;
+}
+.tree-node.drop-top::after {
+    top: -1px;
+    background-color: var(--admin-primary-color);
+}
+.tree-node.drop-bottom::after {
+    bottom: -1px;
+    background-color: var(--admin-primary-color);
+}
+.tree-node.drop-middle {
+    background-color: rgba(24, 144, 255, 0.1) !important;
+    outline: 2px solid var(--admin-primary-color);
+    outline-offset: -1px;
+}
+
+/* FileTree drag cursor */
+.dragging-active .tree-node * { pointer-events: none !important; }
+.dragging-active,
+.dragging-active .tree-node { cursor: move !important; }

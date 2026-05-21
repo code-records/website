@@ -1,0 +1,31 @@
+{
+  "name": "docusaurus-plugin-doc-admin",
+  "version": "0.0.0",
+  "private": true,
+  "main": "src/index.ts",
+  "dependencies": {
+    "@mdx-js/mdx": "^3.1.1",
+    "@monaco-editor/react": "^4.7.0",
+    "@stackoverflow/stacks-editor": "^0.15.3",
+    "@tailwindcss/postcss": "^4.2.4",
+    "@vscode/codicons": "^0.0.44",
+    "axios": "^1.7.0",
+    "cos-js-sdk-v5": "^1.10.1",
+    "hast-util-to-jsx-runtime": "^2.3.6",
+    "monaco-editor": "^0.55.1",
+    "postcss": "^8.5.12",
+    "prettier": "^3.7.4",
+    "react-dom": "^19.0.0",
+    "remark-directive": "^3.0.1",
+    "remark-frontmatter": "^5.0.0",
+    "remark-gfm": "^4.0.1",
+    "remark-math": "^6.0.0",
+    "tailwindcss": "^4.2.4",
+    "unist-util-visit": "^5.0.0"
+  },
+  "peerDependencies": {
+    "@docusaurus/core": "^3.10.1",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  }
+}

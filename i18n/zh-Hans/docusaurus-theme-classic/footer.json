@@ -1,0 +1,38 @@
+{
+  "link.title.文档": {
+    "message": "文档",
+    "description": "The title of the footer links column with title=文档 in the footer"
+  },
+  "link.title.开源项目": {
+    "message": "开源项目",
+    "description": "The title of the footer links column with title=开源项目 in the footer"
+  },
+  "link.title.更多": {
+    "message": "更多",
+    "description": "The title of the footer links column with title=更多 in the footer"
+  },
+  "link.item.label.用户指南": {
+    "message": "用户指南",
+    "description": "The label of footer link with label=用户指南 linking to /docs/"
+  },
+  "link.item.label.联系我们": {
+    "message": "联系我们",
+    "description": "The label of footer link with label=联系我们 linking to /docs/sub2api-user/connect"
+  },
+  "link.item.label.独立生图（GitHub）": {
+    "message": "独立生图（GitHub）",
+    "description": "The label of footer link with label=独立生图（GitHub） linking to https://github.com/aicoding/"
+  },
+  "link.item.label.主站": {
+    "message": "主站",
+    "description": "The label of footer link with label=主站 linking to https://aicoding.xxx.com"
+  },
+  "link.item.label.自建生图站": {
+    "message": "自建生图站",
+    "description": "The label of footer link with label=自建生图站 linking to https://aicoding.xxx.com/"
+  },
+  "copyright": {
+    "message": "Copyright © 2026 dev.",
+    "description": "The footer copyright"
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "name": "docusaurus-plugin-doc-agent",
+  "version": "0.0.0",
+  "private": true,
+  "main": "src/index.ts",
+  "dependencies": {
+    "@a2ui/markdown-it": "^0.0.3",
+    "@a2ui/react": "^0.9.1",
+    "@a2ui/web_core": "^0.9.2",
+    "@tailwindcss/postcss": "^4.2.4",
+    "hast-util-to-jsx-runtime": "^2.3.6",
+    "postcss": "^8.5.12",
+    "remark-gfm": "^4.0.1",
+    "remark-parse": "^11.0.0",
+    "remark-rehype": "^11.1.2",
+    "tailwindcss": "^4.2.4",
+    "unified": "^11.0.5"
+  },
+  "peerDependencies": {
+    "@docusaurus/core": "^3.10.1",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "scripts": {
+    "build:agent": "npx --yes rollup src/agent/index.ts --file dist/agent.umd.js --format umd --name AgentCore --sourcemap --plugin \"node-resolve={browser:true,preferBuiltins:false}\" --plugin commonjs --plugin typescript"
+  }
+}
