@@ -1,4 +1,4 @@
-﻿import * as path from 'node:path';
+import * as path from 'node:path';
 import type { PluginModule } from '@docusaurus/types';
 import type WebpackDevServer from 'webpack-dev-server';
 
@@ -28,9 +28,8 @@ const proxy: DevServerProxy = [
       '^/agent-tools-github': '',
     },
     headers: {
-      Authorization: 'Bearer xxx',
-      'X-GitHub-Api-Version': '2022-11-28',
-      'User-Agent': 'docusaurus-plugin-doc-agent',
+      Authorization: 'Bearer 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',
+      // 'User-Agent': 'docusaurus-plugin-doc-agent',
     },
   },
   {
@@ -57,7 +56,7 @@ const proxy: DevServerProxy = [
 ];
 
 /**
- * 接口代理插件：由代理持有令牌，避免前端暴露密钥。
+ * �ӿڴ���������ɴ����������ƣ�����ǰ�˱�¶��Կ��
  */
 export const devProxyPlugin: PluginModule = (_context, _options) => {
   return {

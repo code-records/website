@@ -102,10 +102,10 @@ const config: Config = {
           },
         ],
         prompt: i18n.docAgent.prompt,
-        gitee: {
-          owner: 'xxx',
-          repo: 'xxx',
-          ref: 'xxx',
+        github: {
+          owner: 'godgege',
+          repo: 'code-records',
+          ref: 'main',
         },
       },
     ],
