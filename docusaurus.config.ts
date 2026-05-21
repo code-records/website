@@ -103,8 +103,8 @@ const config: Config = {
         ],
         prompt: i18n.docAgent.prompt,
         github: {
-          owner: 'godgege',
-          repo: 'code-records',
+          owner: 'code-records',
+          repo: 'website',
           ref: 'main',
         },
       },

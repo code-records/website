@@ -28,8 +28,9 @@ const proxy: DevServerProxy = [
       '^/agent-tools-github': '',
     },
     headers: {
-      Authorization: 'Bearer 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',
-      // 'User-Agent': 'docusaurus-plugin-doc-agent',
+      Authorization: 'Bearer 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',
+      'X-GitHub-Api-Version': '2022-11-28',
+      'User-Agent': 'code-records-website-doc-agent/1.0 (+https://github.com/code-records/website)',
     },
   },
   {

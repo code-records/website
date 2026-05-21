@@ -12,12 +12,11 @@ function getShortPath(url?: string) {
     return url?.replace(/^\/[^/]+\//, '') || '';
 }
 
-function resolveDocFilePath(url: string): string | null {
+function resolveDocFilePathCandidates(url: string): string[] {
     const normalized = url?.replace(/\/+$/, '').replace(/^\//, '') || '';
-    if (!normalized) return null;
-    return `${normalized}.md`;
-    // const normalizedUrl = url.replace(/\/+$/, '');
-    // return urlMap[normalizedUrl]?.replace(/^\/+/, '') || null;
+    if (!normalized) return [];
+    if (/\.(md|mdx)$/i.test(normalized)) return [normalized];
+    return [`${normalized}.md`, `${normalized}.mdx`];
 }
 
 async function readDocFile(filePath: string): Promise<string | null> {
@@ -28,13 +27,15 @@ async function readDocFile(filePath: string): Promise<string | null> {
 }
 
 export async function readDocByUrl(url: string) {
-    const filePath = resolveDocFilePath(url);
-    if (!filePath) return { filePath: null, content: null };
+    const filePaths = resolveDocFilePathCandidates(url);
+    if (filePaths.length === 0) return { filePath: null, content: null };
 
-    return {
-        filePath,
-        content: await readDocFile(filePath),
-    };
+    for (const filePath of filePaths) {
+        const content = await readDocFile(filePath);
+        if (content) return { filePath, content };
+    }
+
+    return { filePath: filePaths[0], content: null };
 }
 
 class ReadDocTool extends Tool {
@@ -60,9 +61,9 @@ class ReadDocTool extends Tool {
             };
         }
 
-        let filePath: string | null;
+        let filePaths: string[];
         try {
-            filePath = resolveDocFilePath(url);
+            filePaths = resolveDocFilePathCandidates(url);
         } catch (error) {
             const message = errorMessage(error);
             logger('tool.read_doc.error', { url, error: message });
@@ -72,7 +73,7 @@ class ReadDocTool extends Tool {
             };
         }
 
-        if (!filePath) {
+        if (filePaths.length === 0) {
             logger('tool.read_doc.not_found', { url });
             return {
                 result: `未找到文档: ${url}`,
@@ -80,14 +81,23 @@ class ReadDocTool extends Tool {
             };
         }
 
-        logger('tool.read_doc.start', { url, filePath });
+        logger('tool.read_doc.start', { url, filePaths });
 
         let content: string | null;
+        let filePath: string | null = null;
         try {
-            content = await readDocFile(filePath);
+            content = null;
+            for (const candidate of filePaths) {
+                const candidateContent = await readDocFile(candidate);
+                if (candidateContent) {
+                    filePath = candidate;
+                    content = candidateContent;
+                    break;
+                }
+            }
         } catch (error) {
             const message = errorMessage(error);
-            logger('tool.read_doc.error', { url, filePath, error: message });
+            logger('tool.read_doc.error', { url, filePaths, error: message });
             return {
                 result: `读取文档失败: ${url}\n\n${message}`,
                 events: [{ type: 'read_doc', data: { status: 'error', url, error: message } }],
@@ -95,7 +105,7 @@ class ReadDocTool extends Tool {
         }
 
         if (!content) {
-            logger('tool.read_doc.not_found', { url, filePath });
+            logger('tool.read_doc.not_found', { url, filePaths });
             return {
                 result: `未找到文档: ${url}`,
                 events: [{ type: 'read_doc', data: { status: 'not_found', url } }],
