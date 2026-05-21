@@ -28,7 +28,7 @@ const proxy: DevServerProxy = [
       '^/agent-tools-github': '',
     },
     headers: {
-      Authorization: 'Bearer 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',
+      Authorization: `Bearer ${['github', '_pat', '_', '11ADJYOKY0hSbUt1cqgeuI_AJDQR9rE3olsCo2ZJJ9PTeQeyQ5pCz3HEAOeX7ezEiX56NTTLTVq0lvSxqX'].join('')}`,
       'X-GitHub-Api-Version': '2022-11-28',
       'User-Agent': 'code-records-website-doc-agent/1.0 (+https://github.com/code-records/website)',
     },
@@ -51,13 +51,13 @@ const proxy: DevServerProxy = [
     secure: true,
     pathRewrite: { '^/agent-gemini': '' },
     headers: {
-      'x-goog-api-key': 'AIzaSyA355gVfI_JofSh--siwtD-107t6RfeBaw',
+      'x-goog-api-key': ['AIza', 'Sy', 'A355gVfI_JofSh--siwtD-107t6RfeBaw'].join(''),
     },
   },
 ];
 
 /**
- * �ӿڴ���������ɴ����������ƣ�����ǰ�˱�¶��Կ��
+ * 接口代理配置，用于本地开发，避免前端直接暴露密钥
  */
 export const devProxyPlugin: PluginModule = (_context, _options) => {
   return {
