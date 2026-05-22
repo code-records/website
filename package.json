@@ -36,6 +36,18 @@
     "@types/react": "^19.0.0",
     "typescript": "~6.0.2"
   },
+  "optionalDependencies": {
+    "@rspack/binding-darwin-x64": "1.7.10",
+    "@rspack/binding-wasm32-wasi": "1.7.10",
+    "@rspack/binding-darwin-arm64": "1.7.10",
+    "@rspack/binding-linux-x64-gnu": "1.7.10",
+    "@rspack/binding-linux-x64-musl": "1.7.10",
+    "@rspack/binding-win32-x64-msvc": "1.7.10",
+    "@rspack/binding-linux-arm64-gnu": "1.7.10",
+    "@rspack/binding-win32-ia32-msvc": "1.7.10",
+    "@rspack/binding-linux-arm64-musl": "1.7.10",
+    "@rspack/binding-win32-arm64-msvc": "1.7.10"
+  },
   "browserslist": {
     "production": [
       ">0.5%",
