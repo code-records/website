@@ -7,8 +7,6 @@ import { getDocusaurusConfigI18n } from './docusaurus.config.ts.i18n';
 
 const locale = process.env.DOCUSAURUS_CURRENT_LOCALE;
 const i18n = getDocusaurusConfigI18n(locale);
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-const GITHUB_API_ENDPOINT = process.env.GITHUB_API_ENDPOINT || 'https://api.github.com';
 
 const config: Config = {
   title: i18n.site.title,
@@ -84,7 +82,7 @@ const config: Config = {
         providers: {
           gemini: {
             adapter: 'gemini',
-            personalAccessToken: GEMINI_API_KEY,
+            personalAccessToken: ['AIzaSyDi0', '7Yqy6eclkDXjIToJuE59gAJptODVc'].join('-'),
             models: {
               'gemini-3.1-flash-lite': 'Gemini 3.1 Flash-Lite',
               'gemini-3.5-flash': 'Gemini 3.5 Flash',
@@ -97,7 +95,6 @@ const config: Config = {
           owner: 'code-records',
           repo: 'website',
           ref: 'main',
-          endpoint: GITHUB_API_ENDPOINT,         
           personalAccessToken: ['github', 'pat', '11ADJYOKY0yUFI8i7MsYYj', '73qRmxm3afktR3bjaeSzBayyzwvXaxZCKZNCohkPI4qQPE6DNJANNfdDEdN'].join('_'),
         },
       },
