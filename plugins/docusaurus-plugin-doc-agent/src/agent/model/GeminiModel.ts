@@ -49,17 +49,17 @@ export class GeminiModel extends Model {
 
                 for (const partValue of candidateContent.parts) {
                     const part = requireJsonObject(partValue, 'Gemini content part');
+                    parts.push(part);
+
                     const text = optionalString(part.text);
                     if (text.length > 0) {
                         content += text;
-                        parts.push({ text });
                         yield { type: 'content_delta', content: text };
                     }
 
                     if (part.functionCall !== undefined) {
                         const functionCall = requireJsonObject(part.functionCall, 'Gemini function call');
                         const call = this.createToolCall(functionCall, toolCalls.length);
-                        parts.push({ functionCall });
                         toolCalls.push(call);
                         this.toolNamesById.set(call.id, call.name);
                         yield { type: 'tool_call_start', callId: call.id, name: call.name };
@@ -232,16 +232,16 @@ export class GeminiModel extends Model {
 
             for (const partValue of candidateContent.parts) {
                 const part = requireJsonObject(partValue, 'Gemini content part');
+                parts.push(part);
+
                 const text = optionalString(part.text);
                 if (text.length > 0) {
                     content += text;
-                    parts.push({ text });
                 }
 
                 if (part.functionCall !== undefined) {
                     const functionCall = requireJsonObject(part.functionCall, 'Gemini function call');
                     const call = this.createToolCall(functionCall, toolCalls.length);
-                    parts.push({ functionCall });
                     toolCalls.push(call);
                     this.toolNamesById.set(call.id, call.name);
                 }

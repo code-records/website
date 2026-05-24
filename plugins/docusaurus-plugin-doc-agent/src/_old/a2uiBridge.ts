@@ -37,7 +37,7 @@ function createEnabledBridge(options: BridgeOptions): A2UIBridge {
         A2UISurface: SurfaceComp,
         getA2UIPromptText,
         toA2UIMessageList,
-    } = require('../../../ai/a2ui/index.js');
+    } = require('../../ai/a2ui/index.js');
 
     const promptText: string = getA2UIPromptText();
 

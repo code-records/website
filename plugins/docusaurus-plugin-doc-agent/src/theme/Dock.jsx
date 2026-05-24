@@ -1,7 +1,7 @@
 import React from 'react';
 import BrowserOnly from '@docusaurus/BrowserOnly';
 
-export default function DockRoot({ children }) {
+export default function Dock({ children }) {
   return (
     <>
       {children}
