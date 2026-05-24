@@ -2,7 +2,7 @@ import { Agent, ClaudeModel, GeminiModel, OpenAIModel, type Model, type ModelMes
 import { DOC_AGENT_TOOLS } from './tools/index';
 import { readDocByUrl } from './tools/ReadDocTool';
 import type { MessageJSON } from '../../agent';
-import type { DocAgentModelOption as ModelOption } from '../../index';
+import type { DocAgentModelSelection, DocAgentPluginOptions, DocAgentProviders } from '../../index';
 
 const SUGGEST_SURFACE_ID = 'message-docs-suggestions';
 const SUGGESTIONS_DELETE_MESSAGE = {
@@ -11,6 +11,7 @@ const SUGGESTIONS_DELETE_MESSAGE = {
 };
 
 let docAgentSitePrompt: string | undefined;
+let docAgentProviders: DocAgentProviders = {};
 
 export const DOC_AGENT_EXECUTION_PROMPT = `文档仓库根目录为 {{docsRoot}}，所有文档 URL 以 /{{docsRoot}}/ 开头。
 
@@ -85,10 +86,7 @@ export class DocAgent extends Agent {
     constructor() {
         super({
             maxRounds: DOC_AGENT_CONFIG.maxRounds,
-            model: createDocAgentModel({
-                adapterType: 'openai',
-                model: '',
-            }),
+            model: new OpenAIModel({ model: '' }),
             toolTimeoutMs: 15000,
         });
 
@@ -103,22 +101,23 @@ export class DocAgent extends Agent {
         return docAgentSitePrompt;
     }
 
-    configure(pluginOptions: { prompt?: string }): void {
+    configure(pluginOptions: Pick<DocAgentPluginOptions, 'prompt' | 'providers'>): void {
         docAgentSitePrompt = pluginOptions.prompt;
+        docAgentProviders = pluginOptions.providers;
     }
 
-    setModelOption(modelOption: ModelOption): void {
-        this.setModel(createDocAgentModel(modelOption));
+    setModelSelection(selection: DocAgentModelSelection): void {
+        this.setModel(createDocAgentModel(selection));
     }
 
     async suggestQuestions({
-        modelOption,
+        modelSelection,
         a2uiPromptText,
         pathname,
         routePath,
         signal,
     }: {
-        modelOption: ModelOption;
+        modelSelection: DocAgentModelSelection;
         a2uiPromptText?: string;
         pathname: string;
         routePath: string;
@@ -141,7 +140,7 @@ export class DocAgent extends Agent {
         }
         if (!content) return null;
 
-        const model = createDocAgentModel(modelOption);
+        const model = createDocAgentModel(modelSelection);
         const response = await model.complete({
             messages: [model.createUserMsg(content.slice(0, 3000))],
             signal,
@@ -197,19 +196,27 @@ export class DocAgent extends Agent {
     }
 }
 
-export function createDocAgentModel(modelOption: ModelOption): Model {
+export function createDocAgentModel(selection: DocAgentModelSelection): Model {
+    const provider = docAgentProviders[selection.provider];
+    if (!provider) {
+        throw new Error(`Unknown provider: ${selection.provider}`);
+    }
+    if (!Object.prototype.hasOwnProperty.call(provider.models, selection.model)) {
+        throw new Error(`Unknown model "${selection.model}" for provider "${selection.provider}".`);
+    }
+
     const config = {
-        url: modelOption.url,
-        streamUrl: modelOption.streamUrl,
-        model: modelOption.model,
-        personalAccessToken: modelOption.personalAccessToken,
+        url: provider.url,
+        streamUrl: provider.streamUrl,
+        model: selection.model,
+        personalAccessToken: provider.personalAccessToken,
     };
 
-    if (modelOption.adapterType === 'openai') return new OpenAIModel(config);
-    if (modelOption.adapterType === 'anthropic') return new ClaudeModel(config);
-    if (modelOption.adapterType === 'gemini') return new GeminiModel(config);
+    if (provider.adapter === 'openai') return new OpenAIModel(config);
+    if (provider.adapter === 'anthropic') return new ClaudeModel(config);
+    if (provider.adapter === 'gemini') return new GeminiModel(config);
 
-    throw new Error(`Unknown adapter type: ${String(modelOption.adapterType)}`);
+    throw new Error(`Unknown adapter type: ${String(provider.adapter)}`);
 }
 
 export function createDocAgentUserMessage(model: Model, content: string): ModelMessage {

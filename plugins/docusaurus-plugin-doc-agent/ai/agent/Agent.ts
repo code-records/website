@@ -13,7 +13,8 @@ import type {
     AgentLoopOptions,
     AgentOptions,
     LogData,
-    ModelOption,
+    ModelSelection,
+    ProviderMap,
     RunOnceOptions,
     ToolMap,
 } from './types';
@@ -31,32 +32,39 @@ interface AgentLoopInput {
 
 export class Agent {
     config: AgentConfig;
+    providers: ProviderMap;
     tools: ToolMap;
 
     constructor({
         config = {},
+        providers = {},
         tools,
     }: AgentOptions = {}) {
         this.config = config;
+        this.providers = providers;
         this.tools = createToolMap(tools);
         setLogger(config.debug ?? false);
     }
 
-    adapter(modelOption: ModelOption): Adapter {
-        if (modelOption.adapterType === undefined || modelOption.model.length === 0) {
-            throw new Error('Agent adapter requires modelOption.adapterType and modelOption.model');
+    adapter(selection: ModelSelection): Adapter {
+        const provider = this.providers[selection.provider];
+        if (!provider) {
+            throw new Error(`Agent adapter requires a known provider: ${selection.provider}`);
+        }
+        if (!Object.prototype.hasOwnProperty.call(provider.models, selection.model)) {
+            throw new Error(`Agent adapter requires a known model "${selection.model}" for provider "${selection.provider}".`);
         }
 
         const config: AdapterConfig = {
-            endpoint: modelOption.url,
-            model: modelOption.model,
+            endpoint: provider.url,
+            model: selection.model,
         };
 
-        if (modelOption.adapterType === 'openai') return new OpenAIAdapter(config);
-        if (modelOption.adapterType === 'anthropic') return new ClaudeAdapter(config);
-        if (modelOption.adapterType === 'gemini') return new GeminiAdapter(config);
+        if (provider.adapter === 'openai') return new OpenAIAdapter(config);
+        if (provider.adapter === 'anthropic') return new ClaudeAdapter(config);
+        if (provider.adapter === 'gemini') return new GeminiAdapter(config);
 
-        throw new Error(`Unknown adapter type: ${modelOption.adapterType}`);
+        throw new Error(`Unknown adapter type: ${provider.adapter}`);
     }
 
     loop(options: AgentLoopInput): Promise<void> {
@@ -69,10 +77,10 @@ export class Agent {
         return loop(loopOptions);
     }
 
-    async runOnce({ modelOption, system, messages, signal }: RunOnceOptions): Promise<Message> {
+    async runOnce({ modelSelection, system, messages, signal }: RunOnceOptions): Promise<Message> {
         const ai = Message.assistant();
         const history = (messages ?? []).map(message => Message.fromJSON(message));
-        await ai.generate(this, this.adapter(modelOption), history, {
+        await ai.generate(this, this.adapter(modelSelection), history, {
             system: system ?? this.config.systemPrompt ?? null,
             signal,
         });

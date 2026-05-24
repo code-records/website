@@ -3,7 +3,12 @@ import type { Action } from './round/Action';
 import type { Agent } from './Agent';
 import type { Message } from './chat/Message';
 import type { Round } from './round/Round';
-import type { DocAgentModelOption } from '../../src';
+import type {
+    DocAgentModelSelection,
+    DocAgentProviderAdapter,
+    DocAgentProviderOption,
+    DocAgentProviders,
+} from '../../src';
 export { Adapter };
 
 export interface UnknownRecord {
@@ -19,7 +24,7 @@ export interface ValueList extends Array<unknown> {
 export interface LogData extends UnknownRecord {
 }
 
-export type AdapterProvider = 'openai' | 'anthropic' | 'gemini';
+export type AdapterProvider = DocAgentProviderAdapter;
 
 export interface AgentConfig extends UnknownRecord {
     baseUrl?: string;
@@ -34,6 +39,7 @@ export interface AgentConfig extends UnknownRecord {
 
 export interface AgentOptions {
     config?: AgentConfig;
+    providers?: ProviderMap;
     tools?: AgentToolList;
 }
 
@@ -42,7 +48,9 @@ export interface AdapterConfig extends UnknownRecord {
     model?: string;
 }
 
-export type ModelOption = DocAgentModelOption;
+export type ModelSelection = DocAgentModelSelection;
+export type ProviderConfig = DocAgentProviderOption;
+export type ProviderMap = DocAgentProviders;
 
 export interface ToolInput extends UnknownRecord {
 }
@@ -273,7 +281,7 @@ export interface SessionList extends Array<SessionListItem> {
 
 export interface RunOnceOptions {
     messages: MessageJSONList | null;
-    modelOption: ModelOption;
+    modelSelection: ModelSelection;
     signal: AbortSignal | null;
     system: string | null;
 }
@@ -292,6 +300,6 @@ export interface SendOptions {
 
 export interface ChatOptions {
     agent: Agent;
-    modelOption: ModelOption;
+    modelSelection: ModelSelection;
     onChange?: Notify;
 }

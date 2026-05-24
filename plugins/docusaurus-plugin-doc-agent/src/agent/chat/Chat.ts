@@ -5,28 +5,28 @@ import { Message, type MessageJSON } from './Message';
 
 export interface ChatOptions {
     agent: Agent;
-    modelOption?: unknown;
+    modelSelection?: unknown;
     onChange?: () => void;
-    setAgentModel?: (agent: Agent, modelOption: unknown) => void;
+    setAgentModel?: (agent: Agent, modelSelection: unknown) => void;
 }
 
 export class Chat {
     readonly agent: Agent;
     readonly history = new History();
     activeMessage?: Message;
-    modelOption?: unknown;
+    modelSelection?: unknown;
 
     private abortController?: AbortController;
     private readonly onChange?: () => void;
-    private readonly setAgentModel?: (agent: Agent, modelOption: unknown) => void;
+    private readonly setAgentModel?: (agent: Agent, modelSelection: unknown) => void;
 
-    constructor({ agent, modelOption, onChange, setAgentModel }: ChatOptions) {
+    constructor({ agent, modelSelection, onChange, setAgentModel }: ChatOptions) {
         this.agent = agent;
-        this.modelOption = modelOption;
+        this.modelSelection = modelSelection;
         this.onChange = onChange;
         this.setAgentModel = setAgentModel;
-        if (modelOption !== undefined) {
-            this.setAgentModel?.(this.agent, modelOption);
+        if (modelSelection !== undefined) {
+            this.setAgentModel?.(this.agent, modelSelection);
         }
     }
 
@@ -38,10 +38,10 @@ export class Chat {
         return this.history.items;
     }
 
-    setModelOption(modelOption: unknown): boolean {
+    setModelSelection(modelSelection: unknown): boolean {
         if (this.isSending) return false;
-        this.modelOption = modelOption;
-        this.setAgentModel?.(this.agent, modelOption);
+        this.modelSelection = modelSelection;
+        this.setAgentModel?.(this.agent, modelSelection);
         return true;
     }
 

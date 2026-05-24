@@ -4,13 +4,21 @@ import type { PluginModule, PostCssOptions } from '@docusaurus/types';
 import tailwindPostcss from '@tailwindcss/postcss';
 import type WebpackDevServer from 'webpack-dev-server';
 
-export interface DocAgentModelOption {
-  label?: string;
-  model: string;
+export type DocAgentProviderAdapter = 'openai' | 'anthropic' | 'gemini';
+
+export interface DocAgentProviderOption {
+  adapter: DocAgentProviderAdapter;
   url?: string;
   streamUrl?: string;
   personalAccessToken?: string;
-  adapterType: 'openai' | 'anthropic' | 'gemini';
+  models: Record<string, string>;
+}
+
+export type DocAgentProviders = Record<string, DocAgentProviderOption>;
+
+export interface DocAgentModelSelection {
+  provider: string;
+  model: string;
 }
 
 export interface DocAgentGiteeOptions {
@@ -43,7 +51,7 @@ export interface DocAgentGithubOptions {
 
 export interface DocAgentPluginOptions {
   defaultModel: string;
-  modelOptions: DocAgentModelOption[];
+  providers: DocAgentProviders;
   gitee?: DocAgentGiteeOptions;
   github?: DocAgentGithubOptions;
   prompt?: string;

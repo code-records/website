@@ -5,23 +5,23 @@ import type {
     ChatOptions,
     MessageJSON,
     MessageJSONList,
-    ModelOption,
+    ModelSelection,
     Notify,
 } from '../types';
 
 export class Chat {
     private _agent: Agent;
-    private _modelOption: ModelOption;
+    private _modelSelection: ModelSelection;
     private _adapter: Adapter;
     private _onChange?: Notify;
     private _messages: Message[];
     activeMessage?: Message;
 
-    constructor({ agent, modelOption, onChange }: ChatOptions) {
+    constructor({ agent, modelSelection, onChange }: ChatOptions) {
         this._agent = agent;
-        if (modelOption === null || modelOption === undefined) throw new Error('Chat requires modelOption');
-        this._modelOption = modelOption;
-        this._adapter = agent.adapter(modelOption);
+        if (modelSelection === null || modelSelection === undefined) throw new Error('Chat requires modelSelection');
+        this._modelSelection = modelSelection;
+        this._adapter = agent.adapter(modelSelection);
         this._onChange = onChange;
         this._messages = [];
         this.activeMessage = undefined;
@@ -31,21 +31,22 @@ export class Chat {
         return this.activeMessage !== undefined;
     }
 
-    get modelOption(): ModelOption {
-        return this._modelOption;
+    get modelSelection(): ModelSelection {
+        return this._modelSelection;
     }
 
     get messages(): Message[] {
         return this._messages;
     }
 
-    setModelOption(modelOption: ModelOption): boolean {
-        if (this.isSending || modelOption === null || modelOption === undefined) return false;
+    setModelSelection(modelSelection: ModelSelection): boolean {
+        if (this.isSending || modelSelection === null || modelSelection === undefined) return false;
 
-        const oldType = this._modelOption?.adapterType;
-        this._bindModelOption(modelOption);
+        const oldAdapter = this._agent.providers[this._modelSelection.provider]?.adapter;
+        this._bindModelSelection(modelSelection);
 
-        if (oldType !== undefined && oldType !== modelOption.adapterType) {
+        const nextAdapter = this._agent.providers[modelSelection.provider]?.adapter;
+        if (oldAdapter !== undefined && oldAdapter !== nextAdapter) {
             this.clear();
         }
         return true;
@@ -115,9 +116,9 @@ export class Chat {
         if (this._onChange !== undefined) this._onChange();
     }
 
-    private _bindModelOption(modelOption: ModelOption): void {
-        if (modelOption === null || modelOption === undefined) throw new Error('Chat requires modelOption');
-        this._modelOption = modelOption;
-        this._adapter = this._agent.adapter(modelOption);
+    private _bindModelSelection(modelSelection: ModelSelection): void {
+        if (modelSelection === null || modelSelection === undefined) throw new Error('Chat requires modelSelection');
+        this._modelSelection = modelSelection;
+        this._adapter = this._agent.adapter(modelSelection);
     }
 }

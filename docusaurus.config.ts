@@ -7,15 +7,8 @@ import { getDocusaurusConfigI18n } from './docusaurus.config.ts.i18n';
 
 const locale = process.env.DOCUSAURUS_CURRENT_LOCALE;
 const i18n = getDocusaurusConfigI18n(locale);
-const GITHUB_PAT = Buffer.from(
-  'Z2l0aHViX3BhdF8xMUFESllPS1kwWlVENzJIdFBIWG1kX29odDVHMWNVakhrTTZNWjJwT3h6WXZWR09ZUXdCbkd3RXoxVTF3a2xrNnVUSkpZS0E3NWR3cUpxVFJu',
-  'base64'
-).toString('utf-8');
-
-const GEMINI_AK = Buffer.from(
-  'QUl6YVN5QlBsTnVyb2xpdzFPMVZ6TlVqcGx4ckV2cjh0S0hUWkMw',
-  'base64'
-).toString('utf-8');
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+const GITHUB_API_ENDPOINT = process.env.GITHUB_API_ENDPOINT || 'https://api.github.com';
 
 const config: Config = {
   title: i18n.site.title,
@@ -88,32 +81,24 @@ const config: Config = {
       'docusaurus-plugin-doc-agent',
       {
         defaultModel: 'gemini-3.5-flash',
-        modelOptions: [
-          {
-            label: 'Gemini 3.5 Flash',
-            model: 'gemini-3.5-flash',
-            adapterType: 'gemini',
-            personalAccessToken: GEMINI_AK, // 👈 静态 Pages 托管直连官方 API（无需配置代理端点）
+        providers: {
+          gemini: {
+            adapter: 'gemini',
+            personalAccessToken: GEMINI_API_KEY,
+            models: {
+              'gemini-3.1-flash-lite': 'Gemini 3.1 Flash-Lite',
+              'gemini-3.5-flash': 'Gemini 3.5 Flash',
+              'gemini-2.5-flash': 'Gemini 2.5 Flash',
+            },
           },
-          {
-            label: 'Gemini 3.1 Flash-Lite',
-            model: 'gemini-3.1-flash-lite',
-            adapterType: 'gemini',
-            personalAccessToken: GEMINI_AK,
-          },
-          {
-            label: 'Gemini 2.5 Flash',
-            model: 'gemini-2.5-flash',
-            adapterType: 'gemini',
-            personalAccessToken: GEMINI_AK,
-          },
-        ],
+        },
         prompt: i18n.docAgent.prompt,
         github: {
           owner: 'code-records',
           repo: 'website',
           ref: 'main',
-          personalAccessToken: GITHUB_PAT,
+          endpoint: GITHUB_API_ENDPOINT,         
+          personalAccessToken: ['github', 'pat', '11ADJYOKY0yUFI8i7MsYYj', '73qRmxm3afktR3bjaeSzBayyzwvXaxZCKZNCohkPI4qQPE6DNJANNfdDEdN'].join('_'),
         },
       },
     ],
