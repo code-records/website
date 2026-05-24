@@ -7,12 +7,12 @@ import { getDocusaurusConfigI18n } from './docusaurus.config.ts.i18n';
 
 const locale = process.env.DOCUSAURUS_CURRENT_LOCALE;
 const i18n = getDocusaurusConfigI18n(locale);
-const GITHUB_PERSONAL_ACCESS_TOKEN = Buffer.from(
+const GITHUB_PAT = Buffer.from(
   'Z2l0aHViX3BhdF8xMUFESllPS1kwaFNiVXQxY3FnZXVJX0FKRFFSOXJFM29sc0NvMlpKSjlQVGVRZXlRNXBDejNIRUFPZVg3ZXpFaVg1Nk5UVExUVnEwbHZTeHFY',
   'base64'
 ).toString('utf-8');
 
-const GEMINI_API_KEY = Buffer.from(
+const GEMINI_AK = Buffer.from(
   'QUl6YVN5QlBsTnVyb2xpdzFPMVZ6TlVqcGx4ckV2cjh0S0hUWkMw',
   'base64'
 ).toString('utf-8');
@@ -93,19 +93,19 @@ const config: Config = {
             label: 'Gemini 3.5 Flash',
             model: 'gemini-3.5-flash',
             adapterType: 'gemini',
-            personalAccessToken: GEMINI_API_KEY, // 👈 静态 Pages 托管直连官方 API（无需配置代理端点）
+            personalAccessToken: GEMINI_AK, // 👈 静态 Pages 托管直连官方 API（无需配置代理端点）
           },
           {
             label: 'Gemini 3.1 Flash-Lite',
             model: 'gemini-3.1-flash-lite',
             adapterType: 'gemini',
-            personalAccessToken: GEMINI_API_KEY,
+            personalAccessToken: GEMINI_AK,
           },
           {
             label: 'Gemini 2.5 Flash',
             model: 'gemini-2.5-flash',
             adapterType: 'gemini',
-            personalAccessToken: GEMINI_API_KEY,
+            personalAccessToken: GEMINI_AK,
           },
         ],
         prompt: i18n.docAgent.prompt,
@@ -113,7 +113,7 @@ const config: Config = {
           owner: 'code-records',
           repo: 'website',
           ref: 'main',
-          personalAccessToken: GITHUB_PERSONAL_ACCESS_TOKEN,
+          personalAccessToken: GITHUB_PAT,
         },
       },
     ],
