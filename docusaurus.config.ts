@@ -7,7 +7,7 @@ import { getDocusaurusConfigI18n } from './docusaurus.config.ts.i18n';
 
 const locale = process.env.DOCUSAURUS_CURRENT_LOCALE;
 const i18n = getDocusaurusConfigI18n(locale);
-const GITHUB_PAT = Buffer.from(
+const GITHUB_PERSONAL_ACCESS_TOKEN = Buffer.from(
   'Z2l0aHViX3BhdF8xMUFESllPS1kwaFNiVXQxY3FnZXVJX0FKRFFSOXJFM29sc0NvMlpKSjlQVGVRZXlRNXBDejNIRUFPZVg3ZXpFaVg1Nk5UVExUVnEwbHZTeHFY',
   'base64'
 ).toString('utf-8');
@@ -113,7 +113,7 @@ const config: Config = {
           owner: 'code-records',
           repo: 'website',
           ref: 'main',
-          personalAccessToken: GITHUB_PAT,
+          personalAccessToken: GITHUB_PERSONAL_ACCESS_TOKEN,
         },
       },
     ],

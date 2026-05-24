@@ -57,7 +57,23 @@
     "lightningcss-linux-arm64-musl": "1.32.0",
     "lightningcss-linux-x64-musl": "1.32.0",
     "lightningcss-freebsd-x64": "1.32.0",
-    "lightningcss-android-arm64": "1.32.0"
+    "lightningcss-android-arm64": "1.32.0",
+    "@swc/html-darwin-arm64": "1.15.33",
+    "@swc/html-darwin-x64": "1.15.33",
+    "@swc/html-linux-arm64-gnu": "1.15.33",
+    "@swc/html-linux-arm64-musl": "1.15.33",
+    "@swc/html-linux-x64-gnu": "1.15.33",
+    "@swc/html-linux-x64-musl": "1.15.33",
+    "@swc/html-win32-arm64-msvc": "1.15.33",
+    "@swc/html-win32-x64-msvc": "1.15.33",
+    "@tailwindcss/oxide-darwin-arm64": "4.3.0",
+    "@tailwindcss/oxide-darwin-x64": "4.3.0",
+    "@tailwindcss/oxide-linux-arm64-gnu": "4.3.0",
+    "@tailwindcss/oxide-linux-arm64-musl": "4.3.0",
+    "@tailwindcss/oxide-linux-x64-gnu": "4.3.0",
+    "@tailwindcss/oxide-linux-x64-musl": "4.3.0",
+    "@tailwindcss/oxide-win32-arm64-msvc": "4.3.0",
+    "@tailwindcss/oxide-win32-x64-msvc": "4.3.0"
   },
   "browserslist": {
     "production": [
