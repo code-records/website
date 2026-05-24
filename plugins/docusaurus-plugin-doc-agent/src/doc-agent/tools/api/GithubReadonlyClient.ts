@@ -1,11 +1,11 @@
 import type { ReadonlyClient } from './ReadonlyClient';
 
-const READONLY_BASE = '/agent-tools-github';
-
 type GithubReadonlyConfig = {
     owner: string;
     repo: string;
     ref: string;
+    endpoint?: string;
+    personalAccessToken?: string;
 };
 
 type GithubContentsItem = {
@@ -33,14 +33,23 @@ export class GithubReadonlyClient implements ReadonlyClient {
             ? `/repos/${this.config.owner}/${this.config.repo}/contents/${encoded}`
             : `/repos/${this.config.owner}/${this.config.repo}/contents`;
 
-        return `${READONLY_BASE}${repoPath}?${params}`;
+        const base = this.config.endpoint || (this.config.personalAccessToken ? 'https://api.github.com' : '/agent-tools-github');
+        return `${base}${repoPath}?${params}`;
+    }
+
+    private getRequestHeaders(customHeaders: Record<string, string> = {}): Record<string, string> {
+        const headers: Record<string, string> = { ...customHeaders };
+        if (this.config.personalAccessToken) {
+            headers['Authorization'] = `Bearer ${this.config.personalAccessToken}`;
+        }
+        return headers;
     }
 
     async readFileReadonly(path: string): Promise<string | null> {
         const res = await fetch(this.buildContentsUrl(path), {
-            headers: {
+            headers: this.getRequestHeaders({
                 Accept: 'application/vnd.github.raw+json',
-            },
+            }),
         });
 
         if (res.ok) return res.text();
@@ -49,7 +58,9 @@ export class GithubReadonlyClient implements ReadonlyClient {
     }
 
     async readTreeReadonly(path = '', recursive = false): Promise<string[] | null> {
-        const response = await fetch(this.buildContentsUrl(path));
+        const response = await fetch(this.buildContentsUrl(path), {
+            headers: this.getRequestHeaders(),
+        });
 
         if (!response.ok) {
             if (response.status === 404) return null;

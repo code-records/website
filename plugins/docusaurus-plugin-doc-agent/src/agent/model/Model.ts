@@ -4,8 +4,10 @@ import { withRetry } from '../utils/retry';
 // ─── 通用类型 ────────────────────────────────────────
 
 export interface ModelConfig {
-    endpoint?: string;
+    url?: string;
+    streamUrl?: string;
     model?: string;
+    personalAccessToken?: string;
 }
 
 export type ProviderPayload = JsonValue;
@@ -66,12 +68,16 @@ export type ModelEvent =
  * 同时维护两套解析逻辑。
  */
 export abstract class Model {
-    protected endpoint: string;
+    protected url: string;
+    protected streamUrl?: string;
     protected model: string;
+    protected personalAccessToken?: string;
 
-    constructor({ endpoint = '', model = '' }: ModelConfig = {}) {
-        this.endpoint = endpoint;
+    constructor({ url = '', streamUrl, model = '', personalAccessToken }: ModelConfig = {}) {
+        this.url = url;
+        this.streamUrl = streamUrl;
         this.model = model;
+        this.personalAccessToken = personalAccessToken;
     }
 
     // ─── 核心方法（子类必须实现） ─────────────────────
@@ -147,7 +153,7 @@ export abstract class Model {
 
     /** 构建请求 URL。 */
     protected buildUrl(): string {
-        return this.endpoint;
+        return this.url;
     }
 
     /** 构建请求头。 */
@@ -156,9 +162,9 @@ export abstract class Model {
     }
 
     /** 带重试的 fetch。 */
-    protected async fetchWithRetry(body: ProviderRequestBody, signal?: AbortSignal): Promise<Response> {
+    protected async fetchWithRetry(body: ProviderRequestBody, signal?: AbortSignal, url = this.buildUrl()): Promise<Response> {
         return withRetry(async (sig) => {
-            const res = await fetch(this.buildUrl(), {
+            const res = await fetch(url, {
                 method: 'POST',
                 headers: this.buildHeaders(),
                 body: JSON.stringify(body),
@@ -175,8 +181,8 @@ export abstract class Model {
     }
 
     /** fetch 并解析 JSON。 */
-    protected async fetchJson(body: ProviderRequestBody, signal?: AbortSignal): Promise<ProviderResponseBody> {
-        const res = await this.fetchWithRetry(body, signal);
+    protected async fetchJson(body: ProviderRequestBody, signal?: AbortSignal, url = this.buildUrl()): Promise<ProviderResponseBody> {
+        const res = await this.fetchWithRetry(body, signal, url);
         return await res.json() as ProviderResponseBody;
     }
 

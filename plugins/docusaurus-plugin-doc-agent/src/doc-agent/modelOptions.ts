@@ -1,6 +1,8 @@
 export interface ModelOption {
   adapterType: 'anthropic' | 'gemini' | 'openai';
-  endpoint?: string;
+  url?: string;
+  streamUrl?: string;
+  personalAccessToken?: string;
   label?: string;
   model: string;
 }

@@ -115,20 +115,24 @@ export class DocAgent extends Agent {
         modelOption,
         a2uiPromptText,
         pathname,
+        routePath = '/chat',
         signal,
     }: {
         modelOption: ModelOption;
         a2uiPromptText?: string;
         pathname: string;
+        routePath?: string;
         signal?: AbortSignal;
     }): Promise<MessageJSON | null> {
         if (typeof pathname !== 'string' || !pathname.startsWith('/')) return null;
 
-        const url = pathname.replace(/\/$/, '');
+        const path = pathname.replace(/\/+$/, '') || '/';
+        const chatPath = routePath.replace(/\/+$/, '') || '/chat';
+        const url = path === '/' || path === chatPath ? 'README.md' : path;
         let content: string | null = null;
         try {
             ({ content } = await readDocByUrl(url));
-            if (!content && pathname !== url) {
+            if (!content && pathname !== url && url !== 'README.md') {
                 ({ content } = await readDocByUrl(pathname));
             }
         } catch {
@@ -194,8 +198,10 @@ export class DocAgent extends Agent {
 
 export function createDocAgentModel(modelOption: ModelOption): Model {
     const config = {
-        endpoint: modelOption.endpoint,
+        url: modelOption.url,
+        streamUrl: modelOption.streamUrl,
         model: modelOption.model,
+        personalAccessToken: modelOption.personalAccessToken,
     };
 
     if (modelOption.adapterType === 'openai') return new OpenAIModel(config);

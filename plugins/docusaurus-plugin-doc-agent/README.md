@@ -100,13 +100,23 @@ type DevServerProxy = NonNullable<DevServerConfiguration['proxy']>;
 
 const proxy: DevServerProxy = [
   {
+    context: ['/agent-tools-github'],
+    target: 'https://api.github.com',
+    changeOrigin: true,
+    secure: true,
+    pathRewrite: (url: string) => url.replace(/^\/agent-tools-github/, ''),
+    headers: {
+      [String('Authorization')]: `Bearer ${GITHUB_PERSONAL_ACCESS_TOKEN}`,
+    },
+  },
+  {
     context: ['/agent-tools-gitlab'],
     target: 'https://gitlab.com',
     changeOrigin: true,
     secure: false,
     pathRewrite: { '^/agent-tools-gitlab': '' },
     headers: {
-      'Private-Token': 'CxnibP4Ws4hrks_7-E8i',
+      [String('Private-Token')]: `${GITLAB_PERSONAL_ACCESS_TOKEN}`,
     },
   },
   {
@@ -118,19 +128,8 @@ const proxy: DevServerProxy = [
       url = url.replace(/^\/agent-tools-gitee/, '');
       const [pathname, query = ''] = url.split('?');
       const params = new URLSearchParams(query);
-      params.set('access_token', '3ec93ad44535672f7e4ab6b5a374c393');
+      params.set('access_token', `${GITEE_PERSONAL_ACCESS_TOKEN}`);
       return `${pathname}?${params.toString()}`;
-    },
-  },
-  {
-    context: ['/agent-api'],
-    target: 'https://aicoding.xxx.com',
-    changeOrigin: true,
-    secure: false,
-    pathRewrite: { '^/agent-api': '' },
-    headers: {
-      'x-api-key': 'sk-e689cbf951b607af8dba8ab0a4953b23edf360a2700cfb033af2a35c02c9ae9f',
-      Authorization: 'Bearer sk-e689cbf951b607af8dba8ab0a4953b23edf360a2700cfb033af2a35c02c9ae9f',
     },
   },
 ];

@@ -102,6 +102,7 @@ class ChatPanel extends React.Component {
             modelOption,
             a2uiPromptText: this.a2ui.promptText,
             pathname,
+            routePath: this.props.pluginOptions?.routePath,
             signal: controller.signal,
         });
         if (

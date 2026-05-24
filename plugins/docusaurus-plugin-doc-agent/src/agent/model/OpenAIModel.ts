@@ -3,13 +3,18 @@ import type { JsonObject, JsonValue, ToolDefinition } from '../tools/Tool';
 import { optionalArray, optionalString, requireJsonObject, requireString, safeParseJsonObject } from '../utils/json';
 import { parseSseStream } from '../utils/sse';
 
-const DEFAULT_OPENAI_ENDPOINT = '/agent/v1/responses';
+const DEFAULT_OPENAI_ENDPOINT = 'https://api.openai.com/v1/responses';
+const DEFAULT_OPENAI_STREAM_ENDPOINT = DEFAULT_OPENAI_ENDPOINT;
 
 type OpenAIMessage = ModelMessage<JsonObject>;
 
 export class OpenAIModel extends Model {
-    constructor({ endpoint = DEFAULT_OPENAI_ENDPOINT, ...rest }: ModelConfig = {}) {
-        super({ endpoint: endpoint || DEFAULT_OPENAI_ENDPOINT, ...rest });
+    constructor({ url = DEFAULT_OPENAI_ENDPOINT, streamUrl = DEFAULT_OPENAI_STREAM_ENDPOINT, ...rest }: ModelConfig = {}) {
+        super({
+            url: url || DEFAULT_OPENAI_ENDPOINT,
+            streamUrl: streamUrl || DEFAULT_OPENAI_STREAM_ENDPOINT,
+            ...rest,
+        });
     }
 
     async *stream(request: ModelRequest): AsyncGenerator<ModelEvent, void, void> {
@@ -192,6 +197,18 @@ export class OpenAIModel extends Model {
             strict: false,
             type: 'function',
         }));
+    }
+
+    protected override buildUrl(): string {
+        return this.streamUrl || this.url || DEFAULT_OPENAI_STREAM_ENDPOINT;
+    }
+
+    protected override buildHeaders(): Record<string, string> {
+        const headers = super.buildHeaders();
+        if (this.personalAccessToken) {
+            headers['Authorization'] = `Bearer ${this.personalAccessToken}`;
+        }
+        return headers;
     }
 
     private textContent(content: JsonValue | undefined, inputType = 'input_text'): JsonValue[] {

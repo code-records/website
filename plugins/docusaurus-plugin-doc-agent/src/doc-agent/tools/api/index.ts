@@ -12,6 +12,8 @@ type GithubReadonlyConfig = {
     owner: string;
     repo: string;
     ref: string;
+    endpoint?: string;
+    personalAccessToken?: string;
 };
 
 type DocAgentPluginData = {

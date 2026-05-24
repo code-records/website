@@ -38,7 +38,7 @@ export interface AgentOptions {
 }
 
 export interface AdapterConfig extends UnknownRecord {
-    endpoint?: string;
+    url?: string;
     model?: string;
 }
 

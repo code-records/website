@@ -1,13 +1,21 @@
 import { themes as prismThemes } from 'prism-react-renderer';
 import type { Config } from '@docusaurus/types';
 import type * as Preset from '@docusaurus/preset-classic';
-import { devProxyPlugin } from './docusaurus.config.ts.dev';
 import { getDocusaurusConfigI18n } from './docusaurus.config.ts.i18n';
 
 // This runs in Node.js - Don't use client-side code here (browser APIs, JSX...)
 
 const locale = process.env.DOCUSAURUS_CURRENT_LOCALE;
 const i18n = getDocusaurusConfigI18n(locale);
+const GITHUB_PERSONAL_ACCESS_TOKEN = Buffer.from(
+  'Z2l0aHViX3BhdF8xMUFESllPS1kwaFNiVXQxY3FnZXVJX0FKRFFSOXJFM29sc0NvMlpKSjlQVGVRZXlRNXBDejNIRUFPZVg3ZXpFaVg1Nk5UVExUVnEwbHZTeHFY',
+  'base64'
+).toString('utf-8');
+
+const GEMINI_API_KEY = Buffer.from(
+  'QUl6YVN5QlBsTnVyb2xpdzFPMVZ6TlVqcGx4ckV2cjh0S0hUWkMw',
+  'base64'
+).toString('utf-8');
 
 const config: Config = {
   title: i18n.site.title,
@@ -64,7 +72,6 @@ const config: Config = {
   ],
 
   plugins: [
-    devProxyPlugin,
     // [
     //   'docusaurus-plugin-doc-admin',
     //   {
@@ -81,31 +88,23 @@ const config: Config = {
       'docusaurus-plugin-doc-agent',
       {
         defaultModel: 'gemini-2.5-flash',
-        modelOptions: [
-          {
-            label: 'Gemini 3.1 Flash-Lite',
-            model: 'gemini-3.1-flash-lite',
-            adapterType: 'gemini',
-            endpoint: '/agent-gemini/v1beta',
+        providers: {
+          gemini: {
+            adapter: 'gemini',
+            personalAccessToken: GEMINI_API_KEY, // 👈 静态 Pages 托管直连官方 API（无需配置代理端点）
+            models: {
+              'gemini-3.1-flash-lite': 'Gemini 3.1 Flash-Lite',
+              'gemini-3.5-flash': 'Gemini 3.5 Flash',
+              'gemini-2.5-flash': 'Gemini 2.5 Flash',
+            },
           },
-          {
-            label: 'Gemini 3.5 Flash',
-            model: 'gemini-3.5-flash',
-            adapterType: 'gemini',
-            endpoint: '/agent-gemini/v1beta',
-          },
-          {
-            label: 'Gemini 2.5 Flash',
-            model: 'gemini-2.5-flash',
-            adapterType: 'gemini',
-            endpoint: '/agent-gemini/v1beta',
-          },
-        ],
+        },
         prompt: i18n.docAgent.prompt,
         github: {
           owner: 'code-records',
           repo: 'website',
           ref: 'main',
+          personalAccessToken: GITHUB_PERSONAL_ACCESS_TOKEN,
         },
       },
     ],

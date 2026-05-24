@@ -3,7 +3,8 @@ import type { JsonObject, JsonValue, ToolDefinition } from '../tools/Tool';
 import { optionalArray, optionalString, requireJsonObject, requireString, safeParseJsonObject } from '../utils/json';
 import { parseSseStream } from '../utils/sse';
 
-const DEFAULT_ANTHROPIC_ENDPOINT = '/agent/v1/messages';
+const DEFAULT_ANTHROPIC_ENDPOINT = 'https://api.anthropic.com/v1/messages';
+const DEFAULT_ANTHROPIC_STREAM_ENDPOINT = DEFAULT_ANTHROPIC_ENDPOINT;
 const CLAUDE_MAX_TOKENS = 4096;
 
 type ClaudeMessage = ModelMessage<JsonObject>;
@@ -17,8 +18,12 @@ interface ChatToolTracker {
 }
 
 export class ClaudeModel extends Model {
-    constructor({ endpoint = DEFAULT_ANTHROPIC_ENDPOINT, ...rest }: ModelConfig = {}) {
-        super({ endpoint: endpoint || DEFAULT_ANTHROPIC_ENDPOINT, ...rest });
+    constructor({ url = DEFAULT_ANTHROPIC_ENDPOINT, streamUrl = DEFAULT_ANTHROPIC_STREAM_ENDPOINT, ...rest }: ModelConfig = {}) {
+        super({
+            url: url || DEFAULT_ANTHROPIC_ENDPOINT,
+            streamUrl: streamUrl || DEFAULT_ANTHROPIC_STREAM_ENDPOINT,
+            ...rest,
+        });
     }
 
     async *stream(request: ModelRequest): AsyncGenerator<ModelEvent, void, void> {
@@ -300,7 +305,7 @@ export class ClaudeModel extends Model {
     }
 
     private isChatCompletionsEndpoint(): boolean {
-        return /\/chat\/completions(?:[?#]|$)/.test(this.endpoint);
+        return /\/chat\/completions(?:[?#]|$)/.test(this.url);
     }
 
     private toChatCompletionsTools(tools: readonly ToolDefinition[]): JsonObject[] {
@@ -359,6 +364,20 @@ export class ClaudeModel extends Model {
             ...(toolCalls.length > 0 ? { tool_calls: toolCalls } : {}),
             role: 'assistant',
         });
+    }
+
+    protected override buildUrl(): string {
+        return this.streamUrl || this.url || DEFAULT_ANTHROPIC_STREAM_ENDPOINT;
+    }
+
+    protected override buildHeaders(): Record<string, string> {
+        const headers = super.buildHeaders();
+        if (this.personalAccessToken) {
+            headers['x-api-key'] = this.personalAccessToken;
+            headers['anthropic-version'] = '2023-06-01';
+            headers['anthropic-dangerous-direct-browser-access'] = 'true';
+        }
+        return headers;
     }
 
     private stringifyToolContent(content: JsonValue | undefined): string {

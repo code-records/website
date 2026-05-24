@@ -1,22 +1,27 @@
-import { Model, type ModelConfig, type ModelEvent, type ModelMessage, type ModelRequest, type ToolCall } from './Model';
+import { Model, type ModelConfig, type ModelEvent, type ModelMessage, type ModelRequest, type ModelResponse, type ToolCall } from './Model';
 import type { JsonObject, JsonValue, ToolDefinition } from '../tools/Tool';
 import { optionalString, requireJsonObject, requireString } from '../utils/json';
 import { parseSseStream } from '../utils/sse';
 
-const DEFAULT_GEMINI_ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta';
+const DEFAULT_GEMINI_GENERATE_URL = 'https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent';
+const DEFAULT_GEMINI_STREAM_URL = 'https://generativelanguage.googleapis.com/v1beta/models/{model}:streamGenerateContent?alt=sse';
 
 type GeminiMessage = ModelMessage<JsonObject>;
 
 export class GeminiModel extends Model {
     private readonly toolNamesById = new Map<string, string>();
 
-    constructor({ endpoint = DEFAULT_GEMINI_ENDPOINT, ...rest }: ModelConfig = {}) {
-        super({ endpoint: endpoint || DEFAULT_GEMINI_ENDPOINT, ...rest });
+    constructor({ url = DEFAULT_GEMINI_GENERATE_URL, streamUrl = DEFAULT_GEMINI_STREAM_URL, ...rest }: ModelConfig = {}) {
+        super({
+            url: url || DEFAULT_GEMINI_GENERATE_URL,
+            streamUrl: streamUrl || DEFAULT_GEMINI_STREAM_URL,
+            ...rest,
+        });
     }
 
     async *stream(request: ModelRequest): AsyncGenerator<ModelEvent, void, void> {
         const body = this.buildGenerateContentBody(request.messages, request.tools ?? [], request.system ?? '');
-        const res = await this.fetchWithRetry(body, request.signal);
+        const res = await this.fetchWithRetry(body, request.signal, this.buildStreamUrl());
         const parts: JsonValue[] = [];
         const toolCalls: ToolCall[] = [];
         let content = '';
@@ -79,6 +84,12 @@ export class GeminiModel extends Model {
         };
     }
 
+    override async complete(request: ModelRequest): Promise<ModelResponse> {
+        const body = this.buildGenerateContentBody(request.messages, request.tools ?? [], request.system ?? '');
+        const json = await this.fetchJson(body, request.signal, this.buildGenerateUrl());
+        return this.parseGenerateContentResponse(json);
+    }
+
     toApiMessages(messages: readonly ModelMessage[]): ModelMessage[] {
         return messages.filter(message => message.provider === 'gemini');
     }
@@ -129,14 +140,6 @@ export class GeminiModel extends Model {
         return true;
     }
 
-    protected override buildUrl(): string {
-        const base = this.endpoint.replace(/\/$/, '');
-        if (/:streamGenerateContent(?:[?#]|$)/.test(base)) {
-            return base.includes('?') ? `${base}&alt=sse` : `${base}?alt=sse`;
-        }
-        return `${base}/models/${encodeURIComponent(this.model)}:streamGenerateContent?alt=sse`;
-    }
-
     private buildGenerateContentBody(messages: readonly ModelMessage[], toolDefs: readonly ToolDefinition[], system: string): JsonObject {
         return {
             contents: this.toContents(messages),
@@ -184,6 +187,87 @@ export class GeminiModel extends Model {
     private wrap(payload: JsonObject): GeminiMessage {
         return { payload, provider: 'gemini' };
     }
+
+    private buildGenerateUrl(): string {
+        return this.withApiKey(this.applyModelTemplate(this.url));
+    }
+
+    private buildStreamUrl(): string {
+        return this.withApiKey(ensureQueryParam(this.applyModelTemplate(this.streamUrl || DEFAULT_GEMINI_STREAM_URL), 'alt', 'sse'));
+    }
+
+    private applyModelTemplate(endpoint: string): string {
+        const value = endpoint.trim().replace('{model}', encodeURIComponent(this.model));
+        if (value.includes('{model}')) {
+            throw new Error('Gemini endpoint template contains an invalid {model} placeholder');
+        }
+        return value;
+    }
+
+    private withApiKey(url: string): string {
+        if (!this.personalAccessToken) return url;
+        return ensureQueryParam(url, 'key', this.personalAccessToken);
+    }
+
+    private parseGenerateContentResponse(response: JsonObject): ModelResponse {
+        const parts: JsonValue[] = [];
+        const toolCalls: ToolCall[] = [];
+        let content = '';
+        let finishReason = '';
+
+        if (response.candidates === undefined) {
+            return { content, raw: this.createModelMsg(parts), status: 'final', toolCalls };
+        }
+        if (!Array.isArray(response.candidates)) {
+            throw new Error('Gemini candidates must be an array');
+        }
+
+        for (const candidateValue of response.candidates) {
+            const candidate = requireJsonObject(candidateValue, 'Gemini candidate');
+            finishReason = optionalString(candidate.finishReason) || finishReason;
+            const candidateContent = requireJsonObject(candidate.content, 'Gemini candidate content');
+            if (!Array.isArray(candidateContent.parts)) {
+                throw new Error('Gemini content parts must be an array');
+            }
+
+            for (const partValue of candidateContent.parts) {
+                const part = requireJsonObject(partValue, 'Gemini content part');
+                const text = optionalString(part.text);
+                if (text.length > 0) {
+                    content += text;
+                    parts.push({ text });
+                }
+
+                if (part.functionCall !== undefined) {
+                    const functionCall = requireJsonObject(part.functionCall, 'Gemini function call');
+                    const call = this.createToolCall(functionCall, toolCalls.length);
+                    parts.push({ functionCall });
+                    toolCalls.push(call);
+                    this.toolNamesById.set(call.id, call.name);
+                }
+            }
+        }
+
+        return {
+            content,
+            raw: this.createModelMsg(parts),
+            status: toolCalls.length > 0
+                ? 'tool'
+                : finishReason === 'MAX_TOKENS'
+                    ? 'continue'
+                    : 'final',
+            toolCalls,
+        };
+    }
+}
+
+function ensureQueryParam(url: string, key: string, value: string): string {
+    if (new RegExp(`(?:[?&])${escapeRegExp(key)}=`).test(url)) return url;
+    return `${url}${url.includes('?') ? '&' : '?'}${encodeURIComponent(key)}=${encodeURIComponent(value)}`;
+}
+
+function escapeRegExp(value: string): string {
+    return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 function normalizeSchema(value: JsonValue): JsonObject {
