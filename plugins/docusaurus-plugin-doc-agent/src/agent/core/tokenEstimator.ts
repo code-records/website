@@ -14,7 +14,7 @@ export function estimateContextTokens(context: readonly ModelMessage[]): number 
     let total = 0;
     for (const message of context) {
         total += 4;
-        total += estimateMessagePayloadTokens(message.payload);
+        total += estimateMessagePayloadTokens(message);
     }
     return total;
 }

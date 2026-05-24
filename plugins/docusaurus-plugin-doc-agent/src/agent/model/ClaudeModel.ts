@@ -1,4 +1,17 @@
-import { Model, type ModelConfig, type ModelEvent, type ModelMessage, type ModelRequest, type ToolCall } from './Model';
+import {
+    Model,
+    type ModelAction,
+    type ModelConfig,
+    type ModelEvent,
+    type ModelMessage,
+    type ModelRequest,
+    type ProviderMessage,
+    type ProviderMessages,
+    type ProviderRequestBody,
+    type ProviderResponseBody,
+    type ProviderStreamChunk,
+    type ToolCall,
+} from './Model';
 import type { JsonObject, JsonValue, ToolDefinition } from '../tools/Tool';
 import { optionalArray, optionalString, requireJsonObject, requireString, safeParseJsonObject } from '../utils/json';
 import { parseSseStream } from '../utils/sse';
@@ -6,8 +19,6 @@ import { parseSseStream } from '../utils/sse';
 const DEFAULT_ANTHROPIC_ENDPOINT = 'https://api.anthropic.com/v1/messages';
 const DEFAULT_ANTHROPIC_STREAM_ENDPOINT = DEFAULT_ANTHROPIC_ENDPOINT;
 const CLAUDE_MAX_TOKENS = 4096;
-
-type ClaudeMessage = ModelMessage<JsonObject>;
 
 interface ChatToolTracker {
     args: string;
@@ -28,33 +39,18 @@ export class ClaudeModel extends Model {
 
     async *stream(request: ModelRequest): AsyncGenerator<ModelEvent, void, void> {
         const isChatCompletions = this.isChatCompletionsEndpoint();
-        const body = isChatCompletions
-            ? {
-                max_tokens: CLAUDE_MAX_TOKENS,
-                messages: this.toChatCompletionsMessages(request.messages, request.system ?? ''),
-                model: this.model,
-                ...(request.tools?.length ? { tools: this.toChatCompletionsTools(request.tools) } : {}),
-                stream: true,
-            }
-            : {
-                max_tokens: CLAUDE_MAX_TOKENS,
-                messages: this.toApiMessages(request.messages).map(message => message.payload),
-                model: this.model,
-                ...(request.system ? { system: request.system } : {}),
-                ...(request.tools?.length ? { tools: this.formatToolDefs(request.tools) } : {}),
-                stream: true,
-            };
-
-        const res = await this.fetchWithRetry(body, request.signal);
+        const body = this.buildRequestBody(request, isChatCompletions);
         const contentBlocks: JsonValue[] = [];
         const toolCalls: ToolCall[] = [];
         const toolArgs = new Map<number, { args: string; call: ToolCall }>();
         const chatToolTrackers = new Map<string, ChatToolTracker>();
         let content = '';
         let thinking = '';
+        let thinkingStarted = false;
         let stopReason = '';
 
-        for await (const event of parseSseStream(res, { idleTimeout: 30000, signal: request.signal })) {
+        for await (const chunk of this.requestStream(body, request.signal)) {
+            const event = requireJsonObject(chunk, 'Claude stream event');
             const eventType = requireString(event.type, 'Claude stream event type');
 
             if (eventType === 'error') {
@@ -74,7 +70,12 @@ export class ClaudeModel extends Model {
 
                     if (reasoningContent.length > 0) {
                         thinking += reasoningContent;
-                        yield { type: 'thinking_delta', content: reasoningContent };
+                        yield {
+                            type: 'action',
+                            action: { type: 'thinking', content: thinking },
+                            kind: thinkingStarted ? 'update' : 'add',
+                        };
+                        thinkingStarted = true;
                     }
 
                     if (textContent.length > 0) {
@@ -88,13 +89,6 @@ export class ClaudeModel extends Model {
                         const tracker = this.ensureChatToolTracker(`${choiceIndex}:${toolIndex}`, toolDelta, toolCalls, chatToolTrackers);
                         const fn = isJsonObject(toolDelta.function) ? toolDelta.function : {};
                         tracker.args += optionalString(fn.arguments);
-                        if (tracker.call !== undefined && optionalString(fn.arguments).length > 0) {
-                            yield {
-                                type: 'tool_call_delta',
-                                callId: tracker.call.id,
-                                inputDelta: optionalString(fn.arguments),
-                            };
-                        }
                     }
 
                     const finishReason = optionalString(choice.finish_reason);
@@ -127,7 +121,12 @@ export class ClaudeModel extends Model {
                     const text = optionalString(block.thinking);
                     if (text.length > 0) {
                         thinking += text;
-                        yield { type: 'thinking_delta', content: text };
+                        yield {
+                            type: 'action',
+                            action: { type: 'thinking', content: thinking },
+                            kind: thinkingStarted ? 'update' : 'add',
+                        };
+                        thinkingStarted = true;
                     }
                     continue;
                 }
@@ -146,7 +145,7 @@ export class ClaudeModel extends Model {
                         type: 'tool_use',
                     };
                     toolArgs.set(index, { args: '', call });
-                    yield { type: 'tool_call_start', callId: call.id, name: call.name };
+                    yield { type: 'action', action: { type: 'tool', call }, kind: 'add' };
                 }
                 continue;
             }
@@ -164,18 +163,20 @@ export class ClaudeModel extends Model {
                 }
 
                 if (deltaType === 'thinking_delta') {
-                    const text = requireString(delta.thinking, 'Claude thinking delta');
-                    thinking += text;
-                    yield { type: 'thinking_delta', content: text };
+                    thinking += requireString(delta.thinking, 'Claude thinking delta');
+                    yield {
+                        type: 'action',
+                        action: { type: 'thinking', content: thinking },
+                        kind: thinkingStarted ? 'update' : 'add',
+                    };
+                    thinkingStarted = true;
                     continue;
                 }
 
                 if (deltaType === 'input_json_delta') {
                     const tracker = toolArgs.get(index);
                     if (tracker !== undefined) {
-                        const partial = requireString(delta.partial_json, 'Claude input JSON delta');
-                        tracker.args += partial;
-                        yield { type: 'tool_call_delta', callId: tracker.call.id, inputDelta: partial };
+                        tracker.args += requireString(delta.partial_json, 'Claude input JSON delta');
                     }
                 }
                 continue;
@@ -188,7 +189,7 @@ export class ClaudeModel extends Model {
                     if (tracker.args.length > 0) {
                         tracker.call.input = safeParseJsonObject(tracker.args);
                     }
-                    yield { type: 'tool_call_done', call: tracker.call };
+                    yield { type: 'action', action: { type: 'tool', call: tracker.call }, kind: 'update' };
                 }
                 continue;
             }
@@ -208,73 +209,183 @@ export class ClaudeModel extends Model {
             if (tracker.finalized || tracker.call === undefined) continue;
             tracker.call.input = safeParseJsonObject(tracker.args);
             tracker.finalized = true;
-            yield { type: 'tool_call_done', call: tracker.call };
+            yield { type: 'action', action: { type: 'tool', call: tracker.call }, kind: 'update' };
         }
 
+        const actions = this.createActions(thinking, toolCalls);
         yield {
             type: 'done',
             response: {
+                actions,
                 content,
-                raw: isChatCompletions
-                    ? this.createChatCompletionsAssistantMsg(content, chatToolTrackers)
-                    : this.createAssistantMsg(contentBlocks.filter(Boolean)),
+                raw: this.createAssistantMsg(content, actions),
                 status: toolCalls.length > 0
                     ? 'tool'
                     : stopReason === 'max_tokens'
                         ? 'continue'
                         : 'final',
-                thinking: thinking || undefined,
-                toolCalls,
             },
         };
     }
 
-    toApiMessages(messages: readonly ModelMessage[]): ModelMessage[] {
-        return messages.filter(message => message.provider === 'anthropic');
+    protected async request(body: ProviderRequestBody, signal?: AbortSignal): Promise<ProviderResponseBody> {
+        const res = await this.postJson(this.url || DEFAULT_ANTHROPIC_ENDPOINT, body, signal);
+        return await res.json() as ProviderResponseBody;
     }
 
-    createToolResultMsg(toolUseId: string, content: JsonValue): ClaudeMessage {
-        if (this.isChatCompletionsEndpoint()) {
-            return this.wrap({ content: this.stringifyToolContent(content), role: 'tool', tool_call_id: toolUseId });
+    protected async *requestStream(body: ProviderRequestBody, signal?: AbortSignal): AsyncGenerator<ProviderStreamChunk, void, void> {
+        const res = await this.postJson(this.streamUrl || this.url || DEFAULT_ANTHROPIC_STREAM_ENDPOINT, body, signal);
+        for await (const event of parseSseStream(res, { idleTimeout: 30000, signal })) {
+            yield event;
         }
-        return this.wrap({ content: [{ content, tool_use_id: toolUseId, type: 'tool_result' }], role: 'user' });
     }
 
-    createUserMsg(content: string): ClaudeMessage {
-        return this.wrap({ content, role: 'user' });
+    protected convertModelMessage2ProviderMessage(message: ModelMessage): ProviderMessage {
+        return this.convertModelMessageToProviderMessages(message)[0] ?? { content: '', role: 'assistant' };
     }
 
-    createAssistantTextMsg(content: string): ClaudeMessage {
-        return this.wrap({ content, role: 'assistant' });
-    }
-
-    override formatToolDefs(tools: ToolDefinition[]): JsonObject[] {
-        if (this.isChatCompletionsEndpoint()) {
-            return this.toChatCompletionsTools(tools);
+    protected convertProviderMessage2ModelMessage(message: ProviderMessage): ModelMessage {
+        const payload = requireJsonObject(message, 'Claude provider message');
+        if (payload.role === 'tool') {
+            return this.createToolResultMsg(requireString(payload.tool_call_id, 'Claude tool call id'), payload.content ?? '');
         }
-        return tools.map(tool => ({
-            description: tool.description,
-            input_schema: tool.input_schema,
-            name: tool.name,
-        }));
+        if (payload.role === 'user') {
+            const content = Array.isArray(payload.content)
+                ? payload.content.map(block => isJsonObject(block) ? optionalString(block.text, optionalString(block.content)) : '').join('')
+                : optionalString(payload.content);
+            return this.createUserMsg(content);
+        }
+        const parsed = this.parseAssistantPayload(payload);
+        return this.createAssistantMsg(parsed.content, parsed.actions);
     }
 
-    override isSafeCompactBoundary(previous: ModelMessage, current: ModelMessage): boolean {
-        if (previous.provider === 'anthropic') {
-            const payload = requireJsonObject(previous.payload, 'Claude previous payload');
-            if (Array.isArray(payload.tool_calls)) return false;
-            if (Array.isArray(payload.content) && payload.content.some(block => isJsonObject(block) && block.type === 'tool_use')) {
-                return false;
+    protected override convertModelMessages2ProviderMessages(messages: readonly ModelMessage[]): ProviderMessages {
+        return messages.flatMap(message => this.convertModelMessageToProviderMessages(message));
+    }
+
+    createToolResultMsg(toolUseId: string, content: JsonValue): ModelMessage {
+        return super.createToolResultMsg(toolUseId, content);
+    }
+
+    private buildRequestBody(request: ModelRequest, isChatCompletions: boolean): ProviderRequestBody {
+        return isChatCompletions
+            ? {
+                max_tokens: CLAUDE_MAX_TOKENS,
+                messages: this.toChatCompletionsMessages(request.messages, request.system ?? ''),
+                model: this.model,
+                ...(request.tools?.length ? { tools: this.toChatCompletionsTools(request.tools) } : {}),
+                stream: true,
+            }
+            : {
+                max_tokens: CLAUDE_MAX_TOKENS,
+                messages: this.convertModelMessages2ProviderMessages(request.messages),
+                model: this.model,
+                ...(request.system ? { system: request.system } : {}),
+                ...(request.tools?.length ? { tools: this.formatToolDefs(request.tools) } : {}),
+                stream: true,
+            };
+    }
+
+    private convertModelMessageToProviderMessages(message: ModelMessage): JsonObject[] {
+        if (this.isChatCompletionsEndpoint()) {
+            return this.convertModelMessageToChatCompletionsMessages(message);
+        }
+
+        if (message.role === 'user') {
+            return [{ content: message.content, role: 'user' }];
+        }
+
+        if (message.role === 'tool') {
+            return [{ content: [{ content: message.content, tool_use_id: message.toolUseId, type: 'tool_result' }], role: 'user' }];
+        }
+
+        const content: JsonValue[] = [];
+        if (message.content.length > 0) {
+            content.push({ text: message.content, type: 'text' });
+        }
+        for (const action of message.actions ?? []) {
+            if (action.type === 'thinking' && action.content.length > 0) {
+                content.push({ thinking: action.content, type: 'thinking' });
+            }
+            if (action.type === 'tool') {
+                content.push({
+                    id: action.call.id,
+                    input: action.call.input,
+                    name: action.call.name,
+                    type: 'tool_use',
+                });
             }
         }
-        if (current.provider === 'anthropic') {
-            const payload = requireJsonObject(current.payload, 'Claude current payload');
-            if (payload.role === 'tool') return false;
-            if (Array.isArray(payload.content) && payload.content.some(block => isJsonObject(block) && block.type === 'tool_result')) {
-                return false;
+
+        return content.length > 0 ? [{ content, role: 'assistant' }] : [];
+    }
+
+    private convertModelMessageToChatCompletionsMessages(message: ModelMessage): JsonObject[] {
+        if (message.role === 'user') {
+            return [{ content: message.content, role: 'user' }];
+        }
+        if (message.role === 'tool') {
+            return [{ content: this.stringifyToolContent(message.content), role: 'tool', tool_call_id: message.toolUseId }];
+        }
+        const toolCalls = (message.actions ?? [])
+            .filter((action): action is Extract<ModelAction, { type: 'tool' }> => action.type === 'tool')
+            .map(action => ({
+                function: {
+                    arguments: JSON.stringify(action.call.input ?? {}),
+                    name: action.call.name,
+                },
+                id: action.call.id,
+                type: 'function',
+            }));
+        return [{
+            content: toolCalls.length > 0 ? null : message.content,
+            ...(toolCalls.length > 0 ? { tool_calls: toolCalls } : {}),
+            role: 'assistant',
+        }];
+    }
+
+    private parseAssistantPayload(payload: JsonObject): { actions: ModelAction[]; content: string } {
+        if (Array.isArray(payload.tool_calls)) {
+            const actions = payload.tool_calls.map(value => {
+                const tool = requireJsonObject(value, 'Claude chat tool call');
+                const fn = requireJsonObject(tool.function, 'Claude chat tool function');
+                const call: ToolCall = {
+                    id: requireString(tool.id, 'Claude chat tool id'),
+                    input: safeParseJsonObject(optionalString(fn.arguments)),
+                    name: requireString(fn.name, 'Claude chat tool name'),
+                };
+                return { type: 'tool' as const, call };
+            });
+            return { actions, content: optionalString(payload.content) };
+        }
+
+        if (!Array.isArray(payload.content)) {
+            return { actions: [], content: optionalString(payload.content) };
+        }
+
+        let content = '';
+        const actions: ModelAction[] = [];
+        for (const blockValue of payload.content) {
+            const block = requireJsonObject(blockValue, 'Claude content block');
+            if (block.type === 'text') {
+                content += optionalString(block.text);
+            }
+            if (block.type === 'thinking') {
+                const thinking = optionalString(block.thinking, optionalString(block.text));
+                if (thinking.length > 0) actions.push({ type: 'thinking', content: thinking });
+            }
+            if (block.type === 'tool_use') {
+                actions.push({
+                    type: 'tool',
+                    call: {
+                        id: requireString(block.id, 'Claude tool use id'),
+                        input: isJsonObject(block.input) ? block.input : {},
+                        name: requireString(block.name, 'Claude tool use name'),
+                    },
+                });
             }
         }
-        return true;
+        return { actions, content };
     }
 
     private ensureChatToolTracker(
@@ -299,6 +410,7 @@ export class ClaudeModel extends Model {
         if (tracker.call === undefined && tracker.id.length > 0 && tracker.name.length > 0) {
             tracker.call = { id: tracker.id, input: {}, name: tracker.name };
             toolCalls.push(tracker.call);
+            void tracker.call;
         }
 
         return tracker;
@@ -306,6 +418,14 @@ export class ClaudeModel extends Model {
 
     private isChatCompletionsEndpoint(): boolean {
         return /\/chat\/completions(?:[?#]|$)/.test(this.url);
+    }
+
+    private formatToolDefs(tools: readonly ToolDefinition[]): JsonObject[] {
+        return tools.map(tool => ({
+            description: tool.description,
+            input_schema: tool.input_schema,
+            name: tool.name,
+        }));
     }
 
     private toChatCompletionsTools(tools: readonly ToolDefinition[]): JsonObject[] {
@@ -324,60 +444,50 @@ export class ClaudeModel extends Model {
         if (system.length > 0) {
             result.push({ content: system, role: 'system' });
         }
-
-        for (const message of this.toApiMessages(messages)) {
-            const msg = requireJsonObject(message.payload, 'Claude message payload');
-            if (msg.role === 'tool') {
-                result.push(msg);
-                continue;
-            }
-            if (msg.role === 'user' || msg.role === 'assistant' || msg.role === 'system') {
-                result.push({
-                    content: this.stringifyToolContent(msg.content),
-                    role: msg.role,
-                });
-            }
-        }
-
+        result.push(...messages.flatMap(message => this.convertModelMessageToChatCompletionsMessages(message)));
         return result;
     }
 
-    private createAssistantMsg(rawContent: JsonValue): ClaudeMessage {
-        const content = Array.isArray(rawContent) ? rawContent : [];
-        return this.wrap({ content, role: 'assistant' });
+    private createActions(thinking: string, toolCalls: readonly ToolCall[]): ModelAction[] {
+        return [
+            ...(thinking.length > 0 ? [{ type: 'thinking' as const, content: thinking }] : []),
+            ...toolCalls.map(call => ({ type: 'tool' as const, call })),
+        ];
     }
 
-    private createChatCompletionsAssistantMsg(content: string, trackers: Map<string, ChatToolTracker>): ClaudeMessage {
-        const toolCalls = Array.from(trackers.values())
-            .filter(tracker => tracker.id.length > 0 && tracker.name.length > 0)
-            .map(tracker => ({
-                function: {
-                    arguments: tracker.args,
-                    name: tracker.name,
-                },
-                id: tracker.id,
-                type: 'function',
-            }));
-
-        return this.wrap({
-            content: toolCalls.length > 0 ? null : content,
-            ...(toolCalls.length > 0 ? { tool_calls: toolCalls } : {}),
-            role: 'assistant',
-        });
-    }
-
-    protected override buildUrl(): string {
-        return this.streamUrl || this.url || DEFAULT_ANTHROPIC_STREAM_ENDPOINT;
-    }
-
-    protected override buildHeaders(): Record<string, string> {
-        const headers = super.buildHeaders();
+    private buildHeaders(): Record<string, string> {
+        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
         if (this.personalAccessToken) {
             headers['x-api-key'] = this.personalAccessToken;
             headers['anthropic-version'] = '2023-06-01';
             headers['anthropic-dangerous-direct-browser-access'] = 'true';
         }
         return headers;
+    }
+
+    private async postJson(url: string, body: ProviderRequestBody, signal?: AbortSignal): Promise<Response> {
+        const res = await fetch(url, {
+            body: JSON.stringify(body),
+            headers: this.buildHeaders(),
+            method: 'POST',
+            signal,
+        });
+        if (!res.ok) {
+            throw await this.createApiError(res);
+        }
+        return res;
+    }
+
+    private async createApiError(res: Response): Promise<Error> {
+        const text = await res.text();
+        try {
+            const json = JSON.parse(text) as unknown;
+            const body = requireJsonObject(json, 'Claude error body');
+            const error = requireJsonObject(body.error, 'Claude error');
+            return Object.assign(new Error(optionalString(error.message) || `Claude API ${res.status}`), { status: res.status });
+        } catch {
+            return Object.assign(new Error(`Claude API ${res.status}: ${text.slice(0, 200)}`), { status: res.status });
+        }
     }
 
     private stringifyToolContent(content: JsonValue | undefined): string {
@@ -387,10 +497,6 @@ export class ClaudeModel extends Model {
         } catch {
             return String(content ?? '');
         }
-    }
-
-    private wrap(payload: JsonObject): ClaudeMessage {
-        return { payload, provider: 'anthropic' };
     }
 }
 

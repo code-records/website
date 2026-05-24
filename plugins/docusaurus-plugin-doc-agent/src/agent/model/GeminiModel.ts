@@ -1,12 +1,24 @@
-import { Model, type ModelConfig, type ModelEvent, type ModelMessage, type ModelRequest, type ModelResponse, type ToolCall } from './Model';
+import {
+    Model,
+    type ModelAction,
+    type ModelConfig,
+    type ModelEvent,
+    type ModelMessage,
+    type ModelRequest,
+    type ModelResponse,
+    type ProviderMessage,
+    type ProviderMessages,
+    type ProviderRequestBody,
+    type ProviderResponseBody,
+    type ProviderStreamChunk,
+    type ToolCall,
+} from './Model';
 import type { JsonObject, JsonValue, ToolDefinition } from '../tools/Tool';
 import { optionalString, requireJsonObject, requireString } from '../utils/json';
 import { parseSseStream } from '../utils/sse';
 
 const DEFAULT_GEMINI_GENERATE_URL = 'https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent';
 const DEFAULT_GEMINI_STREAM_URL = 'https://generativelanguage.googleapis.com/v1beta/models/{model}:streamGenerateContent?alt=sse';
-
-type GeminiMessage = ModelMessage<JsonObject>;
 
 export class GeminiModel extends Model {
     private readonly toolNamesById = new Map<string, string>();
@@ -21,13 +33,13 @@ export class GeminiModel extends Model {
 
     async *stream(request: ModelRequest): AsyncGenerator<ModelEvent, void, void> {
         const body = this.buildGenerateContentBody(request.messages, request.tools ?? [], request.system ?? '');
-        const res = await this.fetchWithRetry(body, request.signal, this.buildStreamUrl());
         const parts: JsonValue[] = [];
         const toolCalls: ToolCall[] = [];
         let content = '';
         let finishReason = '';
 
-        for await (const event of parseSseStream(res, { idleTimeout: 30000, signal: request.signal })) {
+        for await (const chunk of this.requestStream(body, request.signal)) {
+            const event = requireJsonObject(chunk, 'Gemini stream event');
             if (event.error !== undefined) {
                 const error = requireJsonObject(event.error, 'Gemini stream error');
                 yield { type: 'error', error: new Error(optionalString(error.message) || 'Gemini stream failed') };
@@ -35,88 +47,130 @@ export class GeminiModel extends Model {
             }
 
             if (event.candidates === undefined) continue;
-            if (!Array.isArray(event.candidates)) {
-                throw new Error('Gemini candidates must be an array');
+            const parsed = this.parseCandidates(event);
+            finishReason = parsed.finishReason || finishReason;
+            parts.push(...parsed.parts);
+
+            if (parsed.content.length > 0) {
+                content += parsed.content;
+                yield { type: 'content_delta', content: parsed.content };
             }
 
-            for (const candidateValue of event.candidates) {
-                const candidate = requireJsonObject(candidateValue, 'Gemini candidate');
-                finishReason = optionalString(candidate.finishReason) || finishReason;
-                const candidateContent = requireJsonObject(candidate.content, 'Gemini candidate content');
-                if (!Array.isArray(candidateContent.parts)) {
-                    throw new Error('Gemini content parts must be an array');
-                }
-
-                for (const partValue of candidateContent.parts) {
-                    const part = requireJsonObject(partValue, 'Gemini content part');
-                    parts.push(part);
-
-                    const text = optionalString(part.text);
-                    if (text.length > 0) {
-                        content += text;
-                        yield { type: 'content_delta', content: text };
-                    }
-
-                    if (part.functionCall !== undefined) {
-                        const functionCall = requireJsonObject(part.functionCall, 'Gemini function call');
-                        const call = this.createToolCall(functionCall, toolCalls.length);
-                        toolCalls.push(call);
-                        this.toolNamesById.set(call.id, call.name);
-                        yield { type: 'tool_call_start', callId: call.id, name: call.name };
-                        yield { type: 'tool_call_done', call };
-                    }
-                }
+            for (const call of parsed.toolCalls) {
+                toolCalls.push(call);
+                this.toolNamesById.set(call.id, call.name);
+                yield { type: 'action', action: { type: 'tool', call }, kind: 'add' };
             }
         }
 
+        const actions = this.createActions(toolCalls);
         yield {
             type: 'done',
             response: {
+                actions,
                 content,
-                raw: this.createModelMsg(parts),
+                raw: this.createAssistantMsg(content, actions),
                 status: toolCalls.length > 0
                     ? 'tool'
                     : finishReason === 'MAX_TOKENS'
                         ? 'continue'
                         : 'final',
-                toolCalls,
             },
         };
     }
 
     override async complete(request: ModelRequest): Promise<ModelResponse> {
         const body = this.buildGenerateContentBody(request.messages, request.tools ?? [], request.system ?? '');
-        const json = await this.fetchJson(body, request.signal, this.buildGenerateUrl());
+        const json = await this.request(body, request.signal);
         return this.parseGenerateContentResponse(json);
     }
 
-    toApiMessages(messages: readonly ModelMessage[]): ModelMessage[] {
-        return messages.filter(message => message.provider === 'gemini');
+    protected async request(body: ProviderRequestBody, signal?: AbortSignal): Promise<ProviderResponseBody> {
+        const res = await this.postJson(this.buildGenerateUrl(), body, signal);
+        return await res.json() as ProviderResponseBody;
     }
 
-    createToolResultMsg(toolUseId: string, content: JsonValue): GeminiMessage {
-        const name = this.toolNamesById.get(toolUseId) || toolUseId;
-        return this.wrap({
-            parts: [{
-                functionResponse: {
-                    id: toolUseId,
-                    name,
-                    response: { result: content },
+    protected async *requestStream(body: ProviderRequestBody, signal?: AbortSignal): AsyncGenerator<ProviderStreamChunk, void, void> {
+        const res = await this.postJson(this.buildStreamUrl(), body, signal);
+        for await (const event of parseSseStream(res, { idleTimeout: 30000, signal })) {
+            yield event;
+        }
+    }
+
+    protected convertModelMessage2ProviderMessage(message: ModelMessage): ProviderMessage {
+        return this.convertModelMessageToProviderMessages(message)[0] ?? { parts: [], role: 'user' };
+    }
+
+    protected convertProviderMessage2ModelMessage(message: ProviderMessage): ModelMessage {
+        const payload = requireJsonObject(message, 'Gemini provider message');
+        const role = payload.role === 'model' ? 'assistant' : 'user';
+        const parts = Array.isArray(payload.parts) ? payload.parts : [];
+        if (role === 'assistant') {
+            const parsed = this.parseParts(parts);
+            return this.createAssistantMsg(parsed.content, this.createActions(parsed.toolCalls));
+        }
+        return this.createUserMsg(parts.map(part => isJsonObject(part) ? optionalString(part.text) : '').join(''));
+    }
+
+    protected override convertModelMessages2ProviderMessages(messages: readonly ModelMessage[]): ProviderMessages {
+        return messages.flatMap(message => this.convertModelMessageToProviderMessages(message));
+    }
+
+    createToolResultMsg(toolUseId: string, content: JsonValue): ModelMessage {
+        return super.createToolResultMsg(toolUseId, content);
+    }
+
+    private convertModelMessageToProviderMessages(message: ModelMessage): JsonObject[] {
+        if (message.role === 'user') {
+            return [{ parts: [{ text: message.content }], role: 'user' }];
+        }
+
+        if (message.role === 'tool') {
+            const name = this.toolNamesById.get(message.toolUseId) || message.toolUseId;
+            return [{
+                parts: [{
+                    functionResponse: {
+                        id: message.toolUseId,
+                        name,
+                        response: { result: message.content },
+                    },
+                }],
+                role: 'user',
+            }];
+        }
+
+        const parts: JsonValue[] = [];
+        if (message.content.length > 0) {
+            parts.push({ text: message.content });
+        }
+        for (const action of message.actions ?? []) {
+            if (action.type !== 'tool') continue;
+            parts.push({
+                functionCall: {
+                    args: action.call.input,
+                    id: action.call.id,
+                    name: action.call.name,
                 },
-            }],
-            role: 'user',
-        });
+            });
+        }
+
+        return parts.length > 0 ? [{ parts, role: 'model' }] : [];
     }
 
-    createUserMsg(content: string): GeminiMessage {
-        return this.wrap({ parts: [{ text: content }], role: 'user' });
+    private buildGenerateContentBody(messages: readonly ModelMessage[], toolDefs: readonly ToolDefinition[], system: string): JsonObject {
+        return {
+            contents: this.convertModelMessages2ProviderMessages(messages),
+            ...(system.length > 0 ? { systemInstruction: { parts: [{ text: system }] } } : {}),
+            ...(toolDefs.length > 0
+                ? {
+                    toolConfig: { functionCallingConfig: { mode: 'AUTO' } },
+                    tools: [{ functionDeclarations: this.formatToolDefs(toolDefs) }],
+                }
+                : {}),
+        };
     }
 
-    createAssistantTextMsg(content: string): GeminiMessage {
-        return this.createModelMsg(content.length > 0 ? [{ text: content }] : []);
-    }
-
-    override formatToolDefs(tools: ToolDefinition[]): JsonObject[] {
+    private formatToolDefs(tools: readonly ToolDefinition[]): JsonObject[] {
         return tools.map(tool => ({
             description: tool.description,
             name: tool.name,
@@ -124,49 +178,79 @@ export class GeminiModel extends Model {
         }));
     }
 
-    override isSafeCompactBoundary(previous: ModelMessage, current: ModelMessage): boolean {
-        if (previous.provider === 'gemini') {
-            const payload = requireJsonObject(previous.payload, 'Gemini previous payload');
-            if (Array.isArray(payload.parts) && payload.parts.some(part => isJsonObject(part) && isJsonObject(part.functionCall))) {
-                return false;
-            }
+    private parseGenerateContentResponse(response: JsonObject): ModelResponse {
+        if (response.candidates === undefined) {
+            return {
+                actions: [],
+                content: '',
+                raw: this.createAssistantMsg(''),
+                status: 'final',
+            };
         }
-        if (current.provider === 'gemini') {
-            const payload = requireJsonObject(current.payload, 'Gemini current payload');
-            if (Array.isArray(payload.parts) && payload.parts.some(part => isJsonObject(part) && isJsonObject(part.functionResponse))) {
-                return false;
-            }
-        }
-        return true;
-    }
 
-    private buildGenerateContentBody(messages: readonly ModelMessage[], toolDefs: readonly ToolDefinition[], system: string): JsonObject {
+        const parsed = this.parseCandidates(response);
+        for (const call of parsed.toolCalls) {
+            this.toolNamesById.set(call.id, call.name);
+        }
+        const actions = this.createActions(parsed.toolCalls);
+
         return {
-            contents: this.toContents(messages),
-            ...(system.length > 0 ? { systemInstruction: { parts: [{ text: system }] } } : {}),
-            ...(toolDefs.length > 0
-                ? {
-                    toolConfig: { functionCallingConfig: { mode: 'AUTO' } },
-                    tools: [{ functionDeclarations: this.formatToolDefs([...toolDefs]) }],
-                }
-                : {}),
+            actions,
+            content: parsed.content,
+            raw: this.createAssistantMsg(parsed.content, actions),
+            status: parsed.toolCalls.length > 0
+                ? 'tool'
+                : parsed.finishReason === 'MAX_TOKENS'
+                    ? 'continue'
+                    : 'final',
         };
     }
 
-    private toContents(messages: readonly ModelMessage[]): JsonValue[] {
-        return this.toApiMessages(messages)
-            .map(message => {
-                const payload = requireJsonObject(message.payload, 'Gemini message payload');
-                const role = payload.role === 'model' ? 'model' : 'user';
-                if (!Array.isArray(payload.parts)) {
-                    throw new Error('Gemini message parts must be an array');
-                }
-                return {
-                    parts: payload.parts,
-                    role,
-                };
-            })
-            .filter(message => message.parts.length > 0);
+    private parseCandidates(response: JsonObject): { content: string; finishReason: string; parts: JsonValue[]; toolCalls: ToolCall[] } {
+        if (!Array.isArray(response.candidates)) {
+            throw new Error('Gemini candidates must be an array');
+        }
+
+        const parts: JsonValue[] = [];
+        let content = '';
+        let finishReason = '';
+        const toolCalls: ToolCall[] = [];
+
+        for (const candidateValue of response.candidates) {
+            const candidate = requireJsonObject(candidateValue, 'Gemini candidate');
+            finishReason = optionalString(candidate.finishReason) || finishReason;
+            const candidateContent = requireJsonObject(candidate.content, 'Gemini candidate content');
+            if (!Array.isArray(candidateContent.parts)) {
+                throw new Error('Gemini content parts must be an array');
+            }
+
+            const parsed = this.parseParts(candidateContent.parts, toolCalls.length);
+            content += parsed.content;
+            parts.push(...parsed.parts);
+            toolCalls.push(...parsed.toolCalls);
+        }
+
+        return { content, finishReason, parts, toolCalls };
+    }
+
+    private parseParts(parts: readonly JsonValue[], offset = 0): { content: string; parts: JsonValue[]; toolCalls: ToolCall[] } {
+        let content = '';
+        const toolCalls: ToolCall[] = [];
+
+        for (const partValue of parts) {
+            const part = requireJsonObject(partValue, 'Gemini content part');
+            const text = optionalString(part.text);
+            if (text.length > 0) {
+                content += text;
+            }
+
+            if (part.functionCall !== undefined) {
+                const functionCall = requireJsonObject(part.functionCall, 'Gemini function call');
+                toolCalls.push(this.createToolCall(functionCall, offset + toolCalls.length));
+            }
+        }
+
+        return { content, parts: [...parts], toolCalls };
     }
 
     private createToolCall(functionCall: JsonObject, index: number): ToolCall {
@@ -180,16 +264,37 @@ export class GeminiModel extends Model {
         };
     }
 
-    private createModelMsg(parts: JsonValue[]): GeminiMessage {
-        return this.wrap({ parts, role: 'model' });
+    private createActions(toolCalls: readonly ToolCall[]): ModelAction[] {
+        return toolCalls.map(call => ({ type: 'tool' as const, call }));
     }
 
-    private wrap(payload: JsonObject): GeminiMessage {
-        return { payload, provider: 'gemini' };
+    private async postJson(url: string, body: ProviderRequestBody, signal?: AbortSignal): Promise<Response> {
+        const res = await fetch(url, {
+            body: JSON.stringify(body),
+            headers: { 'Content-Type': 'application/json' },
+            method: 'POST',
+            signal,
+        });
+        if (!res.ok) {
+            throw await this.createApiError(res);
+        }
+        return res;
+    }
+
+    private async createApiError(res: Response): Promise<Error> {
+        const text = await res.text();
+        try {
+            const json = JSON.parse(text) as unknown;
+            const body = requireJsonObject(json, 'Gemini error body');
+            const error = requireJsonObject(body.error, 'Gemini error');
+            return Object.assign(new Error(optionalString(error.message) || `Gemini API ${res.status}`), { status: res.status });
+        } catch {
+            return Object.assign(new Error(`Gemini API ${res.status}: ${text.slice(0, 200)}`), { status: res.status });
+        }
     }
 
     private buildGenerateUrl(): string {
-        return this.withApiKey(this.applyModelTemplate(this.url));
+        return this.withApiKey(this.applyModelTemplate(this.url || DEFAULT_GEMINI_GENERATE_URL));
     }
 
     private buildStreamUrl(): string {
@@ -207,57 +312,6 @@ export class GeminiModel extends Model {
     private withApiKey(url: string): string {
         if (!this.personalAccessToken) return url;
         return ensureQueryParam(url, 'key', this.personalAccessToken);
-    }
-
-    private parseGenerateContentResponse(response: JsonObject): ModelResponse {
-        const parts: JsonValue[] = [];
-        const toolCalls: ToolCall[] = [];
-        let content = '';
-        let finishReason = '';
-
-        if (response.candidates === undefined) {
-            return { content, raw: this.createModelMsg(parts), status: 'final', toolCalls };
-        }
-        if (!Array.isArray(response.candidates)) {
-            throw new Error('Gemini candidates must be an array');
-        }
-
-        for (const candidateValue of response.candidates) {
-            const candidate = requireJsonObject(candidateValue, 'Gemini candidate');
-            finishReason = optionalString(candidate.finishReason) || finishReason;
-            const candidateContent = requireJsonObject(candidate.content, 'Gemini candidate content');
-            if (!Array.isArray(candidateContent.parts)) {
-                throw new Error('Gemini content parts must be an array');
-            }
-
-            for (const partValue of candidateContent.parts) {
-                const part = requireJsonObject(partValue, 'Gemini content part');
-                parts.push(part);
-
-                const text = optionalString(part.text);
-                if (text.length > 0) {
-                    content += text;
-                }
-
-                if (part.functionCall !== undefined) {
-                    const functionCall = requireJsonObject(part.functionCall, 'Gemini function call');
-                    const call = this.createToolCall(functionCall, toolCalls.length);
-                    toolCalls.push(call);
-                    this.toolNamesById.set(call.id, call.name);
-                }
-            }
-        }
-
-        return {
-            content,
-            raw: this.createModelMsg(parts),
-            status: toolCalls.length > 0
-                ? 'tool'
-                : finishReason === 'MAX_TOKENS'
-                    ? 'continue'
-                    : 'final',
-            toolCalls,
-        };
     }
 }
 
@@ -285,7 +339,7 @@ function normalizeSchema(value: JsonValue): JsonObject {
 
     const items = isJsonObject(schema.items) ? schema.items : {};
     if (Object.keys(items).length > 0) {
-        schema.items = normalizeSchema(items);
+        schema.items = normalizeSchema(schema.items);
     }
 
     return schema;

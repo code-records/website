@@ -119,7 +119,7 @@ export class CompressTool extends Tool {
 
 function previewContext(context: readonly ModelMessage[]): string {
     return context
-        .map((message, index) => `${index + 1}. [${message.provider}] ${safeStringify(message.payload)}`)
+        .map((message, index) => `${index + 1}. [${message.role}] ${safeStringify(message)}`)
         .join('\n')
         .slice(0, 12000);
 }

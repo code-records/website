@@ -51,6 +51,18 @@ export class Round {
         return true;
     }
 
+    updateLast(action: Action): boolean {
+        const last = this.actions[this.actions.length - 1];
+        if (last === undefined || last.type !== action.type || last.done) {
+            return false;
+        }
+        last.content = action.content;
+        last.call = action.call;
+        last.event = action.event;
+        last.label = action.label;
+        return true;
+    }
+
     finish(): void {
         this.done = true;
         for (const action of this.actions) {

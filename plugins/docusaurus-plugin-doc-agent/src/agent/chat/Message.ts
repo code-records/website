@@ -55,11 +55,11 @@ export class Message {
         return message;
     }
 
-    toContextMessage(createUserMsg: (content: string) => ModelMessage, createAssistantTextMsg: (content: string) => ModelMessage): ModelMessage {
+    toContextMessage(createUserMsg: (content: string) => ModelMessage, createAssistantMsg: (content: string) => ModelMessage): ModelMessage {
         if (this.role === 'user') {
             return createUserMsg(this.content);
         }
-        return createAssistantTextMsg(this.content);
+        return createAssistantMsg(this.content);
     }
 
     toJSON(): MessageJSON {

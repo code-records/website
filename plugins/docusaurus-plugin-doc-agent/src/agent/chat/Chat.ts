@@ -66,16 +66,23 @@ export class Chat {
         const runSignal = signal ?? this.abortController.signal;
 
         try {
+            let responseContent = '';
             for await (const event of this.agent.run({ context, signal: runSignal })) {
                 assistant.plan?.apply(event);
                 if (event.type === 'model_event' && event.event.type === 'content_delta') {
                     assistant.content += event.event.content;
+                }
+                if (event.type === 'agent_done') {
+                    responseContent = event.response?.content ?? responseContent;
                 }
                 if (event.type === 'agent_error') {
                     assistant.fail(event.error.message);
                 }
                 this.notify();
                 yield event;
+            }
+            if (assistant.content.length === 0 && responseContent.length > 0) {
+                assistant.content = responseContent;
             }
             assistant.finish();
         } catch (error) {

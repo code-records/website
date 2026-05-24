@@ -195,10 +195,7 @@ export abstract class Tool {
 function createEmptyToolRunContext(): ToolRunContext {
     return {
         context: [],
-        createUserContextMessage: content => ({
-            payload: { content, role: 'user' },
-            provider: 'default',
-        }),
+        createUserContextMessage: content => ({ content, role: 'user' }),
         tools: new Map(),
     };
 }

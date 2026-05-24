@@ -91,18 +91,18 @@ export class Action {
                 type: 'content',
             });
         }
-        if (modelEvent.type === 'thinking_delta') {
+        if (modelEvent.type === 'action' && modelEvent.action.type === 'thinking') {
             return new Action({
-                content: modelEvent.content,
+                content: modelEvent.action.content,
                 done: false,
                 type: 'thinking',
             });
         }
-        if (modelEvent.type === 'tool_call_done') {
+        if (modelEvent.type === 'action' && modelEvent.action.type === 'tool') {
             return new Action({
-                call: modelEvent.call,
+                call: modelEvent.action.call,
                 done: false,
-                label: modelEvent.call.name,
+                label: modelEvent.action.call.name,
                 type: 'tool',
             });
         }

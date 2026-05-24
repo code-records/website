@@ -1,12 +1,23 @@
-import { Model, type ModelConfig, type ModelEvent, type ModelMessage, type ModelRequest, type ToolCall } from './Model';
+import {
+    Model,
+    type ModelAction,
+    type ModelConfig,
+    type ModelEvent,
+    type ModelMessage,
+    type ModelRequest,
+    type ProviderMessage,
+    type ProviderMessages,
+    type ProviderRequestBody,
+    type ProviderResponseBody,
+    type ProviderStreamChunk,
+    type ToolCall,
+} from './Model';
 import type { JsonObject, JsonValue, ToolDefinition } from '../tools/Tool';
 import { optionalArray, optionalString, requireJsonObject, requireString, safeParseJsonObject } from '../utils/json';
 import { parseSseStream } from '../utils/sse';
 
 const DEFAULT_OPENAI_ENDPOINT = 'https://api.openai.com/v1/responses';
 const DEFAULT_OPENAI_STREAM_ENDPOINT = DEFAULT_OPENAI_ENDPOINT;
-
-type OpenAIMessage = ModelMessage<JsonObject>;
 
 export class OpenAIModel extends Model {
     constructor({ url = DEFAULT_OPENAI_ENDPOINT, streamUrl = DEFAULT_OPENAI_STREAM_ENDPOINT, ...rest }: ModelConfig = {}) {
@@ -18,23 +29,26 @@ export class OpenAIModel extends Model {
     }
 
     async *stream(request: ModelRequest): AsyncGenerator<ModelEvent, void, void> {
-        const body = {
-            input: this.toResponsesInput(request.messages),
+        const body: ProviderRequestBody = {
+            input: this.convertModelMessages2ProviderMessages(request.messages),
             model: this.model,
             ...(request.system ? { instructions: request.system } : {}),
-            ...(request.tools?.length ? { tools: this.toResponsesTools(request.tools) } : {}),
+            ...(request.tools?.length ? { tools: this.formatToolDefs(request.tools) } : {}),
             stream: true,
         };
 
-        const res = await this.fetchWithRetry(body, request.signal);
         const output: JsonValue[] = [];
         const toolCalls: ToolCall[] = [];
         const toolArgs = new Map<string, string>();
         const toolByItemId = new Map<string, ToolCall>();
         let finalStatus = '';
+        let content = '';
         let outputText = '';
+        let thinking = '';
+        let thinkingStarted = false;
 
-        for await (const event of parseSseStream(res, { idleTimeout: 30000, signal: request.signal })) {
+        for await (const chunk of this.requestStream(body, request.signal)) {
+            const event = requireJsonObject(chunk, 'OpenAI stream event');
             const type = requireString(event.type, 'OpenAI stream event type');
 
             if (type === 'response.output_item.added') {
@@ -50,23 +64,25 @@ export class OpenAIModel extends Model {
                 toolArgs.set(itemId, optionalString(item.arguments));
                 toolCalls.push(call);
 
-                yield { type: 'tool_call_start', callId, name };
+                yield { type: 'action', action: { type: 'tool', call }, kind: 'add' };
                 continue;
             }
 
             if (type === 'response.output_text.delta') {
-                yield {
-                    type: 'content_delta',
-                    content: requireString(event.delta, 'OpenAI output text delta'),
-                };
+                const delta = requireString(event.delta, 'OpenAI output text delta');
+                content += delta;
+                yield { type: 'content_delta', content: delta };
                 continue;
             }
 
             if (type === 'response.reasoning_summary_text.delta' || type === 'response.reasoning_text.delta') {
+                thinking += requireString(event.delta, 'OpenAI reasoning delta');
                 yield {
-                    type: 'thinking_delta',
-                    content: requireString(event.delta, 'OpenAI reasoning delta'),
+                    type: 'action',
+                    action: { type: 'thinking', content: thinking },
+                    kind: thinkingStarted ? 'update' : 'add',
                 };
+                thinkingStarted = true;
                 continue;
             }
 
@@ -74,10 +90,6 @@ export class OpenAIModel extends Model {
                 const itemId = requireString(event.item_id, 'OpenAI function call item_id');
                 const delta = requireString(event.delta, 'OpenAI function call arguments delta');
                 toolArgs.set(itemId, (toolArgs.get(itemId) ?? '') + delta);
-                const call = toolByItemId.get(itemId);
-                if (call !== undefined) {
-                    yield { type: 'tool_call_delta', callId: call.id, inputDelta: delta };
-                }
                 continue;
             }
 
@@ -89,7 +101,7 @@ export class OpenAIModel extends Model {
                     const call = toolByItemId.get(itemId);
                     if (call !== undefined) {
                         call.input = safeParseJsonObject(optionalString(item.arguments) || toolArgs.get(itemId) || '');
-                        yield { type: 'tool_call_done', call };
+                        yield { type: 'action', action: { type: 'tool', call }, kind: 'update' };
                     }
                 }
                 continue;
@@ -113,83 +125,94 @@ export class OpenAIModel extends Model {
             }
         }
 
-        if (outputText.length > 0 && output.length === 0) {
-            yield { type: 'content_delta', content: outputText };
+        const finalContent = outputText || content;
+        if (finalContent.length > 0 && content.length === 0) {
+            yield { type: 'content_delta', content: finalContent };
         }
 
+        const actions = this.createActions(thinking, toolCalls);
         yield {
             type: 'done',
             response: {
-                content: outputText,
-                raw: this.createAssistantMsg(output),
+                actions,
+                content: finalContent,
+                raw: this.createAssistantMsg(finalContent, actions),
                 status: toolCalls.length > 0
                     ? 'tool'
                     : finalStatus === 'incomplete'
                         ? 'continue'
                         : 'final',
-                toolCalls,
             },
         };
     }
 
-    toApiMessages(messages: readonly ModelMessage[]): ModelMessage[] {
-        return messages.filter(message => message.provider === 'openai');
+    protected async request(body: ProviderRequestBody, signal?: AbortSignal): Promise<ProviderResponseBody> {
+        const res = await this.postJson(this.url || DEFAULT_OPENAI_ENDPOINT, body, signal);
+        return await res.json() as ProviderResponseBody;
     }
 
-    createToolResultMsg(toolUseId: string, content: JsonValue): OpenAIMessage {
-        return this.wrap({ call_id: toolUseId, output: content, type: 'function_call_output' });
-    }
-
-    createUserMsg(content: string): OpenAIMessage {
-        return this.wrap({ content, role: 'user' });
-    }
-
-    createAssistantTextMsg(content: string): OpenAIMessage {
-        return this.wrap({ content, role: 'assistant' });
-    }
-
-    override formatToolDefs(tools: ToolDefinition[]): JsonObject[] {
-        return this.toResponsesTools(tools);
-    }
-
-    override isSafeCompactBoundary(previous: ModelMessage, current: ModelMessage): boolean {
-        if (previous.provider === 'openai') {
-            const payload = requireJsonObject(previous.payload, 'OpenAI previous payload');
-            if (payload.type === 'function_call') return false;
+    protected async *requestStream(body: ProviderRequestBody, signal?: AbortSignal): AsyncGenerator<ProviderStreamChunk, void, void> {
+        const res = await this.postJson(this.streamUrl || this.url || DEFAULT_OPENAI_STREAM_ENDPOINT, body, signal);
+        for await (const event of parseSseStream(res, { idleTimeout: 30000, signal })) {
+            yield event;
         }
-        if (current.provider === 'openai') {
-            const payload = requireJsonObject(current.payload, 'OpenAI current payload');
-            if (payload.type === 'function_call_output') return false;
-        }
-        return true;
     }
 
-    private toResponsesInput(messages: readonly ModelMessage[]): JsonValue[] {
-        const result: JsonValue[] = [];
+    protected convertModelMessage2ProviderMessage(message: ModelMessage): ProviderMessage {
+        return this.convertModelMessageToProviderMessages(message)[0] ?? { content: [], role: 'assistant' };
+    }
 
-        for (const message of this.toApiMessages(messages)) {
-            const msg = requireJsonObject(message.payload, 'OpenAI message payload');
-            if (msg.type === 'function_call_output') {
-                result.push(msg);
-                continue;
-            }
-            if (msg.role === 'user') {
-                result.push({ content: this.textContent(msg.content), role: 'user' });
-                continue;
-            }
-            if (msg.role === 'assistant') {
-                result.push({ content: this.textContent(msg.content, 'output_text'), role: 'assistant' });
-                continue;
-            }
-            if (typeof msg.type === 'string') {
-                result.push(msg);
-            }
+    protected convertProviderMessage2ModelMessage(message: ProviderMessage): ModelMessage {
+        const payload = requireJsonObject(message, 'OpenAI provider message');
+        if (payload.type === 'function_call_output') {
+            return this.createToolResultMsg(requireString(payload.call_id, 'OpenAI tool result id'), payload.output ?? '');
+        }
+        if (payload.type === 'function_call') {
+            const call: ToolCall = {
+                id: requireString(payload.call_id, 'OpenAI function call id'),
+                input: safeParseJsonObject(optionalString(payload.arguments)),
+                name: requireString(payload.name, 'OpenAI function call name'),
+            };
+            return this.createAssistantMsg('', [{ type: 'tool', call }]);
+        }
+        if (payload.role === 'user') {
+            return this.createUserMsg(this.readText(payload.content));
+        }
+        return this.createAssistantMsg(this.readText(payload.content));
+    }
+
+    protected override convertModelMessages2ProviderMessages(messages: readonly ModelMessage[]): ProviderMessages {
+        return messages.flatMap(message => this.convertModelMessageToProviderMessages(message));
+    }
+
+    private convertModelMessageToProviderMessages(message: ModelMessage): JsonObject[] {
+        if (message.role === 'user') {
+            return [{ content: this.textContent(message.content), role: 'user' }];
+        }
+
+        if (message.role === 'tool') {
+            return [{ call_id: message.toolUseId, output: message.content, type: 'function_call_output' }];
+        }
+
+        const result: JsonObject[] = [];
+        if (message.content.length > 0) {
+            result.push({ content: this.textContent(message.content, 'output_text'), role: 'assistant' });
+        }
+
+        for (const action of message.actions ?? []) {
+            if (action.type !== 'tool') continue;
+            result.push({
+                arguments: JSON.stringify(action.call.input ?? {}),
+                call_id: action.call.id,
+                name: action.call.name,
+                type: 'function_call',
+            });
         }
 
         return result;
     }
 
-    private toResponsesTools(tools: readonly ToolDefinition[]): JsonObject[] {
+    private formatToolDefs(tools: readonly ToolDefinition[]): JsonObject[] {
         return tools.map(tool => ({
             description: tool.description,
             name: tool.name,
@@ -199,16 +222,37 @@ export class OpenAIModel extends Model {
         }));
     }
 
-    protected override buildUrl(): string {
-        return this.streamUrl || this.url || DEFAULT_OPENAI_STREAM_ENDPOINT;
-    }
-
-    protected override buildHeaders(): Record<string, string> {
-        const headers = super.buildHeaders();
+    private buildHeaders(): Record<string, string> {
+        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
         if (this.personalAccessToken) {
-            headers['Authorization'] = `Bearer ${this.personalAccessToken}`;
+            headers.Authorization = `Bearer ${this.personalAccessToken}`;
         }
         return headers;
+    }
+
+    private async postJson(url: string, body: ProviderRequestBody, signal?: AbortSignal): Promise<Response> {
+        const res = await fetch(url, {
+            body: JSON.stringify(body),
+            headers: this.buildHeaders(),
+            method: 'POST',
+            signal,
+        });
+        if (!res.ok) {
+            throw await this.createApiError(res);
+        }
+        return res;
+    }
+
+    private async createApiError(res: Response): Promise<Error> {
+        const text = await res.text();
+        try {
+            const json = JSON.parse(text) as unknown;
+            const body = requireJsonObject(json, 'OpenAI error body');
+            const error = requireJsonObject(body.error, 'OpenAI error');
+            return Object.assign(new Error(optionalString(error.message) || `OpenAI API ${res.status}`), { status: res.status });
+        } catch {
+            return Object.assign(new Error(`OpenAI API ${res.status}: ${text.slice(0, 200)}`), { status: res.status });
+        }
     }
 
     private textContent(content: JsonValue | undefined, inputType = 'input_text'): JsonValue[] {
@@ -216,17 +260,22 @@ export class OpenAIModel extends Model {
         return text.length > 0 ? [{ text, type: inputType }] : [];
     }
 
-    private createAssistantMsg(rawContent: JsonValue): OpenAIMessage {
-        if (Array.isArray(rawContent)) {
-            return this.wrap({ content: rawContent, role: 'assistant' });
-        }
-        return this.wrap({
-            content: rawContent ? this.textContent(rawContent, 'output_text') : [],
-            role: 'assistant',
-        });
+    private readText(content: JsonValue | undefined): string {
+        if (typeof content === 'string') return content;
+        if (!Array.isArray(content)) return String(content ?? '');
+        return content
+            .map(part => isJsonObject(part) ? optionalString(part.text) : '')
+            .join('');
     }
 
-    private wrap(payload: JsonObject): OpenAIMessage {
-        return { payload, provider: 'openai' };
+    private createActions(thinking: string, toolCalls: readonly ToolCall[]): ModelAction[] {
+        return [
+            ...(thinking.length > 0 ? [{ type: 'thinking' as const, content: thinking }] : []),
+            ...toolCalls.map(call => ({ type: 'tool' as const, call })),
+        ];
     }
+}
+
+function isJsonObject(value: unknown): value is JsonObject {
+    return value !== null && typeof value === 'object' && !Array.isArray(value);
 }

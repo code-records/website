@@ -55,7 +55,7 @@ export abstract class Agent {
     }
 
     createAssistantContextMessage(content: string): ModelMessage {
-        return this.context.model.createAssistantTextMsg(content);
+        return this.context.model.createAssistantMsg(content);
     }
 
     /**
