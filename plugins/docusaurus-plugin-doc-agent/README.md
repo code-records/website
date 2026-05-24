@@ -21,7 +21,7 @@ plugins: [
           label: 'GPT-5.5',
           model: 'gpt-5.5',
           adapterType: 'openai',
-          endpoint: '/agent/v1/responses',
+          url: '/agent/v1/responses',
         },
       ],
       prompt: `你是文档助手，专门回答游戏 SDK 接入相关问题。

@@ -53,7 +53,11 @@ function DocAgentWidget() {
         }
     }, [pluginOptions]);
 
-    const routePath = pluginOptions?.routePath || '/chat';
+    if (!pluginOptions) {
+        return null;
+    }
+
+    const routePath = pluginOptions.routePath;
     const pathname = typeof window !== 'undefined' ? window.location.pathname.replace(/\/$/, '') : '';
     const normalizedRoutePath = routePath.replace(/\/$/, '');
     if (pathname === normalizedRoutePath || pathname.endsWith(normalizedRoutePath)) {

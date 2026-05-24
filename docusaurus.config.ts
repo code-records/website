@@ -87,18 +87,27 @@ const config: Config = {
     [
       'docusaurus-plugin-doc-agent',
       {
-        defaultModel: 'gemini-2.5-flash',
-        providers: {
-          gemini: {
-            adapter: 'gemini',
+        defaultModel: 'gemini-3.5-flash',
+        modelOptions: [
+          {
+            label: 'Gemini 3.5 Flash',
+            model: 'gemini-3.5-flash',
+            adapterType: 'gemini',
             personalAccessToken: GEMINI_API_KEY, // 👈 静态 Pages 托管直连官方 API（无需配置代理端点）
-            models: {
-              'gemini-3.1-flash-lite': 'Gemini 3.1 Flash-Lite',
-              'gemini-3.5-flash': 'Gemini 3.5 Flash',
-              'gemini-2.5-flash': 'Gemini 2.5 Flash',
-            },
           },
-        },
+          {
+            label: 'Gemini 3.1 Flash-Lite',
+            model: 'gemini-3.1-flash-lite',
+            adapterType: 'gemini',
+            personalAccessToken: GEMINI_API_KEY,
+          },
+          {
+            label: 'Gemini 2.5 Flash',
+            model: 'gemini-2.5-flash',
+            adapterType: 'gemini',
+            personalAccessToken: GEMINI_API_KEY,
+          },
+        ],
         prompt: i18n.docAgent.prompt,
         github: {
           owner: 'code-records',

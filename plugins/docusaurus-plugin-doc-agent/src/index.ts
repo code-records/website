@@ -41,84 +41,35 @@ export interface DocAgentGithubOptions {
   personalAccessToken?: string;
 }
 
-export interface DocAgentProviderOption {
-  adapter: 'openai' | 'anthropic' | 'gemini';
-  /**
-   * 普通 API 请求端点或端点模板：
-   * 
-   * 不配置时使用各 provider 内置的官方默认端点；需要反向代理或兼容服务时再配置。
-   * Gemini 支持在端点中使用 `{model}` 占位符，例如
-   * 'https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent'。
-   * 若要隐藏 API Key，请配置自有服务端反代，并不要配置 `personalAccessToken`。
-   */
-  url?: string;
-  /**
-   * 流式 API 请求端点或端点模板：
-   * 
-   * 当流式接口与普通非流式接口使用不同的代理路径（例如因 Nginx/CDN 单独配置 SSE 路由）时进行配置。
-   * Gemini 支持在端点中使用 `{model}` 占位符，例如
-   * 'https://generativelanguage.googleapis.com/v1beta/models/{model}:streamGenerateContent?alt=sse'。
-   * Gemini 不配置此项时使用官方默认流式端点；如果要走自定义反代，建议同时配置 `url` 和 `streamUrl`。
-   */
-  streamUrl?: string;
-  /**
-   * 个人访问令牌/API密钥（Pages 纯静态托管 fallback，有安全隐患）：
-   * 
-   * 如果部署在 GitHub Pages 等纯静态托管平台，并且没有配置反向代理服务器，
-   * 可在此直接配置此 Token/API Key。
-   * 注意：这会导致该 Key 被打包进前端静态资源中并直接在浏览器端发起请求，可能会泄露给前端用户！
-   */
-  personalAccessToken?: string;
-  models: Record<string, string>;
-}
-
 export interface DocAgentPluginOptions {
   defaultModel: string;
-  providers?: Record<string, DocAgentProviderOption>;
-  modelOptions?: DocAgentModelOption[];
+  modelOptions: DocAgentModelOption[];
   gitee?: DocAgentGiteeOptions;
   github?: DocAgentGithubOptions;
   prompt?: string;
-  routePath?: string;
+  routePath: string;
 }
 
+type DocAgentPluginUserOptions = Omit<DocAgentPluginOptions, 'routePath'> &
+  Partial<Pick<DocAgentPluginOptions, 'routePath'>>;
 
-const docAgentPlugin: PluginModule<DocAgentPluginOptions> = (_context, options) => {
-  const pluginOptions = options as DocAgentPluginOptions;
-  const routePath = pluginOptions.routePath || '/chat';
+const DEFAULT_ROUTE_PATH = '/chat';
 
-  let modelOptions: DocAgentModelOption[] = pluginOptions.modelOptions || [];
-  if (pluginOptions.providers) {
-    const flatOptions: DocAgentModelOption[] = [];
-    for (const providerConf of Object.values(pluginOptions.providers)) {
-      if (providerConf && providerConf.models) {
-        for (const [modelId, label] of Object.entries(providerConf.models)) {
-          flatOptions.push({
-            label,
-            model: modelId,
-            url: providerConf.url,
-            streamUrl: providerConf.streamUrl,
-            personalAccessToken: providerConf.personalAccessToken,
-            adapterType: providerConf.adapter,
-          });
-        }
-      }
-    }
-    modelOptions = flatOptions;
-  }
+const docAgentPlugin: PluginModule = (_context, options) => {
+  const userOptions = options as DocAgentPluginUserOptions;
+  const pluginOptions: DocAgentPluginOptions = {
+    ...userOptions,
+    routePath: userOptions.routePath ?? DEFAULT_ROUTE_PATH,
+  };
 
   return {
     name: 'docusaurus-plugin-doc-agent',
 
     contentLoaded({ actions }) {
-      actions.setGlobalData({
-        ...pluginOptions,
-        modelOptions,
-        routePath,
-      });
+      actions.setGlobalData(pluginOptions);
       actions.addRoute({
-        path: routePath,
-        component: path.join(__dirname, 'ChatPage.jsx'),
+        path: pluginOptions.routePath,
+        component: path.join(__dirname, 'pages/ChatPage.jsx'),
         exact: true,
       });
     },

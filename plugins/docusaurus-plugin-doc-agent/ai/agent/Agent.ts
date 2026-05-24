@@ -48,7 +48,7 @@ export class Agent {
         }
 
         const config: AdapterConfig = {
-            endpoint: modelOption.endpoint,
+            endpoint: modelOption.url,
             model: modelOption.model,
         };
 

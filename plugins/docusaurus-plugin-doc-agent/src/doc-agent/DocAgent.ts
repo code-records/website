@@ -115,19 +115,20 @@ export class DocAgent extends Agent {
         modelOption,
         a2uiPromptText,
         pathname,
-        routePath = '/chat',
+        routePath,
         signal,
     }: {
         modelOption: ModelOption;
         a2uiPromptText?: string;
         pathname: string;
-        routePath?: string;
+        routePath: string;
         signal?: AbortSignal;
     }): Promise<MessageJSON | null> {
         if (typeof pathname !== 'string' || !pathname.startsWith('/')) return null;
 
         const path = pathname.replace(/\/+$/, '') || '/';
-        const chatPath = routePath.replace(/\/+$/, '') || '/chat';
+        const normalizedRoutePath = routePath.replace(/\/+$/, '');
+        const chatPath = normalizedRoutePath.length > 0 ? normalizedRoutePath : '/';
         const url = path === '/' || path === chatPath ? 'README.md' : path;
         let content: string | null = null;
         try {
