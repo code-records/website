@@ -78,7 +78,7 @@ const config: Config = {
     [
       'docusaurus-plugin-doc-agent',
       {
-        defaultModel: 'gemini-3.5-flash',
+        defaultModel: 'gemini-2.5-flash',
         providers: {
           gemini: {
             adapter: 'gemini',
