@@ -7,8 +7,8 @@ import { getDocusaurusConfigI18n } from './docusaurus.config.ts.i18n';
 
 const locale = process.env.DOCUSAURUS_CURRENT_LOCALE;
 const i18n = getDocusaurusConfigI18n(locale);
-const GITHUB_PERSONAL_ACCESS_TOKEN = Buffer.from(
-  'Z2l0aHViX3BhdF8xMUFESllPS1kwUjRDb2ZxMFBZOFNKX0Q1Qmx6Z2E0SHhDS1Ewbzhod2RYQ0pUa3RSTnRoVDhINUpMRUtlb2g1bG9QVzI1N0VNUXpPbmUyRExj',
+const GITHUB_PAT = Buffer.from(
+  'Z2l0aHViX3BhdF8xMUFESllPS1kwWlVENzJIdFBIWG1kX29odDVHMWNVakhrTTZNWjJwT3h6WXZWR09ZUXdCbkd3RXoxVTF3a2xrNnVUSkpZS0E3NWR3cUpxVFJu',
   'base64'
 ).toString('utf-8');
 
@@ -113,7 +113,7 @@ const config: Config = {
           owner: 'code-records',
           repo: 'website',
           ref: 'main',
-          personalAccessToken: GITHUB_PERSONAL_ACCESS_TOKEN,
+          personalAccessToken: GITHUB_PAT,
         },
       },
     ],
