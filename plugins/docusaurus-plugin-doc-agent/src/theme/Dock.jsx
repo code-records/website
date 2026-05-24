@@ -1,14 +1,14 @@
 import React from 'react';
 import BrowserOnly from '@docusaurus/BrowserOnly';
 
-export default function Root({ children }) {
+export default function DockRoot({ children }) {
   return (
     <>
       {children}
       <BrowserOnly>
         {() => {
-          const DocAgentWidget = require('../components/doc-agent').default;
-          return <DocAgentWidget />;
+          const Chat = require('../components/doc-agent/Chat.jsx').default;
+          return <Chat />;
         }}
       </BrowserOnly>
     </>

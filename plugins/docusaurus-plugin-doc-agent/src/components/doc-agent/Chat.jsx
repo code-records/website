@@ -3,7 +3,7 @@ import { usePluginData } from '@docusaurus/useGlobalData';
 import { initReadonlyClient } from './tools/api';
 import ChatPanel from './ui/ChatPanel.jsx';
 
-class DocAgentWidgetInner extends React.Component {
+class DocAgentChatInner extends React.Component {
     state = {
         isOpen: false,
     };
@@ -45,7 +45,7 @@ class DocAgentWidgetInner extends React.Component {
     }
 }
 
-function DocAgentWidget() {
+function Chat() {
     const pluginOptions = usePluginData('docusaurus-plugin-doc-agent');
     React.useMemo(() => {
         if (pluginOptions) {
@@ -64,7 +64,7 @@ function DocAgentWidget() {
         return null;
     }
 
-    return <DocAgentWidgetInner pluginOptions={pluginOptions} />;
+    return <DocAgentChatInner pluginOptions={pluginOptions} />;
 }
 
-export default DocAgentWidget;
+export default Chat;

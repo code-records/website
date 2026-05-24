@@ -1,8 +1,7 @@
 import React from 'react';
 import { Chat } from '../../../agent/chat';
-import { createA2UIBridge } from '../a2uiBridge';
+import { createA2UIBridge } from '../../../_old/a2uiBridge';
 import { DocAgent } from '../DocAgent';
-import { getDefaultDocAgentModelOption } from '../modelOptions';
 import ChatMessage from './ChatMessage.jsx';
 import SuggestMessage from './SuggestMessage.jsx';
 
@@ -12,7 +11,14 @@ class ChatPanel extends React.Component {
     constructor(props) {
         super(props);
         const pluginOptions = props.pluginOptions;
-        const initialModelOption = getDefaultDocAgentModelOption(pluginOptions);
+        const initialModelOption = pluginOptions.modelOptions.find(
+            item => item.model === pluginOptions.defaultModel,
+        );
+        if (!initialModelOption) {
+            throw new Error(
+                `docusaurus-plugin-doc-agent defaultModel "${pluginOptions.defaultModel}" must exist in modelOptions.`,
+            );
+        }
         this.modelOptions = pluginOptions.modelOptions;
         this.state = {
             inputValue: '',

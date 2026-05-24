@@ -2,7 +2,7 @@ import { Agent, ClaudeModel, GeminiModel, OpenAIModel, type Model, type ModelMes
 import { DOC_AGENT_TOOLS } from './tools/index';
 import { readDocByUrl } from './tools/ReadDocTool';
 import type { MessageJSON } from '../../agent';
-import type { ModelOption } from './modelOptions';
+import type { DocAgentModelOption as ModelOption } from '../../index';
 
 const SUGGEST_SURFACE_ID = 'message-docs-suggestions';
 const SUGGESTIONS_DELETE_MESSAGE = {
