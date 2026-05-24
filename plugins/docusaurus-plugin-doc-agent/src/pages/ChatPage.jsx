@@ -1,8 +1,8 @@
 import React from 'react';
 import BrowserOnly from '@docusaurus/BrowserOnly';
 import { usePluginData } from '@docusaurus/useGlobalData';
-import ChatPanel from '../doc-agent/ui/ChatPanel.jsx';
-import { initReadonlyClient } from '../doc-agent/tools/api';
+import ChatPanel from '../components/doc-agent/ui/ChatPanel.jsx';
+import { initReadonlyClient } from '../components/doc-agent/tools/api';
 
 function ChatPageContent() {
   const pluginOptions = usePluginData('docusaurus-plugin-doc-agent');

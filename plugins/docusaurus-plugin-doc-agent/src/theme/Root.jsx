@@ -7,7 +7,7 @@ export default function Root({ children }) {
       {children}
       <BrowserOnly>
         {() => {
-          const DocAgentWidget = require('../doc-agent').default;
+          const DocAgentWidget = require('../components/doc-agent').default;
           return <DocAgentWidget />;
         }}
       </BrowserOnly>

@@ -1,5 +1,5 @@
-import { parseA2UIPayload, validateA2UIBasicCatalogMessages } from '../../../ai/a2ui/A2UITransport.js';
-import { Tool, type JsonObject, type ToolInput, type ToolInputSchema, type ToolResult, type ToolRunContext } from '../../agent/tools';
+import { parseA2UIPayload, validateA2UIBasicCatalogMessages } from '../../../../ai/a2ui/A2UITransport.js';
+import { Tool, type JsonObject, type ToolInput, type ToolInputSchema, type ToolResult, type ToolRunContext } from '../../../agent/tools';
 
 interface A2UIMessage {
     [key: string]: unknown;

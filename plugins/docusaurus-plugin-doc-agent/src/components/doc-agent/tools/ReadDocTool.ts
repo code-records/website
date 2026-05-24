@@ -1,6 +1,6 @@
 import { readonlyClient } from './api';
-import { logger } from '../../agent/utils/logger';
-import { Tool, type ToolInput, type ToolInputSchema, type ToolResult, type ToolRunContext } from '../../agent/tools';
+import { logger } from '../../../agent/utils/logger';
+import { Tool, type ToolInput, type ToolInputSchema, type ToolResult, type ToolRunContext } from '../../../agent/tools';
 
 const READ_DOC_MAX_CHARS = 8000;
 

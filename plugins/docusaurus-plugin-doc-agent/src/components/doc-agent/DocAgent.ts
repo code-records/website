@@ -1,7 +1,7 @@
-import { Agent, ClaudeModel, GeminiModel, OpenAIModel, type Model, type ModelMessage } from '../agent';
+import { Agent, ClaudeModel, GeminiModel, OpenAIModel, type Model, type ModelMessage } from '../../agent';
 import { DOC_AGENT_TOOLS } from './tools/index';
 import { readDocByUrl } from './tools/ReadDocTool';
-import type { MessageJSON } from '../agent';
+import type { MessageJSON } from '../../agent';
 import type { ModelOption } from './modelOptions';
 
 const SUGGEST_SURFACE_ID = 'message-docs-suggestions';

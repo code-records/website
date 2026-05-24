@@ -83,7 +83,7 @@ const docAgentPlugin: PluginModule = (_context, options) => {
     },
 
     getClientModules() {
-      return [path.join(__dirname, 'clientModules/doc-agent.css')];
+      return [path.join(__dirname, 'css/style.css')];
     },
 
     async postBuild({ outDir }) {

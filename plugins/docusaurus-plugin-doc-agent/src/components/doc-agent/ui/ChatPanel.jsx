@@ -1,5 +1,5 @@
 import React from 'react';
-import { Chat } from '../../agent/chat';
+import { Chat } from '../../../agent/chat';
 import { createA2UIBridge } from '../a2uiBridge';
 import { DocAgent } from '../DocAgent';
 import { getDefaultDocAgentModelOption } from '../modelOptions';
