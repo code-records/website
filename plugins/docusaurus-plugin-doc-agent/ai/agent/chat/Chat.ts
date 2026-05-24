@@ -5,23 +5,22 @@ import type {
     ChatOptions,
     MessageJSON,
     MessageJSONList,
-    ModelSelection,
     Notify,
 } from '../types';
 
 export class Chat {
     private _agent: Agent;
-    private _modelSelection: ModelSelection;
+    private _model: string;
     private _adapter: Adapter;
     private _onChange?: Notify;
     private _messages: Message[];
     activeMessage?: Message;
 
-    constructor({ agent, modelSelection, onChange }: ChatOptions) {
+    constructor({ agent, model, onChange }: ChatOptions) {
         this._agent = agent;
-        if (modelSelection === null || modelSelection === undefined) throw new Error('Chat requires modelSelection');
-        this._modelSelection = modelSelection;
-        this._adapter = agent.adapter(modelSelection);
+        if (!model) throw new Error('Chat requires model');
+        this._model = model;
+        this._adapter = agent.adapter(model);
         this._onChange = onChange;
         this._messages = [];
         this.activeMessage = undefined;
@@ -31,21 +30,21 @@ export class Chat {
         return this.activeMessage !== undefined;
     }
 
-    get modelSelection(): ModelSelection {
-        return this._modelSelection;
+    get model(): string {
+        return this._model;
     }
 
     get messages(): Message[] {
         return this._messages;
     }
 
-    setModelSelection(modelSelection: ModelSelection): boolean {
-        if (this.isSending || modelSelection === null || modelSelection === undefined) return false;
+    setModel(model: string): boolean {
+        if (this.isSending || !model) return false;
 
-        const oldAdapter = this._agent.providers[this._modelSelection.provider]?.adapter;
-        this._bindModelSelection(modelSelection);
+        const oldAdapter = this._adapter.constructor;
+        this._bindModel(model);
 
-        const nextAdapter = this._agent.providers[modelSelection.provider]?.adapter;
+        const nextAdapter = this._adapter.constructor;
         if (oldAdapter !== undefined && oldAdapter !== nextAdapter) {
             this.clear();
         }
@@ -116,9 +115,9 @@ export class Chat {
         if (this._onChange !== undefined) this._onChange();
     }
 
-    private _bindModelSelection(modelSelection: ModelSelection): void {
-        if (modelSelection === null || modelSelection === undefined) throw new Error('Chat requires modelSelection');
-        this._modelSelection = modelSelection;
-        this._adapter = this._agent.adapter(modelSelection);
+    private _bindModel(model: string): void {
+        if (!model) throw new Error('Chat requires model');
+        this._model = model;
+        this._adapter = this._agent.adapter(model);
     }
 }

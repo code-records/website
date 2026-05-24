@@ -4,7 +4,6 @@ type GithubReadonlyConfig = {
     owner: string;
     repo: string;
     ref: string;
-    endpoint?: string;
     personalAccessToken?: string;
 };
 
@@ -33,7 +32,7 @@ export class GithubReadonlyClient implements ReadonlyClient {
             ? `/repos/${this.config.owner}/${this.config.repo}/contents/${encoded}`
             : `/repos/${this.config.owner}/${this.config.repo}/contents`;
 
-        const base = this.config.endpoint || (this.config.personalAccessToken ? 'https://api.github.com' : '/agent-tools-github');
+        const base = this.config.personalAccessToken ? 'https://api.github.com' : '/agent-tools-github';
         return `${base}${repoPath}?${params}`;
     }
 

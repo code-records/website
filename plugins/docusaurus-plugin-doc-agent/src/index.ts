@@ -8,18 +8,11 @@ export type DocAgentProviderAdapter = 'openai' | 'anthropic' | 'gemini';
 
 export interface DocAgentProviderOption {
   adapter: DocAgentProviderAdapter;
-  url?: string;
-  streamUrl?: string;
   personalAccessToken?: string;
   models: Record<string, string>;
 }
 
 export type DocAgentProviders = Record<string, DocAgentProviderOption>;
-
-export interface DocAgentModelSelection {
-  provider: string;
-  model: string;
-}
 
 export interface DocAgentGiteeOptions {
   owner: string;
@@ -31,14 +24,6 @@ export interface DocAgentGithubOptions {
   owner: string;
   repo: string;
   ref: string;
-  /**
-   * 代理路径（推荐，安全优先）：
-   * 
-   * 配置为本地开发服务器或生产环境的反向代理路径（例如 '/agent-tools-github'）。
-   * 敏感的 GitHub 个人访问令牌（PAT）将由服务器端/代理安全注入，
-   * 绝不会泄露给前端浏览器。
-   */
-  endpoint?: string;
   /**
    * 个人访问令牌（Pages 纯静态托管 fallback，有安全隐患）：
    * 

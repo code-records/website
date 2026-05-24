@@ -2,7 +2,7 @@ import { Agent, ClaudeModel, GeminiModel, OpenAIModel, type Model, type ModelMes
 import { DOC_AGENT_TOOLS } from './tools/index';
 import { readDocByUrl } from './tools/ReadDocTool';
 import type { MessageJSON } from '../../agent';
-import type { DocAgentModelSelection, DocAgentPluginOptions, DocAgentProviders } from '../../index';
+import type { DocAgentPluginOptions, DocAgentProviderOption, DocAgentProviders } from '../../index';
 
 const SUGGEST_SURFACE_ID = 'message-docs-suggestions';
 const SUGGESTIONS_DELETE_MESSAGE = {
@@ -106,18 +106,18 @@ export class DocAgent extends Agent {
         docAgentProviders = pluginOptions.providers;
     }
 
-    setModelSelection(selection: DocAgentModelSelection): void {
-        this.setModel(createDocAgentModel(selection));
+    setCurrentModel(model: string): void {
+        this.setModel(createDocAgentModel(model));
     }
 
     async suggestQuestions({
-        modelSelection,
+        model,
         a2uiPromptText,
         pathname,
         routePath,
         signal,
     }: {
-        modelSelection: DocAgentModelSelection;
+        model: string;
         a2uiPromptText?: string;
         pathname: string;
         routePath: string;
@@ -140,9 +140,9 @@ export class DocAgent extends Agent {
         }
         if (!content) return null;
 
-        const model = createDocAgentModel(modelSelection);
-        const response = await model.complete({
-            messages: [model.createUserMsg(content.slice(0, 3000))],
+        const runtimeModel = createDocAgentModel(model);
+        const response = await runtimeModel.complete({
+            messages: [runtimeModel.createUserMsg(content.slice(0, 3000))],
             signal,
             system: [SUGGEST_PROMPT, a2uiPromptText].filter(Boolean).join('\n\n'),
             toolChoice: 'none',
@@ -196,19 +196,19 @@ export class DocAgent extends Agent {
     }
 }
 
-export function createDocAgentModel(selection: DocAgentModelSelection): Model {
-    const provider = docAgentProviders[selection.provider];
-    if (!provider) {
-        throw new Error(`Unknown provider: ${selection.provider}`);
-    }
-    if (!Object.prototype.hasOwnProperty.call(provider.models, selection.model)) {
-        throw new Error(`Unknown model "${selection.model}" for provider "${selection.provider}".`);
+function getProviderByModel(model: string): DocAgentProviderOption {
+    for (const provider of Object.values(docAgentProviders)) {
+        if (Object.prototype.hasOwnProperty.call(provider.models, model)) return provider;
     }
 
+    throw new Error(`Unknown model: ${model}`);
+}
+
+export function createDocAgentModel(model: string): Model {
+    const provider = getProviderByModel(model);
+
     const config = {
-        url: provider.url,
-        streamUrl: provider.streamUrl,
-        model: selection.model,
+        model,
         personalAccessToken: provider.personalAccessToken,
     };
 

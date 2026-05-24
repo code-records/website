@@ -5,28 +5,28 @@ import { Message, type MessageJSON } from './Message';
 
 export interface ChatOptions {
     agent: Agent;
-    modelSelection?: unknown;
+    model?: string;
     onChange?: () => void;
-    setAgentModel?: (agent: Agent, modelSelection: unknown) => void;
+    setAgentModel?: (agent: Agent, model: string) => void;
 }
 
 export class Chat {
     readonly agent: Agent;
     readonly history = new History();
     activeMessage?: Message;
-    modelSelection?: unknown;
+    model?: string;
 
     private abortController?: AbortController;
     private readonly onChange?: () => void;
-    private readonly setAgentModel?: (agent: Agent, modelSelection: unknown) => void;
+    private readonly setAgentModel?: (agent: Agent, model: string) => void;
 
-    constructor({ agent, modelSelection, onChange, setAgentModel }: ChatOptions) {
+    constructor({ agent, model, onChange, setAgentModel }: ChatOptions) {
         this.agent = agent;
-        this.modelSelection = modelSelection;
+        this.model = model;
         this.onChange = onChange;
         this.setAgentModel = setAgentModel;
-        if (modelSelection !== undefined) {
-            this.setAgentModel?.(this.agent, modelSelection);
+        if (model !== undefined) {
+            this.setAgentModel?.(this.agent, model);
         }
     }
 
@@ -38,10 +38,10 @@ export class Chat {
         return this.history.items;
     }
 
-    setModelSelection(modelSelection: unknown): boolean {
+    setModel(model: string): boolean {
         if (this.isSending) return false;
-        this.modelSelection = modelSelection;
-        this.setAgentModel?.(this.agent, modelSelection);
+        this.model = model;
+        this.setAgentModel?.(this.agent, model);
         return true;
     }
 

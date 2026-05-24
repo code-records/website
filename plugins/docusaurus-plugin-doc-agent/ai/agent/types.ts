@@ -4,7 +4,6 @@ import type { Agent } from './Agent';
 import type { Message } from './chat/Message';
 import type { Round } from './round/Round';
 import type {
-    DocAgentModelSelection,
     DocAgentProviderAdapter,
     DocAgentProviderOption,
     DocAgentProviders,
@@ -48,7 +47,6 @@ export interface AdapterConfig extends UnknownRecord {
     model?: string;
 }
 
-export type ModelSelection = DocAgentModelSelection;
 export type ProviderConfig = DocAgentProviderOption;
 export type ProviderMap = DocAgentProviders;
 
@@ -281,7 +279,7 @@ export interface SessionList extends Array<SessionListItem> {
 
 export interface RunOnceOptions {
     messages: MessageJSONList | null;
-    modelSelection: ModelSelection;
+    model: string;
     signal: AbortSignal | null;
     system: string | null;
 }
@@ -300,6 +298,6 @@ export interface SendOptions {
 
 export interface ChatOptions {
     agent: Agent;
-    modelSelection: ModelSelection;
+    model: string;
     onChange?: Notify;
 }

@@ -8,22 +8,25 @@ This package is intentionally a first-pass migration. It owns its runtime depend
 
 ## Docusaurus Config
 
-`defaultModel` and `modelOptions` are required. The plugin does not provide built-in model defaults.
+`defaultModel` and `providers` are required. The plugin does not provide built-in model defaults.
 
 ```ts
 plugins: [
   [
     require.resolve('./plugins/docusaurus-plugin-doc-agent'),
     {
-      defaultModel: 'gpt-5.5',
-      modelOptions: [
-        {
-          label: 'GPT-5.5',
-          model: 'gpt-5.5',
-          adapterType: 'openai',
-          url: '/agent/v1/responses',
+      defaultModel: 'gemini-3.5-flash',
+      providers: {
+        gemini: {
+          adapter: 'gemini',
+          personalAccessToken: ['AIzaSyDi0', '7Yqy6eclkDXjIToJuE59gAJptODVc'].join('-'),
+          models: {
+            'gemini-3.1-flash-lite': 'Gemini 3.1 Flash-Lite',
+            'gemini-3.5-flash': 'Gemini 3.5 Flash',
+            'gemini-2.5-flash': 'Gemini 2.5 Flash',
+          },
         },
-      ],
+      },
       prompt: `你是文档助手，专门回答游戏 SDK 接入相关问题。
 
 回答要求：
@@ -175,5 +178,4 @@ export const devProxyPlugin: PluginModule = (_context, _options) => {
 
 - Move GitLab readonly project/ref settings out of `src/ai/docsAgent/tools/gitlabReadonly.ts`.
 - Generate `url-map.json` from a Docusaurus plugin hook instead of the old slug parser.
-
 

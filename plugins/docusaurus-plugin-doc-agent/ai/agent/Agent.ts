@@ -13,8 +13,8 @@ import type {
     AgentLoopOptions,
     AgentOptions,
     LogData,
-    ModelSelection,
     ProviderMap,
+    ProviderConfig,
     RunOnceOptions,
     ToolMap,
 } from './types';
@@ -46,18 +46,19 @@ export class Agent {
         setLogger(config.debug ?? false);
     }
 
-    adapter(selection: ModelSelection): Adapter {
-        const provider = this.providers[selection.provider];
-        if (!provider) {
-            throw new Error(`Agent adapter requires a known provider: ${selection.provider}`);
-        }
-        if (!Object.prototype.hasOwnProperty.call(provider.models, selection.model)) {
-            throw new Error(`Agent adapter requires a known model "${selection.model}" for provider "${selection.provider}".`);
+    private getProviderByModel(model: string): ProviderConfig {
+        for (const provider of Object.values(this.providers)) {
+            if (Object.prototype.hasOwnProperty.call(provider.models, model)) return provider;
         }
 
+        throw new Error(`Agent adapter requires a known model: ${model}`);
+    }
+
+    adapter(model: string): Adapter {
+        const provider = this.getProviderByModel(model);
+
         const config: AdapterConfig = {
-            endpoint: provider.url,
-            model: selection.model,
+            model,
         };
 
         if (provider.adapter === 'openai') return new OpenAIAdapter(config);
@@ -77,10 +78,10 @@ export class Agent {
         return loop(loopOptions);
     }
 
-    async runOnce({ modelSelection, system, messages, signal }: RunOnceOptions): Promise<Message> {
+    async runOnce({ model, system, messages, signal }: RunOnceOptions): Promise<Message> {
         const ai = Message.assistant();
         const history = (messages ?? []).map(message => Message.fromJSON(message));
-        await ai.generate(this, this.adapter(modelSelection), history, {
+        await ai.generate(this, this.adapter(model), history, {
             system: system ?? this.config.systemPrompt ?? null,
             signal,
         });

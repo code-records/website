@@ -7,41 +7,27 @@ import SuggestMessage from './SuggestMessage.jsx';
 
 const WELCOME_MESSAGE = '你好！我是 AI 助手，可以帮你查阅文档、解答接入问题。';
 
-function formatSelectionValue(selection) {
-    return `${selection.provider}:${selection.model}`;
-}
-
-function findProviderModel(providers, modelId) {
-    for (const [providerId, provider] of Object.entries(providers || {})) {
+function getProviderByModel(providers, modelId) {
+    for (const provider of Object.values(providers || {})) {
         if (Object.prototype.hasOwnProperty.call(provider.models || {}, modelId)) {
-            return { model: modelId, provider: providerId };
+            return provider;
         }
     }
     return null;
-}
-
-function parseSelectionValue(value) {
-    const separator = value.indexOf(':');
-    if (separator < 0) return null;
-    return {
-        provider: value.slice(0, separator),
-        model: value.slice(separator + 1),
-    };
 }
 
 class ChatPanel extends React.Component {
     constructor(props) {
         super(props);
         const pluginOptions = props.pluginOptions;
-        const initialModelSelection = findProviderModel(pluginOptions.providers, pluginOptions.defaultModel);
-        if (!initialModelSelection) {
+        if (!getProviderByModel(pluginOptions.providers, pluginOptions.defaultModel)) {
             throw new Error(
                 `docusaurus-plugin-doc-agent defaultModel "${pluginOptions.defaultModel}" must exist in providers.`,
             );
         }
         this.state = {
             inputValue: '',
-            model: formatSelectionValue(initialModelSelection),
+            model: pluginOptions.defaultModel,
         };
         this.messagesAreaRef = React.createRef();
         this.inputRef = React.createRef();
@@ -62,8 +48,8 @@ class ChatPanel extends React.Component {
 
         this.chat = new Chat({
             agent: this.agent,
-            modelSelection: initialModelSelection,
-            setAgentModel: (agent, modelSelection) => agent.setModelSelection(modelSelection),
+            model: pluginOptions.defaultModel,
+            setAgentModel: (agent, model) => agent.setCurrentModel(model),
             onChange: () => {
                 if (this.agent.config.debug) {
                     console.log('[DocsAgent messages: chat change]', this.chat.messages);
@@ -121,10 +107,10 @@ class ChatPanel extends React.Component {
 
         this.suggestAbort?.abort();
         const controller = new AbortController();
-        const modelSelection = this.chat.modelSelection;
+        const model = this.chat.model;
         this.suggestAbort = controller;
         const message = await this.agent.suggestQuestions({
-            modelSelection,
+            model,
             a2uiPromptText: this.a2ui.promptText,
             pathname,
             routePath: this.props.pluginOptions.routePath,
@@ -133,7 +119,7 @@ class ChatPanel extends React.Component {
         if (
             this.suggestAbort !== controller ||
             controller.signal.aborted ||
-            this.chat.modelSelection !== modelSelection
+            this.chat.model !== model
         ) {
             return;
         }
@@ -193,22 +179,21 @@ class ChatPanel extends React.Component {
     };
 
     handleModelChange = (e) => {
-        const selection = parseSelectionValue(e.target.value);
-        if (!selection) return;
+        const model = e.target.value;
 
-        const currentProvider = this.props.pluginOptions.providers[this.chat.modelSelection?.provider];
-        const nextProvider = this.props.pluginOptions.providers[selection.provider];
-        if (!nextProvider || !Object.prototype.hasOwnProperty.call(nextProvider.models || {}, selection.model)) return;
+        const currentProvider = getProviderByModel(this.props.pluginOptions.providers, this.chat.model);
+        const nextProvider = getProviderByModel(this.props.pluginOptions.providers, model);
+        if (!nextProvider) return;
 
         const cleared = currentProvider?.adapter !== nextProvider.adapter;
-        if (!this.chat.setModelSelection(selection)) return;
+        if (!this.chat.setModel(model)) return;
 
         if (cleared) {
             this.a2ui.resetTracking();
             this.a2ui.clear();
         }
 
-        this.setState({ model: formatSelectionValue(selection) });
+        this.setState({ model });
         if (cleared) this.pushSuggestions(true);
     };
 
@@ -514,7 +499,7 @@ class ChatPanel extends React.Component {
                                     {Object.entries(this.props.pluginOptions.providers || {}).map(([providerId, provider]) => (
                                         <optgroup key={providerId} label={providerId}>
                                             {Object.entries(provider.models || {}).map(([modelId, label]) => (
-                                                <option key={`${providerId}:${modelId}`} value={formatSelectionValue({ provider: providerId, model: modelId })}>{label}</option>
+                                                <option key={`${providerId}:${modelId}`} value={modelId}>{label}</option>
                                             ))}
                                         </optgroup>
                                     ))}
