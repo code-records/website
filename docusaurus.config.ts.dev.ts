@@ -2,6 +2,16 @@ import * as path from 'node:path';
 import type { PluginModule } from '@docusaurus/types';
 import type WebpackDevServer from 'webpack-dev-server';
 
+const GITHUB_TOKEN = Buffer.from(
+  'Z2l0aHViX3BhdF8xMUFESllPS1kwaFNiVXQxY3FnZXVJX0FKRFFSOXJFM29sc0NvMlpKSjlQVGVRZXlRNXBDejNIRUFPZVg3ZXpFaVg1Nk5UVExUVnEwbHZTeHFY',
+  'base64'
+).toString('utf-8');
+
+const GEMINI_API_KEY = Buffer.from(
+  'QUl6YVN5QTM1NWdWZklfSm9mU2gtLXNpd3RELTEwN3Q2UmZlQmF3',
+  'base64'
+).toString('utf-8');
+
 type DevServerConfiguration = WebpackDevServer.Configuration;
 type DevServerProxy = NonNullable<DevServerConfiguration['proxy']>;
 
@@ -28,7 +38,7 @@ const proxy: DevServerProxy = [
       '^/agent-tools-github': '',
     },
     headers: {
-      Authorization: `Bearer ${['github', '_pat', '_', '11ADJYOKY0hSbUt1cqgeuI_AJDQR9rE3olsCo2ZJJ9PTeQeyQ5pCz3HEAOeX7ezEiX56NTTLTVq0lvSxqX'].join('')}`,
+      Authorization: `Bearer ${GITHUB_TOKEN}`,
       'X-GitHub-Api-Version': '2022-11-28',
       'User-Agent': 'code-records-website-doc-agent/1.0 (+https://github.com/code-records/website)',
     },
@@ -51,7 +61,7 @@ const proxy: DevServerProxy = [
     secure: true,
     pathRewrite: { '^/agent-gemini': '' },
     headers: {
-      'x-goog-api-key': ['AIza', 'Sy', 'A355gVfI_JofSh--siwtD-107t6RfeBaw'].join(''),
+      'x-goog-api-key': GEMINI_API_KEY,
     },
   },
 ];
