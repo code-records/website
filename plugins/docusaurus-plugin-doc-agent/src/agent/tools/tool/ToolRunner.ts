@@ -2,6 +2,7 @@ import { Message } from '../../chat/Message';
 import type { Model, ModelToolCall } from '../../model/Model';
 import { ToolError, toError } from '../../utils/errors';
 import type { AskModel, JsonObject, ToolResult } from './Tool';
+import { applyContextPatch } from './contextPatch';
 import { ToolRegistry } from './ToolRegistry';
 
 export type ToolRunMode = 'parallel' | 'serial';
@@ -39,7 +40,7 @@ export interface ToolRunnerOptions {
 
 export class ToolRunner {
     private readonly controllers = new Map<string, AbortController>();
-    private readonly context: readonly Message[];
+    private context: readonly Message[];
     private readonly createAsk?: (toolName: string) => AskModel;
     private readonly defaultTimeoutMs: number;
     private readonly model: Model;
@@ -84,6 +85,7 @@ export class ToolRunner {
             for (let index = 0; index < plan.items.length; index++) {
                 const record = await this.runItem(plan.items[index]);
                 records.push(record);
+                this.applyRecordContextPatch(record);
                 if (timeoutAction === 'kill' && (record.status === 'timeout' || record.status === 'killed')) {
                     for (const skipped of plan.items.slice(index + 1)) {
                         records.push(this.createSkippedRecord(skipped, 'Skipped because an earlier scheduled tool was killed.'));
@@ -94,13 +96,19 @@ export class ToolRunner {
             return records;
         }
 
-        return Promise.all(plan.items.map(async (item) => {
+        const records = await Promise.all(plan.items.map(async (item) => {
             const record = await this.runItem(item);
             if (timeoutAction === 'kill' && (record.status === 'timeout' || record.status === 'killed')) {
                 this.killAll();
             }
             return record;
         }));
+
+        for (const record of records) {
+            this.applyRecordContextPatch(record);
+        }
+
+        return records;
     }
 
     kill(runId: string): boolean {
@@ -130,7 +138,7 @@ export class ToolRunner {
             const run = tool.run(item.input, {
                 context: this.context,
                 createUserContextMessage: Message.user,
-                runner: this,
+                runner: this.createScopedRunner(this.context),
                 signal: controller.signal,
                 tools: this.registry.asReadonlyMap(),
             });
@@ -184,6 +192,24 @@ export class ToolRunner {
         for (const runId of Array.from(this.controllers.keys())) {
             this.kill(runId);
         }
+    }
+
+    private applyRecordContextPatch(record: ToolRunRecord): void {
+        const patch = record.result?.contextPatch;
+        if (patch !== undefined) {
+            this.context = applyContextPatch(this.context, patch);
+        }
+    }
+
+    private createScopedRunner(context: readonly Message[]): ToolRunner {
+        return new ToolRunner({
+            context,
+            createAsk: this.createAsk,
+            defaultTimeoutMs: this.defaultTimeoutMs,
+            model: this.model,
+            registry: this.registry,
+            signal: this.signal,
+        });
     }
 
     private createSkippedRecord(item: ToolRunPlanItem, error: string): ToolRunRecord {

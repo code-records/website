@@ -1,7 +1,7 @@
 import type { AgentEvent } from '../Agent';
-import type { Message } from '../chat/Message';
 import type { Model, ModelAction, ModelEvent } from '../model/Model';
-import type { AskModel, ContextPatch } from '../tools/tool/Tool';
+import type { AskModel } from '../tools/tool/Tool';
+export { applyContextPatch } from '../tools/tool/contextPatch';
 
 export function createAskFactory({
     model,
@@ -24,16 +24,6 @@ export function createAskFactory({
             return request.prompt.parse(response.content);
         };
     };
-}
-
-export function applyContextPatch(messages: readonly Message[], patch: ContextPatch): Message[] {
-    if (patch.type === 'append') {
-        return [...messages, ...patch.context];
-    }
-    if (patch.type === 'replace' || patch.type === 'compact') {
-        return [...patch.context];
-    }
-    return [...messages];
 }
 
 export function toAgentModelEvent(agentName: string, event: ModelEvent): AgentEvent {

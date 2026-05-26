@@ -5,10 +5,22 @@ import type {
     ToolRunRecord,
     ToolTimeoutAction,
 } from './tool/ToolRunner';
-import { Tool, type JsonObject, type JsonValue, type ToolInput, type ToolInputSchema, type ToolResult, type ToolRunContext } from './tool/Tool';
+import { mergeContextPatches } from './tool/contextPatch';
+import {
+    Tool,
+    type ContextPatch,
+    type JsonObject,
+    type JsonValue,
+    type ToolEvent,
+    type ToolInput,
+    type ToolInputSchema,
+    type ToolResult,
+    type ToolRunContext,
+} from './tool/Tool';
 
 export interface ScheduleToolOptions {
     maxItems?: number;
+    maxResultChars?: number;
 }
 
 interface ScheduleInput {
@@ -18,6 +30,14 @@ interface ScheduleInput {
     timeoutAction: ToolTimeoutAction;
 }
 
+/**
+ * Scheduling is modeled as a tool, not as a second loop.
+ *
+ * The outer loop still owns model turns and final context application. This tool
+ * only groups lower-level tool calls into one intentional batch, so the model can
+ * express "run these in parallel" or "do these in order" without making the core
+ * loop understand every workflow shape.
+ */
 export class ScheduleTool extends Tool {
     name = 'schedule_tools';
     description = [
@@ -70,10 +90,12 @@ export class ScheduleTool extends Tool {
     };
 
     private readonly maxItems: number;
+    private readonly maxResultChars: number;
 
-    constructor({ maxItems = 8 }: ScheduleToolOptions = {}) {
+    constructor({ maxItems = 8, maxResultChars = 12000 }: ScheduleToolOptions = {}) {
         super();
         this.maxItems = maxItems;
+        this.maxResultChars = maxResultChars;
     }
 
     protected async execute(input: ToolInput, context: ToolRunContext): Promise<ToolResult> {
@@ -96,19 +118,16 @@ export class ScheduleTool extends Tool {
             timeoutAction: parsed.timeoutAction,
         };
         const records = await context.runner.runPlan(plan);
-        const summary = summarizeRecords(records);
+        const contextPatches = records
+            .map(record => record.result?.contextPatch)
+            .filter((patch): patch is ContextPatch => patch !== undefined);
+        const contextPatch = mergeContextPatches(context.context, contextPatches);
+        const summary = summarizeRecords(records, this.maxResultChars);
+        const events = createScheduleEvents(records, parsed);
 
         return {
-            events: [{
-                data: {
-                    count: records.length,
-                    mode: parsed.mode,
-                    reason: parsed.reason,
-                    records: records.map(recordToEventData),
-                    timeoutAction: parsed.timeoutAction,
-                },
-                type: 'tools_scheduled',
-            }],
+            ...(contextPatch !== undefined ? { contextPatch } : {}),
+            events,
             result: [
                 `Scheduled ${records.length} tool call(s) in ${parsed.mode} mode.`,
                 `Timeout action: ${parsed.timeoutAction}.`,
@@ -156,23 +175,75 @@ export function createScheduleTool(options?: ScheduleToolOptions): ScheduleTool 
     return new ScheduleTool(options);
 }
 
-function summarizeRecords(records: readonly ToolRunRecord[]): string {
-    return records
-        .map(record => {
-            const suffix = record.error !== undefined ? `: ${record.error}` : '';
-            return `- ${record.name} [${record.status}]${suffix}`;
-        })
-        .join('\n');
+function summarizeRecords(records: readonly ToolRunRecord[], maxChars: number): string {
+    let remaining = Math.max(0, maxChars);
+    const lines: string[] = [];
+
+    records.forEach((record, index) => {
+        const title = `${index + 1}. ${record.name} [${record.status}]`;
+        lines.push(record.error !== undefined ? `${title}: ${record.error}` : title);
+
+        if (record.result?.result !== undefined && record.result.result.length > 0 && remaining > 0) {
+            const output = truncateText(record.result.result, remaining);
+            remaining -= output.length;
+            lines.push(indentBlock(output));
+        }
+
+        if (record.result?.contextPatch !== undefined) {
+            lines.push(`   contextPatch: ${record.result.contextPatch.type}`);
+        }
+    });
+
+    return lines.join('\n');
+}
+
+function createScheduleEvents(records: readonly ToolRunRecord[], input: ScheduleInput): ToolEvent[] {
+    return [
+        {
+            data: {
+                count: records.length,
+                mode: input.mode,
+                reason: input.reason,
+                records: records.map(recordToEventData),
+                timeoutAction: input.timeoutAction,
+            },
+            type: 'tools_scheduled',
+        },
+        ...records.flatMap(record => (record.result?.events ?? []).map(event => ({
+            data: {
+                eventData: event.data ?? {},
+                eventType: event.type,
+                runId: record.runId,
+                tool: record.name,
+            },
+            type: 'scheduled_tool_event',
+        }))),
+    ];
 }
 
 function recordToEventData(record: ToolRunRecord): JsonObject {
     return {
+        contextPatch: record.result?.contextPatch?.type ?? null,
         error: record.error ?? null,
         name: record.name,
         result: record.result?.result ?? null,
         runId: record.runId,
         status: record.status,
     };
+}
+
+function truncateText(text: string, maxChars: number): string {
+    if (text.length <= maxChars) {
+        return text;
+    }
+    return `${text.slice(0, Math.max(0, maxChars - 32))}\n[truncated scheduled tool output]`;
+}
+
+function indentBlock(text: string): string {
+    return text
+        .split('\n')
+        .map(line => `   ${line}`)
+        .join('\n');
 }
 
 function isJsonObject(value: JsonValue | undefined): value is JsonObject {
