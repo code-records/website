@@ -1,17 +1,23 @@
 import type { AgentEvent } from '../Agent';
 import type { Agent } from '../Agent';
-import type { Model, ModelAction, ModelEvent, ModelMessage, ToolCall } from '../model/Model';
+import type { Model, ModelAction, ModelEvent } from '../model/Model';
 import type { AskModel, Tool, ToolResult } from '../tools/Tool';
 import { ToolRegistry } from '../tools/ToolRegistry';
 import { SubAgentTool } from '../tools/SubAgentTool';
-import { Context } from './Context';
+import {
+    Context,
+    createToolResultContextMessage,
+    createUserContextMessage,
+    type ContextMessage,
+    type ToolCall,
+} from './Context';
 import { executeToolCall } from './executeToolCall';
 
 // ─── 类型 ───────────────────────────────────────────
 
 export interface LoopOptions {
     agentName?: string;
-    context: ModelMessage[];
+    context: ContextMessage[];
     maxRounds?: number;
     model: Model;
     signal?: AbortSignal;
@@ -62,12 +68,12 @@ export async function* loop(options: LoopOptions): AsyncGenerator<AgentEvent, vo
         const actions: ModelAction[] = [];
         const toolCalls: ToolCall[] = [];
         let status: 'tool' | 'continue' | 'final' = 'final';
-        let raw: ModelMessage | undefined;
+        let raw: ContextMessage | undefined;
 
         // 5. 把当前完整上下文交给 model；model 永远以统一事件流返回。
         for await (const event of model.stream({
             system,
-            messages: context.toModelMessages(),
+            messages: context.toMessages(),
             tools: toolRegistry.definitions(),
             signal,
         })) {
@@ -107,7 +113,7 @@ export async function* loop(options: LoopOptions): AsyncGenerator<AgentEvent, vo
             if (raw !== undefined) {
                 context.append([raw]);
             }
-            context.append([model.createUserMsg('继续')]);
+            context.append([createUserContextMessage('继续')]);
             continue;
         }
 
@@ -198,7 +204,7 @@ export async function* loop(options: LoopOptions): AsyncGenerator<AgentEvent, vo
 
                 // 21. 工具结果必须写回模型上下文，下一轮 model 才知道工具返回了什么。
                 context.append([
-                    model.createToolResultMsg(call.id, result.result),
+                    createToolResultContextMessage(call.id, result.result),
                 ]);
             }
 
@@ -228,7 +234,7 @@ function createAskFactory({
             // 工具回问使用独立的一次 complete，并禁用工具避免递归工具调用。
             const response = await model.complete({
                 system: `${system}\n\nCurrent tool: ${toolName}`,
-                messages: [model.createUserMsg(request.prompt.build(request.input))],
+                messages: [createUserContextMessage(request.prompt.build(request.input))],
                 toolChoice: 'none',
                 signal,
             });

@@ -1,4 +1,5 @@
 import type { JsonObject, JsonValue, ToolDefinition } from '../tools/Tool';
+import type { ContextAction, ContextMessage, ToolCall } from '../core/Context';
 
 // ─── 通用类型 ────────────────────────────────────────
 
@@ -9,32 +10,16 @@ export interface ModelConfig {
     personalAccessToken?: string;
 }
 
-export type ProviderMessage = JsonValue;
-export type ProviderMessages = ProviderMessage[];
 export type ProviderRequestBody = JsonObject;
 export type ProviderResponseBody = JsonObject;
 export type ProviderStreamChunk = JsonValue;
 
-/** 工具调用。 */
-export interface ToolCall {
-    id: string;
-    name: string;
-    input: JsonObject;
-    result?: JsonValue;
-}
-
-export type ModelAction =
-    | { type: 'thinking'; content: string }
-    | { type: 'tool'; call: ToolCall };
-
-export type ModelMessage =
-    | { role: 'user'; content: string }
-    | { role: 'assistant'; content: string; actions?: ModelAction[] }
-    | { role: 'tool'; toolUseId: string; content: JsonValue };
+export type ModelAction = ContextAction;
+export type { ToolCall };
 
 /** provider 无关的单次模型请求。 */
 export interface ModelRequest {
-    messages: ModelMessage[];
+    messages: ContextMessage[];
     tools?: ToolDefinition[];
     system?: string;
     signal?: AbortSignal;
@@ -46,7 +31,7 @@ export interface ModelRequest {
 export interface ModelResponse {
     content: string;
     actions: ModelAction[];
-    raw?: ModelMessage;
+    raw?: ContextMessage;
     status: 'tool' | 'continue' | 'final';
 }
 
@@ -104,59 +89,6 @@ export abstract class Model {
      * 不支持原生流式的 provider 也需要在子类中用非流式响应模拟 chunk。
      */
     protected abstract requestStream(body: ProviderRequestBody, signal?: AbortSignal): AsyncGenerator<ProviderStreamChunk, void, void>;
-
-    /**
-     * 将单条统一模型消息转为单条 provider 消息。
-     */
-    protected abstract convertModelMessage2ProviderMessage(message: ModelMessage): ProviderMessage;
-
-    /**
-     * 将单条 provider 消息转为单条统一模型消息。
-     */
-    protected abstract convertProviderMessage2ModelMessage(message: ProviderMessage): ModelMessage;
-
-    /**
-     * 将统一模型消息列表转为 provider 请求需要的消息列表。
-     *
-     * 默认按单条消息逐条转换；需要合并、拆分、重排消息的 provider 可覆盖。
-     */
-    protected convertModelMessages2ProviderMessages(messages: readonly ModelMessage[]): ProviderMessages {
-        return messages.map(message => this.convertModelMessage2ProviderMessage(message));
-    }
-
-    /**
-     * 将 provider 消息列表转为统一模型消息列表。
-     *
-     * 默认按单条消息逐条转换；需要聚合 content blocks / parts 的 provider 可覆盖。
-     */
-    protected convertProviderMessages2ModelMessages(messages: readonly ProviderMessage[]): ModelMessage[] {
-        return messages.map(message => this.convertProviderMessage2ModelMessage(message));
-    }
-
-    /**
-     * 创建用户消息。
-     */
-    createUserMsg(content: string): ModelMessage {
-        return { content, role: 'user' };
-    }
-
-    /**
-     * 创建助手消息。
-     */
-    createAssistantMsg(content = '', actions?: readonly ModelAction[]): ModelMessage {
-        return {
-            ...(actions !== undefined ? { actions: [...actions] } : {}),
-            content,
-            role: 'assistant',
-        };
-    }
-
-    /**
-     * 创建工具结果消息。
-     */
-    createToolResultMsg(toolUseId: string, content: JsonValue): ModelMessage {
-        return { content, role: 'tool', toolUseId };
-    }
 
     // ─── 便捷方法（子类通常不用覆盖） ─────────────────
 

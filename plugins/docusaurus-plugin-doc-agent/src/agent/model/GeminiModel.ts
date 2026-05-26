@@ -3,16 +3,14 @@ import {
     type ModelAction,
     type ModelConfig,
     type ModelEvent,
-    type ModelMessage,
     type ModelRequest,
     type ModelResponse,
-    type ProviderMessage,
-    type ProviderMessages,
     type ProviderRequestBody,
     type ProviderResponseBody,
     type ProviderStreamChunk,
     type ToolCall,
 } from './Model';
+import { createAssistantContextMessage, type ContextMessage } from '../core/Context';
 import type { JsonObject, JsonValue, ToolDefinition } from '../tools/Tool';
 import { optionalString, requireJsonObject, requireString } from '../utils/json';
 import { parseSseStream } from '../utils/sse';
@@ -69,7 +67,7 @@ export class GeminiModel extends Model {
             response: {
                 actions,
                 content,
-                raw: this.createAssistantMsg(content, actions),
+                raw: createAssistantContextMessage(content, actions),
                 status: toolCalls.length > 0
                     ? 'tool'
                     : finishReason === 'MAX_TOKENS'
@@ -97,30 +95,7 @@ export class GeminiModel extends Model {
         }
     }
 
-    protected convertModelMessage2ProviderMessage(message: ModelMessage): ProviderMessage {
-        return this.convertModelMessageToProviderMessages(message)[0] ?? { parts: [], role: 'user' };
-    }
-
-    protected convertProviderMessage2ModelMessage(message: ProviderMessage): ModelMessage {
-        const payload = requireJsonObject(message, 'Gemini provider message');
-        const role = payload.role === 'model' ? 'assistant' : 'user';
-        const parts = Array.isArray(payload.parts) ? payload.parts : [];
-        if (role === 'assistant') {
-            const parsed = this.parseParts(parts);
-            return this.createAssistantMsg(parsed.content, this.createActions(parsed.toolCalls));
-        }
-        return this.createUserMsg(parts.map(part => isJsonObject(part) ? optionalString(part.text) : '').join(''));
-    }
-
-    protected override convertModelMessages2ProviderMessages(messages: readonly ModelMessage[]): ProviderMessages {
-        return messages.flatMap(message => this.convertModelMessageToProviderMessages(message));
-    }
-
-    createToolResultMsg(toolUseId: string, content: JsonValue): ModelMessage {
-        return super.createToolResultMsg(toolUseId, content);
-    }
-
-    private convertModelMessageToProviderMessages(message: ModelMessage): JsonObject[] {
+    private contextMessageToProviderMessages(message: ContextMessage): JsonObject[] {
         if (message.role === 'user') {
             return [{ parts: [{ text: message.content }], role: 'user' }];
         }
@@ -157,9 +132,9 @@ export class GeminiModel extends Model {
         return parts.length > 0 ? [{ parts, role: 'model' }] : [];
     }
 
-    private buildGenerateContentBody(messages: readonly ModelMessage[], toolDefs: readonly ToolDefinition[], system: string): JsonObject {
+    private buildGenerateContentBody(messages: readonly ContextMessage[], toolDefs: readonly ToolDefinition[], system: string): JsonObject {
         return {
-            contents: this.convertModelMessages2ProviderMessages(messages),
+            contents: this.messagesToProviderMessages(messages),
             ...(system.length > 0 ? { systemInstruction: { parts: [{ text: system }] } } : {}),
             ...(toolDefs.length > 0
                 ? {
@@ -168,6 +143,10 @@ export class GeminiModel extends Model {
                 }
                 : {}),
         };
+    }
+
+    private messagesToProviderMessages(messages: readonly ContextMessage[]): JsonObject[] {
+        return messages.flatMap(message => this.contextMessageToProviderMessages(message));
     }
 
     private formatToolDefs(tools: readonly ToolDefinition[]): JsonObject[] {
@@ -183,7 +162,7 @@ export class GeminiModel extends Model {
             return {
                 actions: [],
                 content: '',
-                raw: this.createAssistantMsg(''),
+                raw: createAssistantContextMessage(''),
                 status: 'final',
             };
         }
@@ -197,7 +176,7 @@ export class GeminiModel extends Model {
         return {
             actions,
             content: parsed.content,
-            raw: this.createAssistantMsg(parsed.content, actions),
+            raw: createAssistantContextMessage(parsed.content, actions),
             status: parsed.toolCalls.length > 0
                 ? 'tool'
                 : parsed.finishReason === 'MAX_TOKENS'

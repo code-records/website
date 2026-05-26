@@ -3,15 +3,13 @@ import {
     type ModelAction,
     type ModelConfig,
     type ModelEvent,
-    type ModelMessage,
     type ModelRequest,
-    type ProviderMessage,
-    type ProviderMessages,
     type ProviderRequestBody,
     type ProviderResponseBody,
     type ProviderStreamChunk,
     type ToolCall,
 } from './Model';
+import { createAssistantContextMessage, type ContextMessage } from '../core/Context';
 import type { JsonObject, JsonValue, ToolDefinition } from '../tools/Tool';
 import { optionalArray, optionalString, requireJsonObject, requireString, safeParseJsonObject } from '../utils/json';
 import { parseSseStream } from '../utils/sse';
@@ -218,7 +216,7 @@ export class ClaudeModel extends Model {
             response: {
                 actions,
                 content,
-                raw: this.createAssistantMsg(content, actions),
+                raw: createAssistantContextMessage(content, actions),
                 status: toolCalls.length > 0
                     ? 'tool'
                     : stopReason === 'max_tokens'
@@ -240,33 +238,6 @@ export class ClaudeModel extends Model {
         }
     }
 
-    protected convertModelMessage2ProviderMessage(message: ModelMessage): ProviderMessage {
-        return this.convertModelMessageToProviderMessages(message)[0] ?? { content: '', role: 'assistant' };
-    }
-
-    protected convertProviderMessage2ModelMessage(message: ProviderMessage): ModelMessage {
-        const payload = requireJsonObject(message, 'Claude provider message');
-        if (payload.role === 'tool') {
-            return this.createToolResultMsg(requireString(payload.tool_call_id, 'Claude tool call id'), payload.content ?? '');
-        }
-        if (payload.role === 'user') {
-            const content = Array.isArray(payload.content)
-                ? payload.content.map(block => isJsonObject(block) ? optionalString(block.text, optionalString(block.content)) : '').join('')
-                : optionalString(payload.content);
-            return this.createUserMsg(content);
-        }
-        const parsed = this.parseAssistantPayload(payload);
-        return this.createAssistantMsg(parsed.content, parsed.actions);
-    }
-
-    protected override convertModelMessages2ProviderMessages(messages: readonly ModelMessage[]): ProviderMessages {
-        return messages.flatMap(message => this.convertModelMessageToProviderMessages(message));
-    }
-
-    createToolResultMsg(toolUseId: string, content: JsonValue): ModelMessage {
-        return super.createToolResultMsg(toolUseId, content);
-    }
-
     private buildRequestBody(request: ModelRequest, isChatCompletions: boolean): ProviderRequestBody {
         return isChatCompletions
             ? {
@@ -278,7 +249,7 @@ export class ClaudeModel extends Model {
             }
             : {
                 max_tokens: CLAUDE_MAX_TOKENS,
-                messages: this.convertModelMessages2ProviderMessages(request.messages),
+                messages: this.messagesToProviderMessages(request.messages),
                 model: this.model,
                 ...(request.system ? { system: request.system } : {}),
                 ...(request.tools?.length ? { tools: this.formatToolDefs(request.tools) } : {}),
@@ -286,9 +257,13 @@ export class ClaudeModel extends Model {
             };
     }
 
-    private convertModelMessageToProviderMessages(message: ModelMessage): JsonObject[] {
+    private messagesToProviderMessages(messages: readonly ContextMessage[]): JsonObject[] {
+        return messages.flatMap(message => this.contextMessageToProviderMessages(message));
+    }
+
+    private contextMessageToProviderMessages(message: ContextMessage): JsonObject[] {
         if (this.isChatCompletionsEndpoint()) {
-            return this.convertModelMessageToChatCompletionsMessages(message);
+            return this.contextMessageToChatCompletionsMessages(message);
         }
 
         if (message.role === 'user') {
@@ -320,7 +295,7 @@ export class ClaudeModel extends Model {
         return content.length > 0 ? [{ content, role: 'assistant' }] : [];
     }
 
-    private convertModelMessageToChatCompletionsMessages(message: ModelMessage): JsonObject[] {
+    private contextMessageToChatCompletionsMessages(message: ContextMessage): JsonObject[] {
         if (message.role === 'user') {
             return [{ content: message.content, role: 'user' }];
         }
@@ -439,12 +414,12 @@ export class ClaudeModel extends Model {
         }));
     }
 
-    private toChatCompletionsMessages(messages: readonly ModelMessage[], system: string): JsonValue[] {
+    private toChatCompletionsMessages(messages: readonly ContextMessage[], system: string): JsonValue[] {
         const result: JsonValue[] = [];
         if (system.length > 0) {
             result.push({ content: system, role: 'system' });
         }
-        result.push(...messages.flatMap(message => this.convertModelMessageToChatCompletionsMessages(message)));
+        result.push(...messages.flatMap(message => this.contextMessageToChatCompletionsMessages(message)));
         return result;
     }
 

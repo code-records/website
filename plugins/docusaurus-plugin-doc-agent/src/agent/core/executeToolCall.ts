@@ -1,11 +1,12 @@
-import type { Model, ModelMessage, ToolCall } from '../model/Model';
+import type { Model } from '../model/Model';
 import type { AskModel, ToolResult } from '../tools/Tool';
 import { ToolRegistry } from '../tools/ToolRegistry';
 import { ToolError } from '../utils/errors';
+import type { ContextMessage, ToolCall } from './Context';
 import { ToolRunner } from './ToolRunner';
 
 export interface ExecuteToolCallOptions {
-    context: readonly ModelMessage[];
+    context: readonly ContextMessage[];
     createAsk?: (toolName: string) => AskModel;
     model: Model;
     registry: ToolRegistry;

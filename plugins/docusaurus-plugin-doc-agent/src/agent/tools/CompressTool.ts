@@ -1,4 +1,4 @@
-import type { ModelMessage } from '../model/Model';
+import type { ContextMessage } from '../core/Context';
 import { estimateContextTokens } from '../core/tokenEstimator';
 import {
     Tool,
@@ -117,7 +117,7 @@ export class CompressTool extends Tool {
     }
 }
 
-function previewContext(context: readonly ModelMessage[]): string {
+function previewContext(context: readonly ContextMessage[]): string {
     return context
         .map((message, index) => `${index + 1}. [${message.role}] ${safeStringify(message)}`)
         .join('\n')

@@ -1,4 +1,4 @@
-import type { ModelMessage } from '../model/Model';
+import type { ContextMessage } from './Context';
 import { isJsonObject } from '../utils/json';
 
 const CJK_RANGE = /[\u3400-\u9fff\u3040-\u30ff\uac00-\ud7af]/g;
@@ -10,7 +10,7 @@ export function estimateTokens(text: string): number {
     return Math.ceil(otherChars / 4 + cjkChars / 1.5);
 }
 
-export function estimateContextTokens(context: readonly ModelMessage[]): number {
+export function estimateContextTokens(context: readonly ContextMessage[]): number {
     let total = 0;
     for (const message of context) {
         total += 4;

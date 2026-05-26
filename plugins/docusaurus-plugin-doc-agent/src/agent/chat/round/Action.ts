@@ -1,5 +1,5 @@
 import type { AgentEvent } from '../../Agent';
-import type { ToolCall } from '../../model/Model';
+import type { ToolCall } from '../../core/Context';
 import type { ToolEvent } from '../../tools/Tool';
 
 export type ActionType =

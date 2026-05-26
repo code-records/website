@@ -1,4 +1,3 @@
-import type { ModelMessage } from '../model/Model';
 import { Plan, type PlanJSON } from './round/Plan';
 
 export type MessageRole = 'assistant' | 'user';
@@ -53,13 +52,6 @@ export class Message {
         message.local = json.local === true;
         message.streaming = json.streaming === true;
         return message;
-    }
-
-    toContextMessage(createUserMsg: (content: string) => ModelMessage, createAssistantMsg: (content: string) => ModelMessage): ModelMessage {
-        if (this.role === 'user') {
-            return createUserMsg(this.content);
-        }
-        return createAssistantMsg(this.content);
     }
 
     toJSON(): MessageJSON {

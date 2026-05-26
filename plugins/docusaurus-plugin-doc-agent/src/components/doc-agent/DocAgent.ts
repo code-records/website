@@ -1,4 +1,12 @@
-import { Agent, ClaudeModel, GeminiModel, OpenAIModel, type Model, type ModelMessage } from '../../agent';
+import {
+    Agent,
+    ClaudeModel,
+    createUserContextMessage,
+    GeminiModel,
+    OpenAIModel,
+    type ContextMessage,
+    type Model,
+} from '../../agent';
 import { DOC_AGENT_TOOLS } from './tools/index';
 import { readDocByUrl } from './tools/ReadDocTool';
 import type { MessageJSON } from '../../agent';
@@ -142,7 +150,7 @@ export class DocAgent extends Agent {
 
         const runtimeModel = createDocAgentModel(model);
         const response = await runtimeModel.complete({
-            messages: [runtimeModel.createUserMsg(content.slice(0, 3000))],
+            messages: [createUserContextMessage(content.slice(0, 3000))],
             signal,
             system: [SUGGEST_PROMPT, a2uiPromptText].filter(Boolean).join('\n\n'),
             toolChoice: 'none',
@@ -219,6 +227,7 @@ export function createDocAgentModel(model: string): Model {
     throw new Error(`Unknown adapter type: ${String(provider.adapter)}`);
 }
 
-export function createDocAgentUserMessage(model: Model, content: string): ModelMessage {
-    return model.createUserMsg(content);
+export function createDocAgentUserMessage(model: Model, content: string): ContextMessage {
+    void model;
+    return createUserContextMessage(content);
 }

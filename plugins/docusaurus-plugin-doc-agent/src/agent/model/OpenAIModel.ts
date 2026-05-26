@@ -3,15 +3,13 @@ import {
     type ModelAction,
     type ModelConfig,
     type ModelEvent,
-    type ModelMessage,
     type ModelRequest,
-    type ProviderMessage,
-    type ProviderMessages,
     type ProviderRequestBody,
     type ProviderResponseBody,
     type ProviderStreamChunk,
     type ToolCall,
 } from './Model';
+import { createAssistantContextMessage, type ContextMessage } from '../core/Context';
 import type { JsonObject, JsonValue, ToolDefinition } from '../tools/Tool';
 import { optionalArray, optionalString, requireJsonObject, requireString, safeParseJsonObject } from '../utils/json';
 import { parseSseStream } from '../utils/sse';
@@ -30,7 +28,7 @@ export class OpenAIModel extends Model {
 
     async *stream(request: ModelRequest): AsyncGenerator<ModelEvent, void, void> {
         const body: ProviderRequestBody = {
-            input: this.convertModelMessages2ProviderMessages(request.messages),
+            input: this.messagesToProviderMessages(request.messages),
             model: this.model,
             ...(request.system ? { instructions: request.system } : {}),
             ...(request.tools?.length ? { tools: this.formatToolDefs(request.tools) } : {}),
@@ -136,7 +134,7 @@ export class OpenAIModel extends Model {
             response: {
                 actions,
                 content: finalContent,
-                raw: this.createAssistantMsg(finalContent, actions),
+                raw: createAssistantContextMessage(finalContent, actions),
                 status: toolCalls.length > 0
                     ? 'tool'
                     : finalStatus === 'incomplete'
@@ -158,34 +156,11 @@ export class OpenAIModel extends Model {
         }
     }
 
-    protected convertModelMessage2ProviderMessage(message: ModelMessage): ProviderMessage {
-        return this.convertModelMessageToProviderMessages(message)[0] ?? { content: [], role: 'assistant' };
+    private messagesToProviderMessages(messages: readonly ContextMessage[]): JsonObject[] {
+        return messages.flatMap(message => this.contextMessageToProviderMessages(message));
     }
 
-    protected convertProviderMessage2ModelMessage(message: ProviderMessage): ModelMessage {
-        const payload = requireJsonObject(message, 'OpenAI provider message');
-        if (payload.type === 'function_call_output') {
-            return this.createToolResultMsg(requireString(payload.call_id, 'OpenAI tool result id'), payload.output ?? '');
-        }
-        if (payload.type === 'function_call') {
-            const call: ToolCall = {
-                id: requireString(payload.call_id, 'OpenAI function call id'),
-                input: safeParseJsonObject(optionalString(payload.arguments)),
-                name: requireString(payload.name, 'OpenAI function call name'),
-            };
-            return this.createAssistantMsg('', [{ type: 'tool', call }]);
-        }
-        if (payload.role === 'user') {
-            return this.createUserMsg(this.readText(payload.content));
-        }
-        return this.createAssistantMsg(this.readText(payload.content));
-    }
-
-    protected override convertModelMessages2ProviderMessages(messages: readonly ModelMessage[]): ProviderMessages {
-        return messages.flatMap(message => this.convertModelMessageToProviderMessages(message));
-    }
-
-    private convertModelMessageToProviderMessages(message: ModelMessage): JsonObject[] {
+    private contextMessageToProviderMessages(message: ContextMessage): JsonObject[] {
         if (message.role === 'user') {
             return [{ content: this.textContent(message.content), role: 'user' }];
         }

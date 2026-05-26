@@ -3,7 +3,7 @@ import type { MessageJSON } from './Message';
 import type { ActionJSON, ActionType } from './round/Action';
 import type { PlanJSON, PlanStatus } from './round/Plan';
 import type { RoundJSON } from './round/Round';
-import type { ToolCall } from '../model/Model';
+import type { ToolCall } from '../core/Context';
 import type { JsonObject, JsonValue, ToolEvent } from '../tools/Tool';
 
 export interface SessionMeta {

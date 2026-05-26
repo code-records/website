@@ -1,5 +1,6 @@
 import type { Agent, AgentEvent } from '../Agent';
-import type { ModelMessage } from '../model/Model';
+import type { ContextMessage } from '../core/Context';
+import { projectMessagesToContext } from '../core/Context';
 import { History } from './History';
 import { Message, type MessageJSON } from './Message';
 
@@ -131,13 +132,8 @@ export class Chat {
         return this.history.items.map(message => message.toJSON());
     }
 
-    toContext(): ModelMessage[] {
-        return this.history.items
-            .filter(message => message.content.length > 0 && message.local !== true)
-            .map(message => message.toContextMessage(
-                content => this.agent.createUserContextMessage(content),
-                content => this.agent.createAssistantContextMessage(content),
-            ));
+    toContext(): ContextMessage[] {
+        return projectMessagesToContext(this.history.items);
     }
 
     private notify(): void {
