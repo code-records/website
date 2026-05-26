@@ -59,13 +59,10 @@ export abstract class Agent {
      */
     async *run(input: AgentInput): AsyncGenerator<AgentEvent, void, void> {
         yield { type: 'agent_start', agent: this.name };
-        const runAssistant = getCurrentAssistant(input.messages);
+        let runAssistant: Message | undefined;
 
         try {
-            if (runAssistant === undefined) {
-                throw new Error('Agent.run() requires messages to end with an active assistant Message');
-            }
-
+            runAssistant = this.ensureCurrentAssistant(input.messages);
             let response: ModelResponse | undefined;
 
             for await (const event of loop({
@@ -79,7 +76,7 @@ export abstract class Agent {
                 signal: input.signal ?? this.context.signal,
                 toolTimeoutMs: this.context.toolTimeoutMs,
             })) {
-                applyRunEvent(runAssistant, event);
+                this.applyEventToAssistantMessage(runAssistant, event);
                 if (event.type === 'model_event' && event.event.type === 'done') {
                     response = event.event.response;
                 }
@@ -117,16 +114,27 @@ export abstract class Agent {
 
         return response;
     }
-}
-
-function getCurrentAssistant(messages: readonly Message[]): Message | undefined {
-    const last = messages[messages.length - 1];
-    return last?.role === 'assistant' && last.plan?.isActive === true ? last : undefined;
-}
-
-function applyRunEvent(assistant: Message, event: AgentEvent): void {
-    assistant.plan?.apply(event);
-    if (event.type === 'model_event' && event.event.type === 'content_delta') {
-        assistant.content += event.event.content;
+    /**
+     * 获取并校验当前正在运行的 assistant 消息。
+     * 核心前置断言：传入的消息列表快照尾部必须是一个处于激活状态（isActive）的助手消息。
+     */
+    private ensureCurrentAssistant(messages: readonly Message[]): Message {
+        const last = messages[messages.length - 1];
+        if (last?.role === 'assistant' && last.plan?.isActive === true) {
+            return last;
+        }
+        throw new Error('Agent.run() requires messages to end with an active assistant Message');
     }
+
+    /**
+     * 将 Agent 运行时事件应用到当前的助理消息中。
+     * 用以就地（in-place）累积 content 并回放事件以推进其 Plan/Round/Action 状态。
+     */
+    private applyEventToAssistantMessage(assistant: Message, event: AgentEvent): void {
+        assistant.plan?.apply(event);
+        if (event.type === 'model_event' && event.event.type === 'content_delta') {
+            assistant.content += event.event.content;
+        }
+    }
+
 }
