@@ -1,5 +1,5 @@
-import type { ContextMessage } from './Context';
-import { isJsonObject } from '../utils/json';
+import type { Message } from '../chat/Message';
+import { isJsonObject } from './json';
 
 const CJK_RANGE = /[\u3400-\u9fff\u3040-\u30ff\uac00-\ud7af]/g;
 
@@ -10,7 +10,7 @@ export function estimateTokens(text: string): number {
     return Math.ceil(otherChars / 4 + cjkChars / 1.5);
 }
 
-export function estimateContextTokens(context: readonly ContextMessage[]): number {
+export function estimateContextTokens(context: readonly Message[]): number {
     let total = 0;
     for (const message of context) {
         total += 4;

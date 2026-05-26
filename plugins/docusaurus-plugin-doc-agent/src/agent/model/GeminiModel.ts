@@ -5,12 +5,13 @@ import {
     type ModelEvent,
     type ModelRequest,
     type ModelResponse,
+    type ProviderMessage,
     type ProviderRequestBody,
     type ProviderResponseBody,
     type ProviderStreamChunk,
     type ToolCall,
 } from './Model';
-import { createAssistantContextMessage, type ContextMessage } from '../core/Context';
+import type { Message } from '../chat/Message';
 import type { JsonObject, JsonValue, ToolDefinition } from '../tools/Tool';
 import { optionalString, requireJsonObject, requireString } from '../utils/json';
 import { parseSseStream } from '../utils/sse';
@@ -30,7 +31,7 @@ export class GeminiModel extends Model {
     }
 
     async *stream(request: ModelRequest): AsyncGenerator<ModelEvent, void, void> {
-        const body = this.buildGenerateContentBody(request.messages, request.tools ?? [], request.system ?? '');
+        const body = this.buildGenerateContentBody(request.messages, request.tools ?? [], request.system ?? '', request.toolAsk);
         const parts: JsonValue[] = [];
         const toolCalls: ToolCall[] = [];
         let content = '';
@@ -67,7 +68,6 @@ export class GeminiModel extends Model {
             response: {
                 actions,
                 content,
-                raw: createAssistantContextMessage(content, actions),
                 status: toolCalls.length > 0
                     ? 'tool'
                     : finishReason === 'MAX_TOKENS'
@@ -78,7 +78,7 @@ export class GeminiModel extends Model {
     }
 
     override async complete(request: ModelRequest): Promise<ModelResponse> {
-        const body = this.buildGenerateContentBody(request.messages, request.tools ?? [], request.system ?? '');
+        const body = this.buildGenerateContentBody(request.messages, request.tools ?? [], request.system ?? '', request.toolAsk);
         const json = await this.request(body, request.signal);
         return this.parseGenerateContentResponse(json);
     }
@@ -95,46 +95,58 @@ export class GeminiModel extends Model {
         }
     }
 
-    private contextMessageToProviderMessages(message: ContextMessage): JsonObject[] {
+    protected expandMessageToProviderMessages(message: Message): ProviderMessage[] {
+        if (message.local === true || message.content.length === 0) {
+            return [];
+        }
         if (message.role === 'user') {
             return [{ parts: [{ text: message.content }], role: 'user' }];
-        }
-
-        if (message.role === 'tool') {
-            const name = this.toolNamesById.get(message.toolUseId) || message.toolUseId;
-            return [{
-                parts: [{
-                    functionResponse: {
-                        id: message.toolUseId,
-                        name,
-                        response: { result: message.content },
-                    },
-                }],
-                role: 'user',
-            }];
         }
 
         const parts: JsonValue[] = [];
         if (message.content.length > 0) {
             parts.push({ text: message.content });
         }
-        for (const action of message.actions ?? []) {
-            if (action.type !== 'tool') continue;
-            parts.push({
-                functionCall: {
-                    args: action.call.input,
-                    id: action.call.id,
-                    name: action.call.name,
-                },
-            });
+        const toolResultMessages: JsonObject[] = [];
+        for (const action of this.roundToolActions(message)) {
+            if (action.call !== undefined) {
+                parts.push({
+                    functionCall: {
+                        args: action.call.input,
+                        id: action.call.id,
+                        name: action.call.name,
+                    },
+                });
+                continue;
+            }
+            if (action.callId !== undefined && action.content.length > 0) {
+                const name = this.toolNamesById.get(action.callId) || action.callId;
+                toolResultMessages.push({
+                    parts: [{
+                        functionResponse: {
+                            id: action.callId,
+                            name,
+                            response: { result: action.content },
+                        },
+                    }],
+                    role: 'user',
+                });
+            }
         }
 
-        return parts.length > 0 ? [{ parts, role: 'model' }] : [];
+        return [
+            ...(parts.length > 0 ? [{ parts, role: 'model' }] : []),
+            ...toolResultMessages,
+        ];
     }
 
-    private buildGenerateContentBody(messages: readonly ContextMessage[], toolDefs: readonly ToolDefinition[], system: string): JsonObject {
+    protected expandToolAskToProviderMessages(toolAsk: string): ProviderMessage[] {
+        return [{ parts: [{ text: toolAsk }], role: 'user' }];
+    }
+
+    private buildGenerateContentBody(messages: readonly Message[], toolDefs: readonly ToolDefinition[], system: string, toolAsk?: string): JsonObject {
         return {
-            contents: this.messagesToProviderMessages(messages),
+            contents: this.buildProviderMessages(messages, toolAsk),
             ...(system.length > 0 ? { systemInstruction: { parts: [{ text: system }] } } : {}),
             ...(toolDefs.length > 0
                 ? {
@@ -145,8 +157,17 @@ export class GeminiModel extends Model {
         };
     }
 
-    private messagesToProviderMessages(messages: readonly ContextMessage[]): JsonObject[] {
-        return messages.flatMap(message => this.contextMessageToProviderMessages(message));
+    private roundToolActions(message: Message): Array<{ call?: ToolCall; callId?: string; content: string }> {
+        return (message.plan?.items ?? []).flatMap(round => round.items.flatMap(action => {
+            if (action.type !== 'tool') {
+                return [];
+            }
+            return [{
+                call: action.call,
+                callId: action.callId,
+                content: action.content,
+            }];
+        }));
     }
 
     private formatToolDefs(tools: readonly ToolDefinition[]): JsonObject[] {
@@ -162,7 +183,6 @@ export class GeminiModel extends Model {
             return {
                 actions: [],
                 content: '',
-                raw: createAssistantContextMessage(''),
                 status: 'final',
             };
         }
@@ -176,7 +196,6 @@ export class GeminiModel extends Model {
         return {
             actions,
             content: parsed.content,
-            raw: createAssistantContextMessage(parsed.content, actions),
             status: parsed.toolCalls.length > 0
                 ? 'tool'
                 : parsed.finishReason === 'MAX_TOKENS'

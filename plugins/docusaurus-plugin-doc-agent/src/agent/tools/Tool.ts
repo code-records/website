@@ -1,7 +1,6 @@
 // ─── 类型 ───────────────────────────────────────────
 
-import type { ContextMessage } from '../core/Context';
-import { createUserContextMessage } from '../core/Context';
+import { Message } from '../chat/Message';
 import type { ToolRunner } from '../core/ToolRunner';
 
 export type JsonPrimitive = string | number | boolean | null;
@@ -21,9 +20,9 @@ export interface ToolEvent {
 
 /** 工具对主上下文的修改请求，由 loop 统一应用。 */
 export type ContextPatch =
-    | { type: 'append'; context: ContextMessage[] }
-    | { type: 'replace'; context: ContextMessage[] }
-    | { type: 'compact'; context: ContextMessage[]; summary?: string };
+    | { type: 'append'; context: Message[] }
+    | { type: 'replace'; context: Message[] }
+    | { type: 'compact'; context: Message[]; summary?: string };
 
 /** 工具执行结果 */
 export interface ToolResult {
@@ -38,9 +37,9 @@ export interface ToolResult {
 /** 工具执行上下文，由 loop 在调用时传入。 */
 export interface ToolRunContext {
     /** 当前 loop 上下文的只读快照；需要修改时返回 contextPatch。 */
-    context: readonly ContextMessage[];
+    context: readonly Message[];
     /** 由当前模型创建上下文消息，避免工具猜 provider payload 格式。 */
-    createUserContextMessage(content: string): ContextMessage;
+    createUserContextMessage(content: string): Message;
     /** 当前 loop 中全部工具的只读视图，调度工具可观察其他工具状态。 */
     tools: ReadonlyMap<string, Tool>;
     /** 工具执行控制器，调度工具可用它串行/并行运行工具。 */
@@ -196,7 +195,7 @@ export abstract class Tool {
 function createEmptyToolRunContext(): ToolRunContext {
     return {
         context: [],
-        createUserContextMessage,
+        createUserContextMessage: Message.user,
         tools: new Map(),
     };
 }

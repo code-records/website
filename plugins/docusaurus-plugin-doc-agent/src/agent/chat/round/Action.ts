@@ -1,5 +1,5 @@
 import type { AgentEvent } from '../../Agent';
-import type { ToolCall } from '../../core/Context';
+import type { ToolCall } from '../../core/ToolCall';
 import type { ToolEvent } from '../../tools/Tool';
 
 export type ActionType =
@@ -10,6 +10,7 @@ export type ActionType =
     | 'tool';
 
 export interface ActionJSON {
+    callId?: string;
     call?: ToolCall;
     content?: string;
     done: boolean;
@@ -19,6 +20,7 @@ export interface ActionJSON {
 }
 
 export class Action {
+    callId?: string;
     call?: ToolCall;
     content = '';
     done = false;
@@ -28,6 +30,7 @@ export class Action {
 
     constructor(json: ActionJSON) {
         this.type = json.type;
+        this.callId = json.callId;
         this.content = json.content ?? '';
         this.call = json.call;
         this.done = json.done;
@@ -40,9 +43,10 @@ export class Action {
     }
 
     static fromAgentEvent(event: AgentEvent): Action | null {
-    if (event.type !== 'model_event') {
+        if (event.type !== 'model_event') {
             if (event.type === 'tool_start') {
                 return new Action({
+                    callId: event.callId,
                     done: false,
                     label: event.tool,
                     type: 'tool',
@@ -50,6 +54,7 @@ export class Action {
             }
             if (event.type === 'tool_done') {
                 return new Action({
+                    callId: event.callId,
                     content: event.result.result,
                     done: true,
                     label: event.tool,
@@ -101,6 +106,7 @@ export class Action {
         if (modelEvent.type === 'action' && modelEvent.action.type === 'tool') {
             return new Action({
                 call: modelEvent.action.call,
+                callId: modelEvent.action.call.id,
                 done: false,
                 label: modelEvent.action.call.name,
                 type: 'tool',
@@ -127,6 +133,7 @@ export class Action {
 
     toJSON(): ActionJSON {
         return {
+            callId: this.callId,
             call: this.call,
             content: this.content.length > 0 ? this.content : undefined,
             done: this.done,

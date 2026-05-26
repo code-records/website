@@ -4,12 +4,13 @@ import {
     type ModelConfig,
     type ModelEvent,
     type ModelRequest,
+    type ProviderMessage,
     type ProviderRequestBody,
     type ProviderResponseBody,
     type ProviderStreamChunk,
     type ToolCall,
 } from './Model';
-import { createAssistantContextMessage, type ContextMessage } from '../core/Context';
+import type { Message } from '../chat/Message';
 import type { JsonObject, JsonValue, ToolDefinition } from '../tools/Tool';
 import { optionalArray, optionalString, requireJsonObject, requireString, safeParseJsonObject } from '../utils/json';
 import { parseSseStream } from '../utils/sse';
@@ -25,6 +26,10 @@ interface ChatToolTracker {
     id: string;
     name: string;
 }
+
+type RoundProviderAction =
+    | { type: 'thinking'; content: string }
+    | { type: 'tool'; call?: ToolCall; callId?: string; content: string };
 
 export class ClaudeModel extends Model {
     constructor({ url = DEFAULT_ANTHROPIC_ENDPOINT, streamUrl = DEFAULT_ANTHROPIC_STREAM_ENDPOINT, ...rest }: ModelConfig = {}) {
@@ -216,7 +221,6 @@ export class ClaudeModel extends Model {
             response: {
                 actions,
                 content,
-                raw: createAssistantContextMessage(content, actions),
                 status: toolCalls.length > 0
                     ? 'tool'
                     : stopReason === 'max_tokens'
@@ -242,14 +246,14 @@ export class ClaudeModel extends Model {
         return isChatCompletions
             ? {
                 max_tokens: CLAUDE_MAX_TOKENS,
-                messages: this.toChatCompletionsMessages(request.messages, request.system ?? ''),
+                messages: this.toChatCompletionsMessages(request.messages, request.system ?? '', request.toolAsk),
                 model: this.model,
                 ...(request.tools?.length ? { tools: this.toChatCompletionsTools(request.tools) } : {}),
                 stream: true,
             }
             : {
                 max_tokens: CLAUDE_MAX_TOKENS,
-                messages: this.messagesToProviderMessages(request.messages),
+                messages: this.buildProviderMessages(request.messages, request.toolAsk),
                 model: this.model,
                 ...(request.system ? { system: request.system } : {}),
                 ...(request.tools?.length ? { tools: this.formatToolDefs(request.tools) } : {}),
@@ -257,32 +261,28 @@ export class ClaudeModel extends Model {
             };
     }
 
-    private messagesToProviderMessages(messages: readonly ContextMessage[]): JsonObject[] {
-        return messages.flatMap(message => this.contextMessageToProviderMessages(message));
-    }
-
-    private contextMessageToProviderMessages(message: ContextMessage): JsonObject[] {
+    protected expandMessageToProviderMessages(message: Message): ProviderMessage[] {
         if (this.isChatCompletionsEndpoint()) {
-            return this.contextMessageToChatCompletionsMessages(message);
+            return this.messageToChatCompletionsMessages(message);
+        }
+
+        if (message.local === true || message.content.length === 0) {
+            return [];
         }
 
         if (message.role === 'user') {
             return [{ content: message.content, role: 'user' }];
         }
 
-        if (message.role === 'tool') {
-            return [{ content: [{ content: message.content, tool_use_id: message.toolUseId, type: 'tool_result' }], role: 'user' }];
-        }
-
         const content: JsonValue[] = [];
         if (message.content.length > 0) {
             content.push({ text: message.content, type: 'text' });
         }
-        for (const action of message.actions ?? []) {
+        for (const action of this.roundActions(message)) {
             if (action.type === 'thinking' && action.content.length > 0) {
                 content.push({ thinking: action.content, type: 'thinking' });
             }
-            if (action.type === 'tool') {
+            if (action.type === 'tool' && action.call !== undefined) {
                 content.push({
                     id: action.call.id,
                     input: action.call.input,
@@ -290,20 +290,28 @@ export class ClaudeModel extends Model {
                     type: 'tool_use',
                 });
             }
+            if (action.type === 'tool' && action.callId !== undefined && action.call === undefined && action.content.length > 0) {
+                content.push({ content: action.content, tool_use_id: action.callId, type: 'tool_result' });
+            }
         }
 
         return content.length > 0 ? [{ content, role: 'assistant' }] : [];
     }
 
-    private contextMessageToChatCompletionsMessages(message: ContextMessage): JsonObject[] {
+    protected expandToolAskToProviderMessages(toolAsk: string): ProviderMessage[] {
+        return [{ content: toolAsk, role: 'user' }];
+    }
+
+    private messageToChatCompletionsMessages(message: Message): JsonObject[] {
+        if (message.local === true || message.content.length === 0) {
+            return [];
+        }
         if (message.role === 'user') {
             return [{ content: message.content, role: 'user' }];
         }
-        if (message.role === 'tool') {
-            return [{ content: this.stringifyToolContent(message.content), role: 'tool', tool_call_id: message.toolUseId }];
-        }
-        const toolCalls = (message.actions ?? [])
-            .filter((action): action is Extract<ModelAction, { type: 'tool' }> => action.type === 'tool')
+        const actions = this.roundActions(message);
+        const toolCalls = actions
+            .filter((action): action is { type: 'tool'; call: ToolCall; callId?: string; content: string } => action.type === 'tool' && action.call !== undefined)
             .map(action => ({
                 function: {
                     arguments: JSON.stringify(action.call.input ?? {}),
@@ -312,11 +320,21 @@ export class ClaudeModel extends Model {
                 id: action.call.id,
                 type: 'function',
             }));
-        return [{
+        const result: JsonObject[] = [{
             content: toolCalls.length > 0 ? null : message.content,
             ...(toolCalls.length > 0 ? { tool_calls: toolCalls } : {}),
             role: 'assistant',
         }];
+        for (const action of actions) {
+            if (action.type === 'tool' && action.callId !== undefined && action.call === undefined && action.content.length > 0) {
+                result.push({
+                    content: this.stringifyToolContent(action.content),
+                    role: 'tool',
+                    tool_call_id: action.callId,
+                });
+            }
+        }
+        return result;
     }
 
     private parseAssistantPayload(payload: JsonObject): { actions: ModelAction[]; content: string } {
@@ -414,13 +432,36 @@ export class ClaudeModel extends Model {
         }));
     }
 
-    private toChatCompletionsMessages(messages: readonly ContextMessage[], system: string): JsonValue[] {
+    private toChatCompletionsMessages(messages: readonly Message[], system: string, toolAsk?: string): JsonValue[] {
         const result: JsonValue[] = [];
         if (system.length > 0) {
             result.push({ content: system, role: 'system' });
         }
-        result.push(...messages.flatMap(message => this.contextMessageToChatCompletionsMessages(message)));
+        result.push(...messages.flatMap(message => this.messageToChatCompletionsMessages(message)));
+        if (toolAsk !== undefined && toolAsk.length > 0) {
+            result.push({ content: toolAsk, role: 'user' });
+        }
         return result;
+    }
+
+    private roundActions(message: Message): RoundProviderAction[] {
+        const actions: RoundProviderAction[] = [];
+        for (const round of message.plan?.items ?? []) {
+            for (const action of round.items) {
+                if (action.type === 'thinking') {
+                    actions.push({ content: action.content, type: 'thinking' });
+                }
+                if (action.type === 'tool') {
+                    actions.push({
+                        call: action.call,
+                        callId: action.callId,
+                        content: action.content,
+                        type: 'tool',
+                    });
+                }
+            }
+        }
+        return actions;
     }
 
     private createActions(thinking: string, toolCalls: readonly ToolCall[]): ModelAction[] {

@@ -155,13 +155,27 @@ ContextPatch / HistoryPatch
 
 provider 请求仍然由 model 子类在最后一步生成。
 
-## 后续实现方向
+## 当前实现状态
 
-当前代码可以分阶段迁移：
+当前代码已经把 `Message / Plan / Round / Action` 作为模型请求的公共状态源。
 
-1. 先把文档和概念统一为 `Message / Plan / Round / Action` 是状态源。
-2. 再让 loop 的执行结果真正写入当前 assistant message 的 rounds/actions。
-3. 最后移除公共 `ContextMessage` 作为长期抽象，只保留必要的临时投影或 provider 子类私有转换。
+`Context.ts` 是空文件，不写注释、不写类型、不写导出。
+
+关于 Context 边界的说明只放在 markdown 文档里，避免 TS 文件看起来像一个可继续扩展的上下文模块。
+
+它不承载公共线性消息，也不承载工具调用类型。
+
+跨层共享的工具调用运行态类型放在 `ToolCall.ts`：
+
+```text
+ToolCall = model 产生的工具调用意图
+         = loop 执行工具的输入
+         = Round/Action 持久化工具调用过程的数据
+```
+
+`loop` 不维护长期 context；它把同一份 `Message[]` 交给 model。GUI 在收到 `AgentEvent` 后更新当前 assistant message 的 rounds/actions，下一轮 model 请求会从这份状态中提炼 provider 请求。
+
+工具返回的 `ContextPatch` 仍然作为本次运行内的 patch 应用；后续如果需要真正修改长期 GUI/session 历史，应引入更明确的 `HistoryPatch`。
 
 目标是：
 

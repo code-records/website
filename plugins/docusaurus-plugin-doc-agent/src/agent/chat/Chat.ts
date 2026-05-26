@@ -1,6 +1,4 @@
 import type { Agent, AgentEvent } from '../Agent';
-import type { ContextMessage } from '../core/Context';
-import { projectMessagesToContext } from '../core/Context';
 import { History } from './History';
 import { Message, type MessageJSON } from './Message';
 
@@ -63,12 +61,11 @@ export class Chat {
         this.abortController = new AbortController();
         this.notify();
 
-        const context = this.toContext();
         const runSignal = signal ?? this.abortController.signal;
 
         try {
             let responseContent = '';
-            for await (const event of this.agent.run({ context, signal: runSignal })) {
+            for await (const event of this.agent.run({ messages: this.history.items, signal: runSignal })) {
                 assistant.plan?.apply(event);
                 if (event.type === 'model_event' && event.event.type === 'content_delta') {
                     assistant.content += event.event.content;
@@ -130,10 +127,6 @@ export class Chat {
 
     toJSON(): MessageJSON[] {
         return this.history.items.map(message => message.toJSON());
-    }
-
-    toContext(): ContextMessage[] {
-        return projectMessagesToContext(this.history.items);
     }
 
     private notify(): void {

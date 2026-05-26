@@ -4,12 +4,13 @@ import {
     type ModelConfig,
     type ModelEvent,
     type ModelRequest,
+    type ProviderMessage,
     type ProviderRequestBody,
     type ProviderResponseBody,
     type ProviderStreamChunk,
     type ToolCall,
 } from './Model';
-import { createAssistantContextMessage, type ContextMessage } from '../core/Context';
+import type { Message } from '../chat/Message';
 import type { JsonObject, JsonValue, ToolDefinition } from '../tools/Tool';
 import { optionalArray, optionalString, requireJsonObject, requireString, safeParseJsonObject } from '../utils/json';
 import { parseSseStream } from '../utils/sse';
@@ -28,7 +29,7 @@ export class OpenAIModel extends Model {
 
     async *stream(request: ModelRequest): AsyncGenerator<ModelEvent, void, void> {
         const body: ProviderRequestBody = {
-            input: this.messagesToProviderMessages(request.messages),
+            input: this.buildProviderMessages(request.messages, request.toolAsk),
             model: this.model,
             ...(request.system ? { instructions: request.system } : {}),
             ...(request.tools?.length ? { tools: this.formatToolDefs(request.tools) } : {}),
@@ -134,7 +135,6 @@ export class OpenAIModel extends Model {
             response: {
                 actions,
                 content: finalContent,
-                raw: createAssistantContextMessage(finalContent, actions),
                 status: toolCalls.length > 0
                     ? 'tool'
                     : finalStatus === 'incomplete'
@@ -156,34 +156,49 @@ export class OpenAIModel extends Model {
         }
     }
 
-    private messagesToProviderMessages(messages: readonly ContextMessage[]): JsonObject[] {
-        return messages.flatMap(message => this.contextMessageToProviderMessages(message));
-    }
-
-    private contextMessageToProviderMessages(message: ContextMessage): JsonObject[] {
+    protected expandMessageToProviderMessages(message: Message): ProviderMessage[] {
+        if (message.local === true || message.content.length === 0) {
+            return [];
+        }
         if (message.role === 'user') {
             return [{ content: this.textContent(message.content), role: 'user' }];
         }
 
-        if (message.role === 'tool') {
-            return [{ call_id: message.toolUseId, output: message.content, type: 'function_call_output' }];
-        }
-
         const result: JsonObject[] = [];
-        if (message.content.length > 0) {
-            result.push({ content: this.textContent(message.content, 'output_text'), role: 'assistant' });
-        }
+        result.push({ content: this.textContent(message.content, 'output_text'), role: 'assistant' });
 
-        for (const action of message.actions ?? []) {
-            if (action.type !== 'tool') continue;
-            result.push({
-                arguments: JSON.stringify(action.call.input ?? {}),
-                call_id: action.call.id,
-                name: action.call.name,
-                type: 'function_call',
-            });
-        }
+        result.push(...this.roundsToProviderMessages(message));
 
+        return result;
+    }
+
+    protected expandToolAskToProviderMessages(toolAsk: string): ProviderMessage[] {
+        return [{ content: this.textContent(toolAsk), role: 'user' }];
+    }
+
+    private roundsToProviderMessages(message: Message): JsonObject[] {
+        const result: JsonObject[] = [];
+        for (const round of message.plan?.items ?? []) {
+            for (const action of round.items) {
+                if (action.type !== 'tool') continue;
+                if (action.call !== undefined) {
+                    result.push({
+                        arguments: JSON.stringify(action.call.input ?? {}),
+                        call_id: action.call.id,
+                        name: action.call.name,
+                        type: 'function_call',
+                    });
+                    continue;
+                }
+                if (action.callId !== undefined && action.content.length > 0) {
+                    result.push({
+                        call_id: action.callId,
+                        output: action.content,
+                        type: 'function_call_output',
+                    });
+                }
+            }
+        }
         return result;
     }
 

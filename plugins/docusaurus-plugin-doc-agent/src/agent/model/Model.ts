@@ -1,5 +1,6 @@
 import type { JsonObject, JsonValue, ToolDefinition } from '../tools/Tool';
-import type { ContextAction, ContextMessage, ToolCall } from '../core/Context';
+import type { Message } from '../chat/Message';
+import type { ToolCall } from '../core/ToolCall';
 
 // ─── 通用类型 ────────────────────────────────────────
 
@@ -12,14 +13,19 @@ export interface ModelConfig {
 
 export type ProviderRequestBody = JsonObject;
 export type ProviderResponseBody = JsonObject;
+export type ProviderMessage = JsonObject;
 export type ProviderStreamChunk = JsonValue;
 
-export type ModelAction = ContextAction;
+export type ModelAction =
+    | { type: 'thinking'; content: string }
+    | { type: 'tool'; call: ToolCall };
 export type { ToolCall };
 
 /** provider 无关的单次模型请求。 */
 export interface ModelRequest {
-    messages: ContextMessage[];
+    messages: readonly Message[];
+    /** 工具向模型发起的一次性回问，不写入长期 Message[]。 */
+    toolAsk?: string;
     tools?: ToolDefinition[];
     system?: string;
     signal?: AbortSignal;
@@ -31,7 +37,6 @@ export interface ModelRequest {
 export interface ModelResponse {
     content: string;
     actions: ModelAction[];
-    raw?: ContextMessage;
     status: 'tool' | 'continue' | 'final';
 }
 
@@ -90,6 +95,21 @@ export abstract class Model {
      */
     protected abstract requestStream(body: ProviderRequestBody, signal?: AbortSignal): AsyncGenerator<ProviderStreamChunk, void, void>;
 
+    /**
+     * 将一条公共 Message 展开成 provider 请求片段。
+     *
+     * 一条公共 assistant Message 可能包含最终文本、round、tool call、tool result，
+     * 所以展开结果允许是 0..N 条 provider message。
+     */
+    protected abstract expandMessageToProviderMessages(message: Message): ProviderMessage[];
+
+    /**
+     * 将工具回问展开成 provider 请求片段。
+     *
+     * toolAsk 只服务于 Tool.askModel() 这条链路，不进入长期 Message[]。
+     */
+    protected abstract expandToolAskToProviderMessages(toolAsk: string): ProviderMessage[];
+
     // ─── 便捷方法（子类通常不用覆盖） ─────────────────
 
     /**
@@ -108,6 +128,20 @@ export abstract class Model {
         }
 
         throw new Error('Model.stream() ended without a done(response) event');
+    }
+
+    /**
+     * 构建完整 provider messages。
+     *
+     * 基类只负责统一遍历公共 Message[] 和追加工具回问；
+     * provider 具体格式由子类的 expand* 方法决定。
+     */
+    protected buildProviderMessages(messages: readonly Message[], toolAsk?: string): ProviderMessage[] {
+        const result = messages.flatMap(message => this.expandMessageToProviderMessages(message));
+        if (toolAsk !== undefined && toolAsk.length > 0) {
+            result.push(...this.expandToolAskToProviderMessages(toolAsk));
+        }
+        return result;
     }
 
 }

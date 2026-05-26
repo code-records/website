@@ -1,4 +1,5 @@
 import type { Agent, AgentEvent } from '../Agent';
+import { Message } from '../chat/Message';
 import { Tool, type JsonObject, type ToolInput, type ToolInputSchema, type ToolResult, type ToolRunContext } from './Tool';
 
 export interface SubAgentToolOptions {
@@ -67,9 +68,9 @@ export class SubAgentTool extends Tool {
 
         let content = '';
         const events: JsonObject[] = [];
-        const subContext = [subAgent.createUserContextMessage(prompt)];
+        const subContext = [Message.user(prompt)];
 
-        for await (const event of subAgent.run({ context: subContext, signal: context.signal })) {
+        for await (const event of subAgent.run({ messages: subContext, signal: context.signal })) {
             events.push(agentEventToJson(event));
             if (event.type === 'model_event' && event.event.type === 'content_delta') {
                 content += event.event.content;

@@ -1,24 +1,19 @@
 import type { AgentEvent } from '../Agent';
 import type { Agent } from '../Agent';
-import type { Model, ModelAction, ModelEvent } from '../model/Model';
-import type { AskModel, Tool, ToolResult } from '../tools/Tool';
+import { Message } from '../chat/Message';
+import type { Model, ModelAction } from '../model/Model';
+import type { Tool, ToolResult } from '../tools/Tool';
 import { ToolRegistry } from '../tools/ToolRegistry';
 import { SubAgentTool } from '../tools/SubAgentTool';
-import {
-    Context,
-    createToolResultContextMessage,
-    createUserContextMessage,
-    type ContextMessage,
-    type ToolCall,
-} from './Context';
-import { executeToolCall } from './executeToolCall';
+import type { ToolCall } from './ToolCall';
+import { applyContextPatch, createAskFactory, executeToolCall, mergeAction, toAgentModelEvent } from './helper';
 
 // ─── 类型 ───────────────────────────────────────────
 
 export interface LoopOptions {
     agentName?: string;
-    context: ContextMessage[];
     maxRounds?: number;
+    messages: readonly Message[];
     model: Model;
     signal?: AbortSignal;
     subAgents?: Agent[];
@@ -27,7 +22,8 @@ export interface LoopOptions {
     tools: Tool[];
 }
 
-interface ToolExecutionResult {
+// 一个工具调用 promise 已完成
+interface SettledToolCall {
     call: ToolCall;
     result: ToolResult;
     token: symbol;
@@ -51,8 +47,8 @@ export async function* loop(options: LoopOptions): AsyncGenerator<AgentEvent, vo
         tools,
     } = options;
 
-    // 1. 建立本次运行的上下文副本；loop 后续只改这个 Context。
-    const context = new Context(options.context);
+    // 1. 本次运行使用 Message 引用作为状态源；临时追加只影响当前 run。
+    let runMessages = [...options.messages];
 
     // 2. 合并普通工具和 sub-agent 工具，并生成运行时工具表。
     const runtimeTools = subAgents.length > 0
@@ -68,12 +64,10 @@ export async function* loop(options: LoopOptions): AsyncGenerator<AgentEvent, vo
         const actions: ModelAction[] = [];
         const toolCalls: ToolCall[] = [];
         let status: 'tool' | 'continue' | 'final' = 'final';
-        let raw: ContextMessage | undefined;
-
         // 5. 把当前完整上下文交给 model；model 永远以统一事件流返回。
         for await (const event of model.stream({
             system,
-            messages: context.toMessages(),
+            messages: runMessages,
             tools: toolRegistry.definitions(),
             signal,
         })) {
@@ -88,7 +82,6 @@ export async function* loop(options: LoopOptions): AsyncGenerator<AgentEvent, vo
             // 8. done 表示本轮 model 输出结束；保存状态、raw 消息和最终 actions。
             if (event.type === 'done') {
                 status = event.response.status;
-                raw = event.response.raw;
                 actions.splice(0, actions.length, ...event.response.actions);
             }
 
@@ -110,25 +103,19 @@ export async function* loop(options: LoopOptions): AsyncGenerator<AgentEvent, vo
 
         // 12. continue 表示模型输出被截断；写回 raw，并追加“继续”让模型续写。
         if (status === 'continue') {
-            if (raw !== undefined) {
-                context.append([raw]);
-            }
-            context.append([createUserContextMessage('继续')]);
+            runMessages = [...runMessages, Message.user('继续')];
             continue;
         }
 
         // 13. tool 表示模型要求执行工具；先把 assistant 的 raw 写入上下文。
         if (status === 'tool') {
-            if (raw !== undefined) {
-                context.append([raw]);
-            }
             if (toolCalls.length === 0) {
                 throw new Error('Model returned tool status without tool calls');
             }
 
             // 14. 启动全部工具调用；这里先发 tool_start，再并发等待结果。
             const pending: Array<{
-                promise: Promise<ToolExecutionResult>;
+                promise: Promise<SettledToolCall>;
                 token: symbol;
             }> = [];
 
@@ -149,7 +136,7 @@ export async function* loop(options: LoopOptions): AsyncGenerator<AgentEvent, vo
                 pending.push({
                     token,
                     promise: executeToolCall(call, {
-                        context: context.snapshot(),
+                        context: runMessages,
                         createAsk,
                         model,
                         registry: toolRegistry,
@@ -193,7 +180,7 @@ export async function* loop(options: LoopOptions): AsyncGenerator<AgentEvent, vo
 
                 // 20. 工具如需改写上下文，统一通过 contextPatch 交给 loop 应用。
                 if (result.contextPatch !== undefined) {
-                    context.apply(result.contextPatch);
+                    runMessages = applyContextPatch(runMessages, result.contextPatch);
                     yield {
                         type: 'context_patch',
                         agent: agentName,
@@ -202,10 +189,7 @@ export async function* loop(options: LoopOptions): AsyncGenerator<AgentEvent, vo
                     };
                 }
 
-                // 21. 工具结果必须写回模型上下文，下一轮 model 才知道工具返回了什么。
-                context.append([
-                    createToolResultContextMessage(call.id, result.result),
-                ]);
+                // 21. 工具结果通过 tool_done 事件写入当前 assistant round；下一轮 model 从 Message 读取。
             }
 
             // 22. 工具结果已写回上下文，进入下一轮 model 调用。
@@ -218,50 +202,4 @@ export async function* loop(options: LoopOptions): AsyncGenerator<AgentEvent, vo
 
     // 24. 超过最大轮数通常说明模型一直在请求工具或续写。
     throw new Error(`Agent loop exceeded maxRounds=${maxRounds}`);
-}
-
-function createAskFactory({
-    model,
-    signal,
-    system,
-}: {
-    model: Model;
-    signal?: AbortSignal;
-    system: string;
-}): (toolName: string) => AskModel {
-    return (toolName: string): AskModel => {
-        return async (request) => {
-            // 工具回问使用独立的一次 complete，并禁用工具避免递归工具调用。
-            const response = await model.complete({
-                system: `${system}\n\nCurrent tool: ${toolName}`,
-                messages: [createUserContextMessage(request.prompt.build(request.input))],
-                toolChoice: 'none',
-                signal,
-            });
-            return request.prompt.parse(response.content);
-        };
-    };
-}
-
-function toAgentModelEvent(agentName: string, event: ModelEvent): AgentEvent {
-    // ModelEvent 是模型层事件；AgentEvent 补上 agent 名，方便 UI/父 agent 区分来源。
-    return {
-        type: 'model_event',
-        agent: agentName,
-        event,
-    };
-}
-
-function mergeAction(actions: ModelAction[], action: ModelAction): void {
-    // tool action 可能先 add 再 update；用 call.id 覆盖同一个工具调用。
-    if (action.type === 'tool') {
-        const index = actions.findIndex(item => item.type === 'tool' && item.call.id === action.call.id);
-        if (index >= 0) {
-            actions[index] = action;
-            return;
-        }
-    }
-
-    // thinking action 目前按事件顺序追加；是否合并由 UI Round 层处理。
-    actions.push(action);
 }

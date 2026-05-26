@@ -23,8 +23,9 @@ class DocsAgent extends Agent {
 }
 
 const agent = new DocsAgent({ model });
+const messages = [Message.user('如何配置文档搜索？')];
 
-for await (const event of agent.run({ context })) {
+for await (const event of agent.run({ messages })) {
     // UI / 日志 / 父 agent 消费事件
 }
 ```
@@ -47,7 +48,7 @@ Agent.run(input)
        model: this.context.model,
        tools: this.tools,
        system: this.instructions,
-       context: input.context
+       messages: input.messages
      })
   -> yield AgentEvent
 ```
@@ -121,7 +122,7 @@ tools/Tool.ts
 `run()` 返回事件流，适合 UI、日志、实时观察、取消和父 agent 调度：
 
 ```ts
-for await (const event of agent.run({ context })) {
+for await (const event of agent.run({ messages })) {
     // event: AgentEvent
 }
 ```
@@ -129,7 +130,7 @@ for await (const event of agent.run({ context })) {
 `complete()` 消费 `run()` 并只返回最终响应，适合测试、批处理和不需要中间过程的调用：
 
 ```ts
-const response = await agent.complete({ context });
+const response = await agent.complete({ messages });
 ```
 
 ## 目录结构
@@ -144,6 +145,6 @@ agent/
 └── utils/          # 通用工具
 ```
 
-`chat/` 存放 UI/会话层数据，例如 `History`、`Message`、`SessionStore`。它不是 loop 的运行上下文；真正发给模型的运行上下文由 `core/Context` 管理。
+`chat/` 存放 UI/会话层数据，例如 `History`、`Message`、`SessionStore`。它也是后续模型请求的公共状态源；model 子类负责从 `Message / Plan / Round / Action` 提炼 provider 请求格式。
 
 `tools/` 下的 `ScheduleTool`、`SubAgentTool`、`CompressTool`、`FileTool` 是后续扩展 agent 能力的主要落点。模型负责决定何时调用工具，工具负责把能力封装为强类型输入输出，core 负责执行边界。

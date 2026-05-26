@@ -1,16 +1,12 @@
 import type { Model, ModelEvent, ModelResponse } from './model/Model';
-import {
-    createAssistantContextMessage,
-    createUserContextMessage,
-    type ContextMessage,
-} from './core/Context';
+import type { Message } from './chat/Message';
 import type { ContextPatch, Tool, ToolEvent, ToolResult } from './tools/Tool';
 import { toError } from './utils/errors';
 import { loop } from './core/loop';
 
 /** agent 单次运行输入。 */
 export interface AgentInput {
-    context: ContextMessage[];
+    messages: readonly Message[];
     signal?: AbortSignal;
 }
 
@@ -55,14 +51,6 @@ export abstract class Agent {
         this.context.model = model;
     }
 
-    createUserContextMessage(content: string): ContextMessage {
-        return createUserContextMessage(content);
-    }
-
-    createAssistantContextMessage(content: string): ContextMessage {
-        return createAssistantContextMessage(content);
-    }
-
     /**
      * 标准 agent 运行入口。
      *
@@ -82,7 +70,7 @@ export abstract class Agent {
                 tools: this.tools,
                 subAgents: this.subAgents,
                 system: this.instructions,
-                context: input.context,
+                messages: input.messages,
                 signal: input.signal ?? this.context.signal,
                 toolTimeoutMs: this.context.toolTimeoutMs,
             })) {
