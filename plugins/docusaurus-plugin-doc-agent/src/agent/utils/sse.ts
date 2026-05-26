@@ -1,4 +1,4 @@
-import type { JsonObject } from '../tools/Tool';
+import type { JsonObject } from '../tools/tool/Tool';
 
 export interface ParseSseOptions {
     idleTimeout?: number;

@@ -1,6 +1,6 @@
 import type { Model, ModelEvent, ModelResponse } from './model/Model';
 import type { Message } from './chat/Message';
-import type { ContextPatch, Tool, ToolEvent, ToolResult } from './tools/Tool';
+import type { ContextPatch, Tool, ToolEvent, ToolResult } from './tools/tool/Tool';
 import { toError } from './utils/errors';
 import { loop } from './core/loop';
 

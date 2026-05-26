@@ -1,10 +1,9 @@
-import type { Message } from '../chat/Message';
-import type { Agent } from '../Agent';
-import type { Model } from '../model/Model';
-import type { ToolCall } from '../core/ToolCall';
-import { ToolError } from '../utils/errors';
+import type { Message } from '../../chat/Message';
+import type { Agent } from '../../Agent';
+import type { Model, ModelToolCall } from '../../model/Model';
+import { ToolError } from '../../utils/errors';
 import type { AskModel, Tool, ToolDefinition, ToolResult } from './Tool';
-import { SubAgentTool } from './SubAgentTool';
+import { SubAgentTool } from '../SubAgentTool';
 import { ToolRegistry } from './ToolRegistry';
 import { ToolRunner } from './ToolRunner';
 
@@ -59,7 +58,7 @@ export class ToolManager {
         this.context = context;
     }
 
-    async runCall(call: ToolCall, timeoutMs = this.defaultTimeoutMs): Promise<ToolResult> {
+    async runCall(call: ModelToolCall, timeoutMs = this.defaultTimeoutMs): Promise<ToolResult> {
         const runner = new ToolRunner({
             context: this.context,
             createAsk: this.createAsk,

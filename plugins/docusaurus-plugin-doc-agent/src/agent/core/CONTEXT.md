@@ -165,12 +165,12 @@ provider 请求仍然由 model 子类在最后一步生成。
 
 它不承载公共线性消息，也不承载工具调用类型。
 
-跨层共享的工具调用运行态类型放在 `ToolCall.ts`：
+模型产出的工具调用意图类型放在 `model/Model.ts`：
 
 ```text
-ToolCall = model 产生的工具调用意图
-         = loop 执行工具的输入
-         = Round/Action 持久化工具调用过程的数据
+ModelToolCall = model 产生的工具调用意图
+              = loop 执行工具的输入
+              = Round/Action 持久化工具调用过程的数据
 ```
 
 `loop` 不维护长期 context；它把同一份 `Message[]` 交给 model。GUI 在收到 `AgentEvent` 后更新当前 assistant message 的 rounds/actions，下一轮 model 请求会从这份状态中提炼 provider 请求。

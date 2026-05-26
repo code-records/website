@@ -3,8 +3,8 @@ import type { MessageJSON } from './Message';
 import type { ActionJSON, ActionType } from './round/Action';
 import type { PlanJSON, PlanStatus } from './round/Plan';
 import type { RoundJSON } from './round/Round';
-import type { ToolCall } from '../core/ToolCall';
-import type { JsonObject, JsonValue, ToolEvent } from '../tools/Tool';
+import type { ModelToolCall } from '../model/Model';
+import type { JsonObject, JsonValue, ToolEvent } from '../tools/tool/Tool';
 
 export interface SessionMeta {
     [key: string]: string | number | boolean | null;
@@ -232,7 +232,7 @@ function parseAction(value: unknown): ActionJSON | null {
     };
 }
 
-function parseToolCall(value: unknown): ToolCall | null {
+function parseToolCall(value: unknown): ModelToolCall | null {
     if (!isRecord(value)) return null;
     const input = parseJsonObject(value.input);
     if (typeof value.id !== 'string' || typeof value.name !== 'string' || input === null) {

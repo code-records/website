@@ -2,192 +2,174 @@
 
 `core/` 是 agent 的运行编排层。
 
-它不定义 provider 请求格式，也不保存一套独立的公共上下文结构。当前公共状态源是：
+它负责把一次 `Agent.run()` 串起来：
+
+```text
+Message[] -> model.stream() -> tool -> model.stream() -> ... -> final
+```
+
+它不拥有长期历史，不定义 provider 请求格式，也不保存一套独立的公共上下文结构。
+
+当前公共状态源只有一份：
 
 ```text
 Message[] -> Message.plan -> Round[] -> Action[]
 ```
 
-`core` 做的事情是读取这份公共状态，驱动：
+## 分层位置
 
 ```text
-model -> tool -> model -> ... -> final
+chat
+  拥有 GUI/session 的 Message[] 长期历史。
+
+core
+  读取本次 Message[]，驱动 model/tool 循环，发出 AgentEvent。
+
+model
+  把 Message[] / Round / Action 提炼成 provider 请求格式。
+
+tools
+  执行模型请求的 ModelToolCall，返回 ToolResult / ToolEvent / ContextPatch。
 ```
+
+`core` 是调度者，不是状态仓库。
 
 ## 职责
 
 `core/` 负责：
 
-- 接收本次运行的 `Message[]` 只读快照。
+- 接收本次运行的 `Message[]`。
 - 调用 `model.stream()`，消费统一的 `ModelEvent`。
-- 把 `ModelEvent` 包装成 `AgentEvent` 透传给 GUI / 日志 / 父 agent。
-- 根据 `ModelResponse.status` 判断继续、执行工具或结束。
-- 执行工具调用，处理工具超时、取消、事件和结果。
-- 把 sub-agent 包装成运行时工具，让委派仍然走工具链路。
+- 把 `ModelEvent` 包装成 `AgentEvent`，透传给 GUI / 日志 / 父 agent。
+- 根据 `ModelResponse.status` 判断结束、续写或执行工具。
+- 通过 `ToolManager` 执行模型请求的工具调用。
+- 把 sub-agent 包装进工具链路，而不是给 loop 增加特殊分支。
 
 `core/` 不负责：
 
-- 维护长期聊天历史。
-- 直接修改 GUI/session 持有的 `Message[]`。
-- 定义 OpenAI / Claude / Gemini 的线性 messages。
-- 保存一份 `ContextMessage[]` 作为第二状态源。
-- 暴露绕过 loop 的外部临时问答 API。
+- 保存长期聊天历史。
+- 原地维护 GUI/session 状态。
+- 定义 OpenAI / Claude / Gemini 的 provider messages。
+- 保存 `ContextMessage[]` 作为第二状态源。
+- 直接执行工具业务逻辑。
+- 暴露绕过 loop 的外部临时 prompt API。
 
-## 数据边界
+## 运行入口
 
-外部输入进入 loop 时是：
+`loop()` 是标准 agent 状态机：
 
 ```ts
-messages: readonly Message[]
+interface LoopOptions {
+  agentName?: string;
+  maxRounds?: number;
+  messages: readonly Message[];
+  model: Model;
+  signal?: AbortSignal;
+  subAgents?: Agent[];
+  system: string;
+  toolTimeoutMs?: number;
+  tools: Tool[];
+}
 ```
 
-这表示 `loop` 可以读取公共状态，但不应该原地修改外部历史。
-
-实现上 `loop` 会复制一份本次运行列表：
+`messages` 是公共状态快照。实现里会复制数组：
 
 ```ts
 let runMessages = [...options.messages];
 ```
 
-这份列表只用于当前 run 内部，例如追加“继续”或应用工具 patch。长期状态仍然应该通过 `AgentEvent` 回到 GUI/session 层后，由上层更新 `Message / Plan / Round / Action`。
+这个复制只保护列表结构，不深拷贝 `Message` 对象。GUI/chat 层可以在收到 `AgentEvent` 后把事件应用到当前 assistant message 的 `plan`，后续 model round 再从同一批 `Message` 对象里读取更新后的 `Round / Action`。
 
-## Model 入口
+## 一轮 Loop
 
-`core` 只调用统一入口：
-
-```text
-model.stream(ModelRequest)
-```
-
-无论 provider 底层是真流式、SSE、普通 HTTP response，还是用非流式模拟流式，对 `core` 来说都必须表现为：
-
-```text
-ModelEvent
-  content_delta
-  action
-  done
-  error
-```
-
-provider 子类负责把公共状态提炼成自己的请求格式：
-
-```text
-Message[] / Round / Action
-  -> OpenAI provider messages
-  -> Claude provider messages
-  -> Gemini provider messages
-```
-
-因此 `core` 不认识这类 provider 私有结构：
-
-```ts
-{ role: 'assistant', tool_calls: [...] }
-{ role: 'tool', tool_call_id, content }
-{ functionCall: ... }
-{ functionResponse: ... }
-```
-
-## Loop 状态机
-
-一轮 loop 等于一次 model 调用，以及可能跟随的一批工具执行。
+一轮 `round` 等于一次模型调用，以及可能跟随的一批工具执行：
 
 ```text
 for round in maxRounds:
   model.stream()
-    -> content_delta/action/error/done
+    -> content_delta
+    -> action(thinking/tool)
+    -> done(status)
 
-  done.status = final
-    -> 结束
+  status = final
+    -> 本次 run 结束
 
-  done.status = continue
-    -> 当前 run 内追加“继续”
+  status = continue
+    -> 当前 run 内追加 Message.user('继续')
     -> 下一轮 model.stream()
 
-  done.status = tool
-    -> 执行本轮 tool calls
-    -> 发出 tool_start/tool_done/tool_event/context_patch
+  status = tool
+    -> 提取 ModelToolCall
+    -> ToolManager.runCall()
+    -> 发出 tool_start / tool_done / tool_event
     -> 下一轮 model.stream()
 ```
 
-`loop` 自己只根据 `ModelAction.type === 'tool'` 提取工具调用。thinking、content 等展示状态由事件交给上层维护。
+`core` 只执行 `ModelAction.type === 'tool'` 的 action。`thinking` 和 `content_delta` 都是展示/记录状态，由事件交给上层维护。
 
-## ToolCall
+## AgentEvent
 
-`ToolCall` 是一次工具调用意图：
-
-```ts
-{
-  id: string;
-  name: string;
-  input: JsonObject;
-  result?: JsonValue;
-}
-```
-
-它会跨层流动：
+`loop` 对外只发 `AgentEvent`：
 
 ```text
-model 产出 ToolCall
-loop 收集 ToolCall
-ToolManager 执行 ToolCall
-ToolRunner 在 tools 层消费 ToolCall
-Round/Action 记录 ToolCall
-SessionStore 反序列化 ToolCall
+model_event
+  模型层事件，包含 content_delta / action / done / error。
+
+tool_start
+  某个 ModelToolCall 开始执行。
+
+tool_done
+  工具返回 ToolResult。
+
+tool_event
+  工具产生额外副作用事件。
+
+context_patch
+  工具请求改写本次 run 的上下文列表。
 ```
 
-所以它不是 provider 消息，也不是工具基类，而是 agent 运行态数据。
-
-## 工具执行
-
-工具执行主路径收敛到 `ToolManager`。
-
-`loop` 做的是：
-
-- 从 model actions 中收集 `ToolCall`。
-- 发出 `tool_start`。
-- 调用 `ToolManager.runCall()`。
-- 工具完成后发出 `tool_done` 和 `tool_event`。
-- 应用工具返回的 `contextPatch`。
-
-`ToolManager` 是 core 面向工具系统的门面：
+`Agent.run()` 会在外层再补上：
 
 ```text
-loop
-  -> ToolManager.definitions()
-  -> ToolManager.runCall(call)
-     -> ToolRegistry 查找工具
-     -> ToolRunner 执行工具
-     -> ToolResult
+agent_start
+agent_done
+agent_error
 ```
 
-`ToolRegistry` 和 `ToolRunner` 仍然保留清晰职责，但它们不再由 loop 直接装配。
+GUI、日志、父 agent、调度工具都应该消费事件流，而不是读取 core 内部变量。
 
-## 工具回问
+## Message 与 Context
 
-工具可以通过 `askModel()` 发起一次内部回问。
+现在没有公共 `ContextMessage` 类型。
 
-这条路不是外部临时问答 API，而是工具链路的一部分：
+原因是 GUI 真实需要展示和保存的是：
 
 ```text
-Tool.askModel()
-  -> createAskFactory()
-  -> model.complete({ toolAsk, messages: [], toolChoice: 'none' })
+assistant Message
+  content
+  plan
+    round
+      action: thinking
+      action: tool call
+      action: tool result
+      action: context patch
 ```
 
-`toolAsk` 的含义是：
+而模型 provider 通常需要的是自己的线性结构：
 
-- 只由工具发起。
-- 只用于本次 model request。
-- 不写入长期 `Message[]`。
-- 禁用工具调用，避免递归工具回问。
+```text
+OpenAI function_call / function_call_output
+Claude tool_use / tool_result
+Gemini functionCall / functionResponse
+```
 
-如果未来有摘要、压缩、校验、路由等临时模型能力，优先把它们建成工具或 loop 策略，而不是开放一个绕过 agent loop 的外部 prompt API。
+这两者不应该在 `core` 里再抽象出第三套公共 JSON。公共状态就是 `Message[]`；provider 请求由 `model` 子类在调用前从 `Message[]` 提炼出来。
+
+`Context.ts` 因此保持空文件。相关理念写在 `CONTEXT.md`，不要在 TS 里引入第二状态源。
 
 ## ContextPatch
 
-工具可以返回 `contextPatch`。
-
-当前它仍然表示“本次 run 内对消息列表的 patch”：
+工具可以返回 `contextPatch`：
 
 ```text
 append
@@ -195,15 +177,52 @@ replace
 compact
 ```
 
-它不等于新的长期状态源。长期 GUI/session 历史应该由上层根据 `AgentEvent` 决定如何落盘。
+它表示工具请求修改“本次 run 继续发送给模型的上下文列表”。`loop` 会应用 patch，并发出 `context_patch` 事件。
 
-后续如果要让工具稳定修改长期历史，应该引入更明确的 `HistoryPatch`，而不是把 provider messages 或临时 context 当成公共状态。
+它不等于长期历史写入协议。长期 GUI/session 历史是否落盘，应该由上层根据 `AgentEvent` 决定。
+
+如果以后要让工具稳定修改长期历史，应该新增更明确的 `HistoryPatch`，不要把 provider messages 或临时 context 当成公共状态。
+
+## ToolManager
+
+工具执行主路径收敛到 `ToolManager`：
+
+```text
+loop
+  -> ToolManager.definitions()
+  -> model.stream(...tools)
+  -> ToolManager.runCall(ModelToolCall)
+     -> ToolRegistry.require()
+     -> ToolRunner.runCall()
+     -> ToolResult
+```
+
+`loop` 不直接装配 `ToolRegistry` / `ToolRunner`，也不理解工具调度、超时、kill、askModel 等细节。
+
+## Tool Ask
+
+工具可以通过 `askModel()` 发起一次内部回问：
+
+```text
+Tool.askModel()
+  -> createAskFactory()
+  -> model.complete({ toolAsk, messages: [], toolChoice: 'none' })
+```
+
+这条路径只属于工具系统：
+
+- 只由工具发起。
+- 只用于当前 request。
+- 不写入长期 `Message[]`。
+- 默认禁用工具调用，避免工具递归请求工具。
+
+如果未来有摘要、压缩、校验、路由等临时模型能力，优先把它们建成工具或 loop 策略，而不是开放一个绕过 agent loop 的外部 prompt API。
 
 ## Sub Agents
 
 sub-agent 不在 loop 中成为特殊分支。
 
-`core` 会把 sub-agent 包装成运行时工具：
+`ToolManager` 会把 sub-agent 包装成运行时工具：
 
 ```text
 model
@@ -213,13 +232,25 @@ model
   -> parent model next round
 ```
 
-这样父 agent 可以用同一套事件流观察委派过程：
+父 agent 可以用同一套事件流观察委派过程。
+
+## 新能力放哪里
 
 ```text
-tool_start
-model_event
-tool_done
-tool_event
+要接新模型接口
+  放 model/，实现 Model 子类。
+
+要接新外部能力
+  放 tools/，实现 Tool 子类。
+
+要改模型-工具循环策略
+  改 core/loop.ts。
+
+要记录或展示聊天历史
+  放 chat/ 的 Message / Plan / Round / Action。
+
+要估算 token、解析 JSON、处理 SSE、错误封装
+  放 utils/。
 ```
 
 ## 文件说明
@@ -230,9 +261,6 @@ loop.ts
 
 helper.ts
   loop 的局部辅助函数，例如事件包装、工具回问和 action 合并。
-
-ToolCall.ts
-  工具调用意图的运行态类型。
 
 Context.ts
   空文件。当前不定义公共 Context，避免出现第二状态源。

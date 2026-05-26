@@ -1,7 +1,6 @@
-import { Message } from '../chat/Message';
-import type { Model } from '../model/Model';
-import type { ToolCall } from '../core/ToolCall';
-import { ToolError, toError } from '../utils/errors';
+import { Message } from '../../chat/Message';
+import type { Model, ModelToolCall } from '../../model/Model';
+import { ToolError, toError } from '../../utils/errors';
 import type { AskModel, JsonObject, ToolResult } from './Tool';
 import { ToolRegistry } from './ToolRegistry';
 
@@ -63,7 +62,7 @@ export class ToolRunner {
         this.signal = signal;
     }
 
-    async runCall(call: ToolCall, timeoutMs = this.defaultTimeoutMs): Promise<ToolResult> {
+    async runCall(call: ModelToolCall, timeoutMs = this.defaultTimeoutMs): Promise<ToolResult> {
         const record = await this.runItem({
             input: call.input,
             name: call.name,

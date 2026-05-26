@@ -4,8 +4,8 @@ import type {
     ToolRunPlanItem,
     ToolRunRecord,
     ToolTimeoutAction,
-} from './ToolRunner';
-import { Tool, type JsonObject, type JsonValue, type ToolInput, type ToolInputSchema, type ToolResult, type ToolRunContext } from './Tool';
+} from './tool/ToolRunner';
+import { Tool, type JsonObject, type JsonValue, type ToolInput, type ToolInputSchema, type ToolResult, type ToolRunContext } from './tool/Tool';
 
 export interface ScheduleToolOptions {
     maxItems?: number;

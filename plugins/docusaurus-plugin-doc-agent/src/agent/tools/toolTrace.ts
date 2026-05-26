@@ -1,5 +1,5 @@
 import type { HistoryJSON } from '../chat/History';
-import type { JsonValue } from './Tool';
+import type { JsonValue } from './tool/Tool';
 
 export function collectToolCallInputs(history: HistoryJSON, toolName: string, inputKey?: string): JsonValue[] {
     const values: JsonValue[] = [];

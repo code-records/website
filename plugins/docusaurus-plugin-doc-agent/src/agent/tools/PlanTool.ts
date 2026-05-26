@@ -1,4 +1,4 @@
-import { Tool, type JsonObject, type ToolInput, type ToolInputSchema, type ToolResult, type ToolRunContext } from './Tool';
+import { Tool, type JsonObject, type ToolInput, type ToolInputSchema, type ToolResult, type ToolRunContext } from './tool/Tool';
 
 export interface PlanStep extends JsonObject {
     description: string;

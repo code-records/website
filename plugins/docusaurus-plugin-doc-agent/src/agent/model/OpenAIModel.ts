@@ -8,7 +8,7 @@ import {
     type ProviderRequestBody,
     type ProviderResponseBody,
     type ProviderStreamChunk,
-    type ToolCall,
+    type ModelToolCall,
 } from './Model';
 import type { Message } from '../chat/Message';
 import type { JsonObject, JsonValue, ToolDefinition } from '../tools/tool/Tool';
@@ -37,9 +37,9 @@ export class OpenAIModel extends Model {
         };
 
         const output: JsonValue[] = [];
-        const toolCalls: ToolCall[] = [];
+        const toolCalls: ModelToolCall[] = [];
         const toolArgs = new Map<string, string>();
-        const toolByItemId = new Map<string, ToolCall>();
+        const toolByItemId = new Map<string, ModelToolCall>();
         let finalStatus = '';
         let content = '';
         let outputText = '';
@@ -57,7 +57,7 @@ export class OpenAIModel extends Model {
                 const itemId = requireString(item.id, 'OpenAI output item id');
                 const callId = typeof item.call_id === 'string' ? item.call_id : itemId;
                 const name = requireString(item.name, 'OpenAI function call name');
-                const call: ToolCall = { id: callId, input: {}, name };
+                const call: ModelToolCall = { id: callId, input: {}, name };
 
                 toolByItemId.set(itemId, call);
                 toolArgs.set(itemId, optionalString(item.arguments));
@@ -258,7 +258,7 @@ export class OpenAIModel extends Model {
             .join('');
     }
 
-    private createActions(thinking: string, toolCalls: readonly ToolCall[]): ModelAction[] {
+    private createActions(thinking: string, toolCalls: readonly ModelToolCall[]): ModelAction[] {
         return [
             ...(thinking.length > 0 ? [{ type: 'thinking' as const, content: thinking }] : []),
             ...toolCalls.map(call => ({ type: 'tool' as const, call })),

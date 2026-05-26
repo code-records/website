@@ -2,9 +2,9 @@ import type { AgentEvent } from '../Agent';
 import type { Agent } from '../Agent';
 import { Message } from '../chat/Message';
 import type { Model, ModelAction } from '../model/Model';
+import type { ModelToolCall } from '../model/Model';
 import type { Tool, ToolResult } from '../tools/tool/Tool';
 import { ToolManager } from '../tools/tool/ToolManager';
-import type { ToolCall } from './ToolCall';
 import { applyContextPatch, createAskFactory, mergeAction, toAgentModelEvent } from './helper';
 
 // ─── 类型 ───────────────────────────────────────────
@@ -23,7 +23,7 @@ export interface LoopOptions {
 
 // 一个工具调用 promise 已完成
 interface SettledToolCall {
-    call: ToolCall;
+    call: ModelToolCall;
     result: ToolResult;
     token: symbol;
     tool: string;
@@ -66,7 +66,7 @@ export async function* loop(options: LoopOptions): AsyncGenerator<AgentEvent, vo
     // 4. 一轮 round = 一次 model 调用，以及可能跟随的一批工具执行。
     for (let round = 0; round < maxRounds && !signal?.aborted; round++) {
         const actions: ModelAction[] = [];
-        const toolCalls: ToolCall[] = [];
+        const toolCalls: ModelToolCall[] = [];
         let status: 'tool' | 'continue' | 'final' = 'final';
         // 5. 把当前完整上下文交给 model；model 永远以统一事件流返回。
         for await (const event of model.stream({

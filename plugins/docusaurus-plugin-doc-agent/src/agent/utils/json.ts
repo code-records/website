@@ -1,4 +1,4 @@
-import type { JsonObject, JsonValue } from '../tools/Tool';
+import type { JsonObject, JsonValue } from '../tools/tool/Tool';
 
 export function isJsonObject(value: unknown): value is JsonObject {
     return value !== null && typeof value === 'object' && !Array.isArray(value);

@@ -8,7 +8,7 @@ import {
     type ProviderRequestBody,
     type ProviderResponseBody,
     type ProviderStreamChunk,
-    type ToolCall,
+    type ModelToolCall,
 } from './Model';
 import type { Message } from '../chat/Message';
 import type { JsonObject, JsonValue, ToolDefinition } from '../tools/tool/Tool';
@@ -21,7 +21,7 @@ const CLAUDE_MAX_TOKENS = 4096;
 
 interface ChatToolTracker {
     args: string;
-    call?: ToolCall;
+    call?: ModelToolCall;
     finalized?: boolean;
     id: string;
     name: string;
@@ -29,7 +29,7 @@ interface ChatToolTracker {
 
 type RoundProviderAction =
     | { type: 'thinking'; content: string }
-    | { type: 'tool'; call?: ToolCall; callId?: string; content: string };
+    | { type: 'tool'; call?: ModelToolCall; callId?: string; content: string };
 
 export class ClaudeModel extends Model {
     constructor({ url = DEFAULT_ANTHROPIC_ENDPOINT, streamUrl = DEFAULT_ANTHROPIC_STREAM_ENDPOINT, ...rest }: ModelConfig = {}) {
@@ -44,8 +44,8 @@ export class ClaudeModel extends Model {
         const isChatCompletions = this.isChatCompletionsEndpoint();
         const body = this.buildRequestBody(request, isChatCompletions);
         const contentBlocks: JsonValue[] = [];
-        const toolCalls: ToolCall[] = [];
-        const toolArgs = new Map<number, { args: string; call: ToolCall }>();
+        const toolCalls: ModelToolCall[] = [];
+        const toolArgs = new Map<number, { args: string; call: ModelToolCall }>();
         const chatToolTrackers = new Map<string, ChatToolTracker>();
         let content = '';
         let thinking = '';
@@ -135,7 +135,7 @@ export class ClaudeModel extends Model {
                 }
 
                 if (type === 'tool_use') {
-                    const call: ToolCall = {
+                    const call: ModelToolCall = {
                         id: requireString(block.id, 'Claude tool_use id'),
                         input: isJsonObject(block.input) ? block.input : {},
                         name: requireString(block.name, 'Claude tool_use name'),
@@ -311,7 +311,7 @@ export class ClaudeModel extends Model {
         }
         const actions = this.roundActions(message);
         const toolCalls = actions
-            .filter((action): action is { type: 'tool'; call: ToolCall; callId?: string; content: string } => action.type === 'tool' && action.call !== undefined)
+            .filter((action): action is { type: 'tool'; call: ModelToolCall; callId?: string; content: string } => action.type === 'tool' && action.call !== undefined)
             .map(action => ({
                 function: {
                     arguments: JSON.stringify(action.call.input ?? {}),
@@ -342,7 +342,7 @@ export class ClaudeModel extends Model {
             const actions = payload.tool_calls.map(value => {
                 const tool = requireJsonObject(value, 'Claude chat tool call');
                 const fn = requireJsonObject(tool.function, 'Claude chat tool function');
-                const call: ToolCall = {
+                const call: ModelToolCall = {
                     id: requireString(tool.id, 'Claude chat tool id'),
                     input: safeParseJsonObject(optionalString(fn.arguments)),
                     name: requireString(fn.name, 'Claude chat tool name'),
@@ -384,7 +384,7 @@ export class ClaudeModel extends Model {
     private ensureChatToolTracker(
         key: string,
         toolDelta: JsonObject,
-        toolCalls: ToolCall[],
+        toolCalls: ModelToolCall[],
         chatTrackers: Map<string, ChatToolTracker>,
     ): ChatToolTracker {
         const fn = isJsonObject(toolDelta.function) ? toolDelta.function : {};
@@ -464,7 +464,7 @@ export class ClaudeModel extends Model {
         return actions;
     }
 
-    private createActions(thinking: string, toolCalls: readonly ToolCall[]): ModelAction[] {
+    private createActions(thinking: string, toolCalls: readonly ModelToolCall[]): ModelAction[] {
         return [
             ...(thinking.length > 0 ? [{ type: 'thinking' as const, content: thinking }] : []),
             ...toolCalls.map(call => ({ type: 'tool' as const, call })),

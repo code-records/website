@@ -1,6 +1,5 @@
 import type { JsonObject, JsonValue, ToolDefinition } from '../tools/tool/Tool';
 import type { Message } from '../chat/Message';
-import type { ToolCall } from '../core/ToolCall';
 
 // ─── 通用类型 ────────────────────────────────────────
 
@@ -16,10 +15,17 @@ export type ProviderResponseBody = JsonObject;
 export type ProviderMessage = JsonObject;
 export type ProviderStreamChunk = JsonValue;
 
+/** 模型产出的工具调用意图，由 loop/tool 层消费并由 Round/Action 记录。 */
+export interface ModelToolCall {
+    id: string;
+    name: string;
+    input: JsonObject;
+    result?: JsonValue;
+}
+
 export type ModelAction =
     | { type: 'thinking'; content: string }
-    | { type: 'tool'; call: ToolCall };
-export type { ToolCall };
+    | { type: 'tool'; call: ModelToolCall };
 
 /** provider 无关的单次模型请求。 */
 export interface ModelRequest {

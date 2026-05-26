@@ -1,6 +1,6 @@
 import type { Agent, AgentEvent } from '../Agent';
 import { Message } from '../chat/Message';
-import { Tool, type JsonObject, type ToolInput, type ToolInputSchema, type ToolResult, type ToolRunContext } from './Tool';
+import { Tool, type JsonObject, type ToolInput, type ToolInputSchema, type ToolResult, type ToolRunContext } from './tool/Tool';
 
 export interface SubAgentToolOptions {
     maxResultChars?: number;

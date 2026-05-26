@@ -1,6 +1,6 @@
 import type { AgentEvent } from '../../Agent';
-import type { ToolCall } from '../../core/ToolCall';
-import type { ToolEvent } from '../../tools/Tool';
+import type { ModelToolCall } from '../../model/Model';
+import type { ToolEvent } from '../../tools/tool/Tool';
 
 export type ActionType =
     | 'content'
@@ -11,7 +11,7 @@ export type ActionType =
 
 export interface ActionJSON {
     callId?: string;
-    call?: ToolCall;
+    call?: ModelToolCall;
     content?: string;
     done: boolean;
     event?: ToolEvent;
@@ -21,7 +21,7 @@ export interface ActionJSON {
 
 export class Action {
     callId?: string;
-    call?: ToolCall;
+    call?: ModelToolCall;
     content = '';
     done = false;
     event?: ToolEvent;

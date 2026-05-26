@@ -9,7 +9,7 @@ import {
     type ProviderRequestBody,
     type ProviderResponseBody,
     type ProviderStreamChunk,
-    type ToolCall,
+    type ModelToolCall,
 } from './Model';
 import type { Message } from '../chat/Message';
 import type { JsonObject, JsonValue, ToolDefinition } from '../tools/tool/Tool';
@@ -33,7 +33,7 @@ export class GeminiModel extends Model {
     async *stream(request: ModelRequest): AsyncGenerator<ModelEvent, void, void> {
         const body = this.buildGenerateContentBody(request.messages, request.tools ?? [], request.system ?? '', request.toolAsk);
         const parts: JsonValue[] = [];
-        const toolCalls: ToolCall[] = [];
+        const toolCalls: ModelToolCall[] = [];
         let content = '';
         let finishReason = '';
 
@@ -157,7 +157,7 @@ export class GeminiModel extends Model {
         };
     }
 
-    private roundToolActions(message: Message): Array<{ call?: ToolCall; callId?: string; content: string }> {
+    private roundToolActions(message: Message): Array<{ call?: ModelToolCall; callId?: string; content: string }> {
         return (message.plan?.items ?? []).flatMap(round => round.items.flatMap(action => {
             if (action.type !== 'tool') {
                 return [];
@@ -204,7 +204,7 @@ export class GeminiModel extends Model {
         };
     }
 
-    private parseCandidates(response: JsonObject): { content: string; finishReason: string; parts: JsonValue[]; toolCalls: ToolCall[] } {
+    private parseCandidates(response: JsonObject): { content: string; finishReason: string; parts: JsonValue[]; toolCalls: ModelToolCall[] } {
         if (!Array.isArray(response.candidates)) {
             throw new Error('Gemini candidates must be an array');
         }
@@ -212,7 +212,7 @@ export class GeminiModel extends Model {
         const parts: JsonValue[] = [];
         let content = '';
         let finishReason = '';
-        const toolCalls: ToolCall[] = [];
+        const toolCalls: ModelToolCall[] = [];
 
         for (const candidateValue of response.candidates) {
             const candidate = requireJsonObject(candidateValue, 'Gemini candidate');
@@ -231,9 +231,9 @@ export class GeminiModel extends Model {
         return { content, finishReason, parts, toolCalls };
     }
 
-    private parseParts(parts: readonly JsonValue[], offset = 0): { content: string; parts: JsonValue[]; toolCalls: ToolCall[] } {
+    private parseParts(parts: readonly JsonValue[], offset = 0): { content: string; parts: JsonValue[]; toolCalls: ModelToolCall[] } {
         let content = '';
-        const toolCalls: ToolCall[] = [];
+        const toolCalls: ModelToolCall[] = [];
 
         for (const partValue of parts) {
             const part = requireJsonObject(partValue, 'Gemini content part');
@@ -251,7 +251,7 @@ export class GeminiModel extends Model {
         return { content, parts: [...parts], toolCalls };
     }
 
-    private createToolCall(functionCall: JsonObject, index: number): ToolCall {
+    private createToolCall(functionCall: JsonObject, index: number): ModelToolCall {
         const name = requireString(functionCall.name, 'Gemini function call name');
         const rawId = optionalString(functionCall.id);
         const id = rawId || `gemini_${name}_${index + 1}`;
@@ -262,7 +262,7 @@ export class GeminiModel extends Model {
         };
     }
 
-    private createActions(toolCalls: readonly ToolCall[]): ModelAction[] {
+    private createActions(toolCalls: readonly ModelToolCall[]): ModelAction[] {
         return toolCalls.map(call => ({ type: 'tool' as const, call }));
     }
 

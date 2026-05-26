@@ -8,7 +8,7 @@ import {
     type ToolInputSchema,
     type ToolResult,
     type ToolRunContext,
-} from './Tool';
+} from './tool/Tool';
 
 export interface CompressToolOptions {
     keepTail?: number;

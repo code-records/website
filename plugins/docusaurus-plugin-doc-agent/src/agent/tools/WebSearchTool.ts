@@ -1,4 +1,4 @@
-import { Tool, type JsonObject, type JsonValue, type ToolAskPrompt, type ToolInput, type ToolInputSchema, type ToolResult, type ToolRunContext } from './Tool';
+import { Tool, type JsonObject, type JsonValue, type ToolAskPrompt, type ToolInput, type ToolInputSchema, type ToolResult, type ToolRunContext } from './tool/Tool';
 
 export interface WebSearchToolOptions {
     endpoint?: string;
