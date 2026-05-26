@@ -4,7 +4,7 @@ import type {
     ToolRunPlanItem,
     ToolRunRecord,
     ToolTimeoutAction,
-} from '../core/ToolRunner';
+} from './ToolRunner';
 import { Tool, type JsonObject, type JsonValue, type ToolInput, type ToolInputSchema, type ToolResult, type ToolRunContext } from './Tool';
 
 export interface ScheduleToolOptions {

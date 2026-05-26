@@ -128,8 +128,9 @@ for round in maxRounds:
 
 ```text
 model 产出 ToolCall
-loop 执行 ToolCall
-ToolRunner 消费 ToolCall
+loop 收集 ToolCall
+ToolManager 执行 ToolCall
+ToolRunner 在 tools 层消费 ToolCall
 Round/Action 记录 ToolCall
 SessionStore 反序列化 ToolCall
 ```
@@ -138,24 +139,28 @@ SessionStore 反序列化 ToolCall
 
 ## 工具执行
 
-工具执行主路径在 `ToolRunner`。
+工具执行主路径收敛到 `ToolManager`。
 
 `loop` 做的是：
 
 - 从 model actions 中收集 `ToolCall`。
-- 找到对应工具。
-- 注入工具回问能力 `askModel()`。
 - 发出 `tool_start`。
-- 调用 `executeToolCall()`。
+- 调用 `ToolManager.runCall()`。
 - 工具完成后发出 `tool_done` 和 `tool_event`。
+- 应用工具返回的 `contextPatch`。
 
-`executeToolCall()` 现在放在 `helper.ts`，只是 loop 的薄包装：
+`ToolManager` 是 core 面向工具系统的门面：
 
 ```text
-ToolCall + registry + model + context snapshot
-  -> ToolRunner.runCall()
-  -> ToolResult
+loop
+  -> ToolManager.definitions()
+  -> ToolManager.runCall(call)
+     -> ToolRegistry 查找工具
+     -> ToolRunner 执行工具
+     -> ToolResult
 ```
+
+`ToolRegistry` 和 `ToolRunner` 仍然保留清晰职责，但它们不再由 loop 直接装配。
 
 ## 工具回问
 
@@ -224,10 +229,7 @@ loop.ts
   标准 agent 状态机，驱动 model/tool/sub-agent。
 
 helper.ts
-  loop 的局部辅助函数，例如事件包装、工具回问、工具执行包装。
-
-ToolRunner.ts
-  工具执行控制器，负责 timeout、kill、串并行调度和 ask 注入。
+  loop 的局部辅助函数，例如事件包装、工具回问和 action 合并。
 
 ToolCall.ts
   工具调用意图的运行态类型。

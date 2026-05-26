@@ -1,4 +1,4 @@
-import type { JsonObject, JsonValue, ToolDefinition } from '../tools/Tool';
+import type { JsonObject, JsonValue, ToolDefinition } from '../tools/tool/Tool';
 import type { Message } from '../chat/Message';
 import type { ToolCall } from '../core/ToolCall';
 

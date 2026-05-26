@@ -1,7 +1,7 @@
 // ─── 类型 ───────────────────────────────────────────
 
-import { Message } from '../chat/Message';
-import type { ToolRunner } from '../core/ToolRunner';
+import { Message } from '../../chat/Message';
+import type { ToolRunner } from './ToolRunner';
 
 export type JsonPrimitive = string | number | boolean | null;
 export type JsonValue = JsonPrimitive | JsonValue[] | { [key: string]: JsonValue };

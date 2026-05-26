@@ -5,6 +5,8 @@ export * from './PlanTool';
 export * from './ScheduleTool';
 export * from './SubAgentTool';
 export * from './Tool';
+export * from './ToolManager';
 export * from './ToolRegistry';
+export * from './ToolRunner';
 export * from './WebSearchTool';
 export * from './toolTrace';

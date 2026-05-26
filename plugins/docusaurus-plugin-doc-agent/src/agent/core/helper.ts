@@ -1,20 +1,7 @@
 import type { AgentEvent } from '../Agent';
 import type { Message } from '../chat/Message';
 import type { Model, ModelAction, ModelEvent } from '../model/Model';
-import type { AskModel, ContextPatch, ToolResult } from '../tools/Tool';
-import { ToolRegistry } from '../tools/ToolRegistry';
-import { ToolError } from '../utils/errors';
-import type { ToolCall } from './ToolCall';
-import { ToolRunner } from './ToolRunner';
-
-export interface ExecuteToolCallOptions {
-    context: readonly Message[];
-    createAsk?: (toolName: string) => AskModel;
-    model: Model;
-    registry: ToolRegistry;
-    signal?: AbortSignal;
-    timeoutMs?: number;
-}
+import type { AskModel, ContextPatch } from '../tools/tool/Tool';
 
 export function createAskFactory({
     model,
@@ -67,24 +54,4 @@ export function mergeAction(actions: ModelAction[], action: ModelAction): void {
     }
 
     actions.push(action);
-}
-
-export async function executeToolCall(
-    call: ToolCall,
-    options: ExecuteToolCallOptions,
-): Promise<ToolResult> {
-    const runner = new ToolRunner({
-        context: options.context,
-        createAsk: options.createAsk,
-        defaultTimeoutMs: options.timeoutMs,
-        model: options.model,
-        registry: options.registry,
-        signal: options.signal,
-    });
-
-    const result = await runner.runCall(call, options.timeoutMs);
-    if (result === undefined) {
-        throw new ToolError(call.name, `Tool ${call.name} did not return a result`);
-    }
-    return result;
 }

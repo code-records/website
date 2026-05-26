@@ -35,7 +35,9 @@ abstract class Tool {
 | 文件 | 作用 |
 |---|---|
 | `Tool.ts` | 工具基类、强类型 JSON、`ToolRunContext`、`contextPatch`、工具事件 |
+| `ToolManager.ts` | 工具系统门面，收束工具定义导出、sub-agent 包装和工具调用执行 |
 | `ToolRegistry.ts` | 工具注册表，负责重复名称检查和模型工具定义导出 |
+| `ToolRunner.ts` | 工具执行控制器，负责 timeout、kill、串并行调度和 ask 注入 |
 | `CompressTool.ts` | 上下文压缩工具，返回 `compact` 类型 `contextPatch` |
 | `PlanTool.ts` | 计划工具，只发事件，不接管执行 |
 | `ScheduleTool.ts` | 调度工具，把串行/并行/超时策略交给 `ToolRunner` 执行 |
@@ -59,7 +61,7 @@ abstract class Tool {
 }
 ```
 
-实际串行、并行、超时 Abort、运行记录由 `core/ToolRunner` 完成。
+实际串行、并行、超时 Abort、运行记录由 `tools/ToolRunner` 完成。
 
 `timeoutAction = kill` 表示某个任务超时或被取消时，调度器会 Abort 还在运行的同批工具；`serial` 模式下后续未开始的工具会标记为 `skipped`。
 

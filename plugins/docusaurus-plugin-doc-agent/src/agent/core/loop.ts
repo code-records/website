@@ -2,11 +2,10 @@ import type { AgentEvent } from '../Agent';
 import type { Agent } from '../Agent';
 import { Message } from '../chat/Message';
 import type { Model, ModelAction } from '../model/Model';
-import type { Tool, ToolResult } from '../tools/Tool';
-import { ToolRegistry } from '../tools/ToolRegistry';
-import { SubAgentTool } from '../tools/SubAgentTool';
+import type { Tool, ToolResult } from '../tools/tool/Tool';
+import { ToolManager } from '../tools/tool/ToolManager';
 import type { ToolCall } from './ToolCall';
-import { applyContextPatch, createAskFactory, executeToolCall, mergeAction, toAgentModelEvent } from './helper';
+import { applyContextPatch, createAskFactory, mergeAction, toAgentModelEvent } from './helper';
 
 // ─── 类型 ───────────────────────────────────────────
 
@@ -50,14 +49,19 @@ export async function* loop(options: LoopOptions): AsyncGenerator<AgentEvent, vo
     // 1. 本次运行使用 Message 引用作为状态源；临时追加只影响当前 run。
     let runMessages = [...options.messages];
 
-    // 2. 合并普通工具和 sub-agent 工具，并生成运行时工具表。
-    const runtimeTools = subAgents.length > 0
-        ? [...tools, new SubAgentTool({ subAgents })]
-        : tools;
-    const toolRegistry = new ToolRegistry(runtimeTools);
-
-    // 3. 创建工具回问 model 的闭包；具体工具执行前会注入。
+    // 2. 创建工具回问 model 的闭包；具体工具执行前会注入。
     const createAsk = createAskFactory({ model, signal, system });
+
+    // 3. 工具查找、sub-agent 包装、runner 构建都收敛在 ToolManager。
+    const toolManager = new ToolManager({
+        context: runMessages,
+        createAsk,
+        defaultTimeoutMs: toolTimeoutMs,
+        model,
+        signal,
+        subAgents,
+        tools,
+    });
 
     // 4. 一轮 round = 一次 model 调用，以及可能跟随的一批工具执行。
     for (let round = 0; round < maxRounds && !signal?.aborted; round++) {
@@ -68,7 +72,7 @@ export async function* loop(options: LoopOptions): AsyncGenerator<AgentEvent, vo
         for await (const event of model.stream({
             system,
             messages: runMessages,
-            tools: toolRegistry.definitions(),
+            tools: toolManager.definitions(),
             signal,
         })) {
             // 6. 先把 model 事件透传给上层 UI/日志，让界面可以实时更新。
@@ -120,9 +124,8 @@ export async function* loop(options: LoopOptions): AsyncGenerator<AgentEvent, vo
             }> = [];
 
             for (const call of toolCalls) {
-                // 15. 找到工具并注入 ask 能力，让工具可在边界场景回问 model。
-                const tool = toolRegistry.require(call.name);
-                tool.setAsk(createAsk(call.name));
+                // 15. 先确认工具存在；实际 ask 注入和执行交给 ToolManager。
+                toolManager.require(call.name);
 
                 yield {
                     type: 'tool_start',
@@ -135,14 +138,7 @@ export async function* loop(options: LoopOptions): AsyncGenerator<AgentEvent, vo
                 const token = Symbol(call.id);
                 pending.push({
                     token,
-                    promise: executeToolCall(call, {
-                        context: runMessages,
-                        createAsk,
-                        model,
-                        registry: toolRegistry,
-                        signal,
-                        timeoutMs: toolTimeoutMs,
-                    }).then(result => ({
+                    promise: toolManager.runCall(call).then(result => ({
                         call,
                         result,
                         token,
@@ -181,6 +177,7 @@ export async function* loop(options: LoopOptions): AsyncGenerator<AgentEvent, vo
                 // 20. 工具如需改写上下文，统一通过 contextPatch 交给 loop 应用。
                 if (result.contextPatch !== undefined) {
                     runMessages = applyContextPatch(runMessages, result.contextPatch);
+                    toolManager.setContext(runMessages);
                     yield {
                         type: 'context_patch',
                         agent: agentName,

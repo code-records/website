@@ -12,7 +12,7 @@ import {
     type ToolCall,
 } from './Model';
 import type { Message } from '../chat/Message';
-import type { JsonObject, JsonValue, ToolDefinition } from '../tools/Tool';
+import type { JsonObject, JsonValue, ToolDefinition } from '../tools/tool/Tool';
 import { optionalString, requireJsonObject, requireString } from '../utils/json';
 import { parseSseStream } from '../utils/sse';
 

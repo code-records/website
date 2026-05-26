@@ -1,9 +1,9 @@
 import { Message } from '../chat/Message';
 import type { Model } from '../model/Model';
-import type { AskModel, JsonObject, ToolResult } from '../tools/Tool';
-import { ToolRegistry } from '../tools/ToolRegistry';
+import type { ToolCall } from '../core/ToolCall';
 import { ToolError, toError } from '../utils/errors';
-import type { ToolCall } from './ToolCall';
+import type { AskModel, JsonObject, ToolResult } from './Tool';
+import { ToolRegistry } from './ToolRegistry';
 
 export type ToolRunMode = 'parallel' | 'serial';
 export type ToolTimeoutAction = 'continue' | 'kill';
