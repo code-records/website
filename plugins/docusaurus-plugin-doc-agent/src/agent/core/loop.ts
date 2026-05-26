@@ -7,7 +7,7 @@ import type { Tool, ToolResult } from '../tools/tool/Tool';
 import { ToolManager } from '../tools/tool/ToolManager';
 import { applyContextPatch, createAskFactory, mergeAction, toAgentModelEvent } from './helper';
 
-// ─── 类型 ───────────────────────────────────────────
+// ─── 类型 (公开 API) ───────────────────────────────────
 
 export interface LoopOptions {
     agentName?: string;
@@ -21,6 +21,8 @@ export interface LoopOptions {
     tools: Tool[];
 }
 
+// ─── 类型 (内部实现私有) ─────────────────────────────────
+
 // 一个工具调用 promise 已完成
 interface SettledToolCall {
     call: ModelToolCall;
@@ -28,6 +30,7 @@ interface SettledToolCall {
     token: symbol;
     tool: string;
 }
+
 
 // ─── 主循环 ──────────────────────────────────────────
 

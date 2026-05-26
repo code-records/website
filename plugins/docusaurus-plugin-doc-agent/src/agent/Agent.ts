@@ -1,5 +1,5 @@
 import type { Model, ModelEvent, ModelResponse } from './model/Model';
-import type { Message } from './chat/Message';
+import { Message } from './chat/Message';
 import type { ContextPatch, Tool, ToolEvent, ToolResult } from './tools/tool/Tool';
 import { toError } from './utils/errors';
 import { loop } from './core/loop';
@@ -59,8 +59,13 @@ export abstract class Agent {
      */
     async *run(input: AgentInput): AsyncGenerator<AgentEvent, void, void> {
         yield { type: 'agent_start', agent: this.name };
+        const runAssistant = getCurrentAssistant(input.messages);
 
         try {
+            if (runAssistant === undefined) {
+                throw new Error('Agent.run() requires messages to end with an active assistant Message');
+            }
+
             let response: ModelResponse | undefined;
 
             for await (const event of loop({
@@ -74,15 +79,24 @@ export abstract class Agent {
                 signal: input.signal ?? this.context.signal,
                 toolTimeoutMs: this.context.toolTimeoutMs,
             })) {
+                applyRunEvent(runAssistant, event);
                 if (event.type === 'model_event' && event.event.type === 'done') {
                     response = event.event.response;
                 }
                 yield event;
             }
 
+            if (runAssistant.content.length === 0 && response?.content) {
+                runAssistant.content = response.content;
+            }
+            runAssistant.finish();
+            runAssistant.plan?.apply({ type: 'agent_done', agent: this.name, response });
             yield { type: 'agent_done', agent: this.name, response };
         } catch (error) {
-            yield { type: 'agent_error', agent: this.name, error: toError(error) };
+            const err = toError(error);
+            runAssistant?.fail(err.message);
+            runAssistant?.plan?.apply({ type: 'agent_error', agent: this.name, error: err });
+            yield { type: 'agent_error', agent: this.name, error: err };
         }
     }
 
@@ -102,5 +116,17 @@ export abstract class Agent {
         }
 
         return response;
+    }
+}
+
+function getCurrentAssistant(messages: readonly Message[]): Message | undefined {
+    const last = messages[messages.length - 1];
+    return last?.role === 'assistant' && last.plan?.isActive === true ? last : undefined;
+}
+
+function applyRunEvent(assistant: Message, event: AgentEvent): void {
+    assistant.plan?.apply(event);
+    if (event.type === 'model_event' && event.event.type === 'content_delta') {
+        assistant.content += event.event.content;
     }
 }

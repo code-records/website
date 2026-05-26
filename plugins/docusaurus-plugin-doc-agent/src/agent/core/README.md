@@ -1,270 +1,276 @@
 # Core
 
-`core/` 是 agent 的运行编排层。
-
-它负责把一次 `Agent.run()` 串起来：
+`core/` 是 agent 的运行编排层。它负责把一次 `Agent.run()` 的生命周期完整串联起来：
 
 ```text
 Message[] -> model.stream() -> tool -> model.stream() -> ... -> final
 ```
 
-它不拥有长期历史，不定义 provider 请求格式，也不保存一套独立的公共上下文结构。
+它是一个**纯粹的调度者**，而非状态仓库。它不拥有长期对话历史，不定义具体模型 Provider 的请求格式，也不在内存中保存一套独立的公共线性上下文结构。
 
-当前公共状态源只有一份：
+---
 
-```text
-Message[] -> Message.plan -> Round[] -> Action[]
-```
+## 1. 架构定位与分层
 
-## 分层位置
+在整个系统的架构中，`core` 扮演着中枢调度的角色：
 
 ```text
 chat
-  拥有 GUI/session 的 Message[] 长期历史。
+  └── 拥有 GUI/session 的 Message[] 长期历史与状态落盘。
 
 core
-  读取本次 Message[]，驱动 model/tool 循环，发出 AgentEvent。
+  └── 读取本次 Message[] 快照，驱动 model/tool 状态机循环，持续向外发射 AgentEvent。
 
 model
-  把 Message[] / Round / Action 提炼成 provider 请求格式。
+  └── 把 Message[] / Round / Action 统一的公共状态提炼成具体模型 Provider 的请求格式。
 
 tools
-  执行模型请求的 ModelToolCall，返回 ToolResult / ToolEvent / ContextPatch。
+  └── 执行模型请求中的 ModelToolCall，返回 ToolResult / ToolEvent / ContextPatch。
 ```
 
-`core` 是调度者，不是状态仓库。
+### 职责边界
 
-## 职责
+| `core/` 负责的职责 | `core/` **不**负责的职责 |
+| :--- | :--- |
+| ✓ 接收本次运行的 `Message[]` 上下文快照 | ✗ 保存长期的聊天历史与 session 状态 |
+| ✓ 调用 `model.stream()` 消费统一的 `ModelEvent` | ✗ 维护 GUI 展示层状态与数据落盘 |
+| ✓ 把底层事件包装成 `AgentEvent` 并实时向外透传 | ✗ 定义 OpenAI / Claude / Gemini 的私有请求格式 |
+| ✓ 根据模型返回的 `ModelResponse.status` 判断终止或续写 | ✗ 保存 `ContextMessage[]` 作为第二线性状态源 |
+| ✓ 通过 `ToolManager` 调度并安全执行模型请求的工具调用 | ✗ 直接执行工具的内部具体业务逻辑 |
+| ✓ 把 sub-agent 包装进工具链路，避免给 loop 增加特殊分支 | ✗ 暴露绕过标准状态机循环的外部临时 Prompt API |
 
-`core/` 负责：
+---
 
-- 接收本次运行的 `Message[]`。
-- 调用 `model.stream()`，消费统一的 `ModelEvent`。
-- 把 `ModelEvent` 包装成 `AgentEvent`，透传给 GUI / 日志 / 父 agent。
-- 根据 `ModelResponse.status` 判断结束、续写或执行工具。
-- 通过 `ToolManager` 执行模型请求的工具调用。
-- 把 sub-agent 包装进工具链路，而不是给 loop 增加特殊分支。
+## 2. 核心编排循环 (Loop)
 
-`core/` 不负责：
+### 2.1 运行入口
 
-- 保存长期聊天历史。
-- 原地维护 GUI/session 状态。
-- 定义 OpenAI / Claude / Gemini 的 provider messages。
-- 保存 `ContextMessage[]` 作为第二状态源。
-- 直接执行工具业务逻辑。
-- 暴露绕过 loop 的外部临时 prompt API。
+`loop()` 是标准 agent 状态机，其调用参数定义如下：
 
-## 运行入口
-
-`loop()` 是标准 agent 状态机：
-
-```ts
+```typescript
 interface LoopOptions {
-  agentName?: string;
-  maxRounds?: number;
-  messages: readonly Message[];
-  model: Model;
-  signal?: AbortSignal;
-  subAgents?: Agent[];
-  system: string;
-  toolTimeoutMs?: number;
-  tools: Tool[];
+    agentName?: string;
+    maxRounds?: number;
+    messages: readonly Message[];
+    model: Model;
+    signal?: AbortSignal;
+    subAgents?: Agent[];
+    system: string;
+    toolTimeoutMs?: number;
+    tools: Tool[];
 }
 ```
 
-`messages` 是公共状态快照。实现里会复制数组：
+> [!NOTE]
+> 标准调用 `Agent.run()` 时，`messages` 必须以一个 active `Message.assistant()` 结尾。
+> `Agent.run()` 负责把 `AgentEvent` 应用到这个当前 assistant 的 `content / plan`，`loop` 只负责编排和发出事件。
+> 在 `loop` 内部，会对数组做一次浅拷贝：`let runMessages = [...options.messages];`
+> 这次复制只保护列表结构，但不深拷贝里面的 `Message` 对象。后续 model round 会从同一个 assistant message 的 `Round / Action` 读取最新工具调用和工具结果。
 
-```ts
-let runMessages = [...options.messages];
-```
+### 2.2 状态机运行逻辑
 
-这个复制只保护列表结构，不深拷贝 `Message` 对象。GUI/chat 层可以在收到 `AgentEvent` 后把事件应用到当前 assistant message 的 `plan`，后续 model round 再从同一批 `Message` 对象里读取更新后的 `Round / Action`。
-
-## 一轮 Loop
-
-一轮 `round` 等于一次模型调用，以及可能跟随的一批工具执行：
+一轮 `round` 等于一次模型调用，以及可能跟随的一批并发工具执行：
 
 ```text
 for round in maxRounds:
-  model.stream()
-    -> content_delta
-    -> action(thinking/tool)
-    -> done(status)
+  1. 调用 model.stream() 消费流式事件
+     ├── content_delta  -> 实时吐出内容
+     ├── action         -> 捕获 thinking/tool 动作并合并
+     └── done(status)   -> 本轮流式输出结束，获取终止状态
 
-  status = final
-    -> 本次 run 结束
-
-  status = continue
-    -> 当前 run 内追加 Message.user('继续')
-    -> 下一轮 model.stream()
-
-  status = tool
-    -> 提取 ModelToolCall
-    -> ToolManager.runCall()
-    -> 发出 tool_start / tool_done / tool_event
-    -> 下一轮 model.stream()
+  2. 根据 status 决定分支：
+     ├── status === 'final'
+     │     └── [本次运行结束] ──> 直接 return 终止循环
+     │
+     ├── status === 'continue'
+     │     └── [模型输出被截断] ──> 在 runMessages 追加 Message.user('继续') ──> 进入下一轮 round
+     │
+     └── status === 'tool'
+           └── [触发工具调用] 
+                 ├── 提取 ModelToolCall 动作
+                 ├── 触发并并发执行 ToolManager.runCall()
+                 ├── 持续 yield 事件：tool_start ──> tool_done ──> tool_event / context_patch
+                 └── 全部工具执行完毕 ──> 进入下一轮 round
 ```
 
-`core` 只执行 `ModelAction.type === 'tool'` 的 action。`thinking` 和 `content_delta` 都是展示/记录状态，由事件交给上层维护。
+> [!IMPORTANT]
+> `core` 状态机在模型输出的 actions 中，**只负责执行** `ModelAction.type === 'tool'` 的动作。对于 `thinking` 以及流式的 `content_delta` 等事件，仅作为展示/记录层状态透传给上层，不干涉其内容。
 
-## AgentEvent
+### 2.3 事件流 (AgentEvent)
 
-`loop` 对外只发 `AgentEvent`：
+为了保障层级解耦，`loop` 对外仅发射统一的 `AgentEvent` 异步生成器，上层（如 GUI、日志、父 agent、调度工具）应消费事件流，而不应该读取或修改 `core` 内部的变量：
+
+*   `model_event`：模型层事件，透传包含 `content_delta`、`action`、`done`、`error` 的底层状态。
+*   `tool_start`：表示某个 `ModelToolCall` 已经开始调度并执行。
+*   `tool_done`：工具执行完毕，返回 `ToolResult`，UI 可以此更新动作的完成状态。
+*   `tool_event`：工具在执行过程中产生的额外副作用事件。
+*   `context_patch`：工具请求改写本次 run 内部的上下文消息列表。
+
+> [!TIP]
+> 外层的 `Agent.run()` 会在这个事件流的头部和尾部再补充包裹 `agent_start`、`agent_done` 以及 `agent_error`，提供更宏观的生命周期观测。
+
+---
+
+## 3. 公共状态源与上下文设计 (Context)
+
+这一节深入阐述 `core` 模块的核心设计理念 —— **为什么不引入独立的 `Context` 模块与第二状态源？**
+
+### 3.1 核心原则
+
+在多数 Agent 框架中，往往会在内存中抽象出一套公共的、线性的 tool 消息格式（如 `{ role: 'tool', content: ... }`），然后再将该格式翻译给各个模型接口。但在本架构中：
+
+*   **`Message / Plan / Round / Action` 是 Agent 唯一的公共状态源**。
+*   各个模型 Provider 的 messages 是其各自子类的**私有格式**。
+*   **中间不再抽象一层公共的线性 tool JSON**。
 
 ```text
-model_event
-  模型层事件，包含 content_delta / action / done / error。
-
-tool_start
-  某个 ModelToolCall 开始执行。
-
-tool_done
-  工具返回 ToolResult。
-
-tool_event
-  工具产生额外副作用事件。
-
-context_patch
-  工具请求改写本次 run 的上下文列表。
+Message[] / Plan / Round / Action (唯一状态源)
+  ├── ──> OpenAI provider messages (OpenAI 专属转换)
+  ├── ──> Claude provider messages (Claude 专属转换)
+  └── ──> Gemini provider messages (Gemini 专属转换)
 ```
 
-`Agent.run()` 会在外层再补上：
+### 3.2 公共状态源的树状结构
+
+GUI / session 层负责保存和持久化完整的树状结构。一次回答的完整生命周期全部被记录在其中：
 
 ```text
-agent_start
-agent_done
-agent_error
+Chat
+└── Message[]
+    ├── user Message (用户提问)
+    └── assistant Message (助手回答)
+        └── Plan
+            └── Round[]
+                └── Action[] (包含 thinking, tool call, tool result, context patch 等)
 ```
 
-GUI、日志、父 agent、调度工具都应该消费事件流，而不是读取 core 内部变量。
+这套唯一的公共状态源同时服务于以下多重职责，确保了 **“GUI 看到的完整过程”** 与 **“模型下一轮需要的执行事实”** 来源于同一种数据：
+1. GUI 展示与用户交互。
+2. 历史回放与回滚调试。
+3. Session 长期持久化与落盘。
+4. 后续模型请求的输入来源。
 
-## Message 与 Context
+### 3.3 提炼请求规则 (发送模型时的裁剪)
 
-现在没有公共 `ContextMessage` 类型。
+模型请求不应该也无须无脑消费树状结构下的完整历史动作细节。在发送给具体模型前，各 `Model` 子类需要根据当前场景，从公共状态源中**提炼**出干净的 Provider 请求消息。
 
-原因是 GUI 真实需要展示和保存的是：
+#### 默认历史提炼规则：
+*   **历史 user message**：保留用户最初的问题文本。
+*   **历史 assistant message**：**仅保留助手最终呈现给用户的回答**，默认**不带**历史 assistant 内部产生过的具体 `Plan / Round / Action` 细节。
+*   **Local message / 空消息**：默认过滤不带。
+*   **当前执行中的 message**：如果当前正在执行，可以读取当前最新 assistant message 的 `Round / Action`，将本轮的 tool call / tool result 提炼并翻译为当前 Provider 需要的格式。
+
+#### 提炼演进实例：
+当用户进行**第 10 次提问**时，发送给模型的上下文将被提炼为：
+```text
+历史部分 (前9次) =
+  [用户提问 1] ──> [最终回答 1]
+  ...
+  [用户提问 9] ──> [最终回答 9]
+
+当前执行部分 (第10次) =
+  [用户提问 10] ──> [第 10 次 assistant 正在执行的当前 rounds / actions 细节]
+```
+当用户进行**第 11 次提问**时，原先第 10 次内部繁琐的思维过程、工具调用细节都会被过滤掉，只保留最终回答：
+```text
+历史部分 (前10次) =
+  [用户提问 1] ──> [最终回答 1]
+  ...
+  [用户提问 10] ──> [最终回答 10] (第10次执行细节已被全部提炼和裁减)
+
+当前执行部分 (第11次) =
+  [用户提问 11] ──> [第 11 次 assistant 正在执行的当前 rounds / actions 细节]
+```
+这种提炼机制能够保证**模型随着对话轮数的增加，其上下文窗口不会被历史工具执行的冗余细节撑爆**，同时又保证了当前轮次执行时拥有完整的动作链事实。
+
+### 3.4 Provider 差异边界
+
+不同模型 Provider 对多轮工具调用链（Multi-turn Tool Calling）的表示方式存在极大差异：
+*   **OpenAI**：依靠 `tool_calls` 数组和对应的 `tool` 角色消息（携带 `tool_call_id`）。
+*   **Claude**：在 `assistant` 消息中使用 `tool_use` 类型的 content block，在紧随其后的 `user` 消息中使用 `tool_result` 类型的 content block。
+*   **Gemini**：在 `model` 消息中使用 `functionCall` 类型的 parts，在紧随其后的 `user` 消息中使用 `functionResponse` 类型的 parts。
+
+由于这种差异是协议层级的，任何试图在公共层强行定义线性 tool JSON（例如 `{ role: 'tool', toolUseId, content }`）的做法都会导致抽象泄漏。
+因此，这类线性结构**必须由各个 model 子类在转换 provider 请求时，在各自类内部自行生成**。公共层只定义并维护极其稳定的运行态树状结构 `Message / Plan / Round / Action`。
+
+### 3.5 工具操作上下文的三层原则
+
+虽然我们极力避免工具直接越权修改上下文，但设计上依然支持工具在受控范围内操作上下文。为了避免混乱，必须遵循以下三层原则：
+
+1.  **操作当前执行过程**
+    *   工具结果、工具事件、错误、以及运行态 patch 应该且只应该记录到当前 assistant message 的 `Round / Action` 中。
+2.  **操作长期对话状态**
+    *   如果工具要执行类似“压缩历史”、“摘要”、“删除历史”、“插入系统长期记忆”等影响长期会话的操作，必须通过明确的 `ContextPatch` / `HistoryPatch` 表达，并在上层应用，**严禁在工具内部偷偷修改底层的 provider messages 缓存**。
+3.  **操作 Provider 请求**
+    *   **绝对禁止**。工具不应该、也不可能感知到 OpenAI / Claude / Gemini 的请求细节，Provider 请求必须在最后一步由对应的 model 子类去生成。
+
+---
+
+## 4. 关键协作机制
+
+### 4.1 ToolManager
+
+工具执行的主路径全部收敛在 `ToolManager` 中：
 
 ```text
-assistant Message
-  content
-  plan
-    round
-      action: thinking
-      action: tool call
-      action: tool result
-      action: context patch
+loop (循环器)
+  ├── ──> definitions() 获取工具声明
+  ├── ──> 传递给 model.stream(...tools) 告知模型可用工具
+  └── ──> 收到 tool call 后，调用 ToolManager.runCall(ModelToolCall)
+            ├── ToolRegistry.require() 校验工具存在性
+            └── ToolRunner.runCall() 触发工具具体执行，返回 ToolResult
 ```
+通过这种设计，`loop` 状态机无需直接理解工具注册、超时挂起、Kill 信号、或者内部回问（askModel）等具体业务细节，实现了完美的职责解耦。
 
-而模型 provider 通常需要的是自己的线性结构：
+### 4.2 Tool Ask (工具内部回问)
 
-```text
-OpenAI function_call / function_call_output
-Claude tool_use / tool_result
-Gemini functionCall / functionResponse
-```
-
-这两者不应该在 `core` 里再抽象出第三套公共 JSON。公共状态就是 `Message[]`；provider 请求由 `model` 子类在调用前从 `Message[]` 提炼出来。
-
-`Context.ts` 因此保持空文件。相关理念写在 `CONTEXT.md`，不要在 TS 里引入第二状态源。
-
-## ContextPatch
-
-工具可以返回 `contextPatch`：
-
-```text
-append
-replace
-compact
-```
-
-它表示工具请求修改“本次 run 继续发送给模型的上下文列表”。`loop` 会应用 patch，并发出 `context_patch` 事件。
-
-它不等于长期历史写入协议。长期 GUI/session 历史是否落盘，应该由上层根据 `AgentEvent` 决定。
-
-如果以后要让工具稳定修改长期历史，应该新增更明确的 `HistoryPatch`，不要把 provider messages 或临时 context 当成公共状态。
-
-## ToolManager
-
-工具执行主路径收敛到 `ToolManager`：
-
-```text
-loop
-  -> ToolManager.definitions()
-  -> model.stream(...tools)
-  -> ToolManager.runCall(ModelToolCall)
-     -> ToolRegistry.require()
-     -> ToolRunner.runCall()
-     -> ToolResult
-```
-
-`loop` 不直接装配 `ToolRegistry` / `ToolRunner`，也不理解工具调度、超时、kill、askModel 等细节。
-
-## Tool Ask
-
-工具可以通过 `askModel()` 发起一次内部回问：
-
+工具在执行过程中，可以通过 `askModel()` 向模型发起一次内部临时回问：
 ```text
 Tool.askModel()
-  -> createAskFactory()
-  -> model.complete({ toolAsk, messages: [], toolChoice: 'none' })
+  └── createAskFactory()
+        └── model.complete({ toolAsk, messages: [], toolChoice: 'none' })
 ```
+该回问机制属于纯粹的工具内部辅助路径：
+*   **仅由工具主动发起**。
+*   **其生命周期仅对当前工具请求有效**。
+*   **绝对不会写入长期的对话 `Message[]` 中**。
+*   **默认强行禁用工具调用**，杜绝工具无限递归调用工具带来的死循环和费用超支。
 
-这条路径只属于工具系统：
+> [!TIP]
+> 未来如果需要引入类似“网页摘要”、“JSON 校验”、“意图路由”等临时模型能力，应优先将其设计为特定工具或 loop 级策略，而不是向外部暴露一个绕过 core 循环的公用 prompt 接口。
 
-- 只由工具发起。
-- 只用于当前 request。
-- 不写入长期 `Message[]`。
-- 默认禁用工具调用，避免工具递归请求工具。
+### 4.3 Sub Agents (子代理委派)
 
-如果未来有摘要、压缩、校验、路由等临时模型能力，优先把它们建成工具或 loop 策略，而不是开放一个绕过 agent loop 的外部 prompt API。
-
-## Sub Agents
-
-sub-agent 不在 loop 中成为特殊分支。
-
-`ToolManager` 会把 sub-agent 包装成运行时工具：
+在 `core` 的设计中，子代理（Sub-agent）**不会在 `loop` 中成为特殊的分支代码**。
+`ToolManager` 会在运行时将 sub-agent **包装为标准的工具**交付给状态机：
 
 ```text
-model
-  -> run_sub_agent tool
-  -> child Agent.run()
-  -> tool result
-  -> parent model next round
+model (模型)
+  └── 做出决策，要求调用包装好的 run_sub_agent 工具
+        └── 触发子代理运行：child Agent.run()
+              └── 运行完毕，返回 tool result
+                    └── parent model 收到结果，继续下一轮编排决策
 ```
+父 agent 与子代理之间能够以同一套 `AgentEvent` 事件流的形式去实时观察、展示、甚至打断这一委派过程，使整个系统的多代理（Multi-agent）协作流程极为统一。
 
-父 agent 可以用同一套事件流观察委派过程。
+---
 
-## 新能力放哪里
+## 5. 开发指南与目录文件说明
 
-```text
-要接新模型接口
-  放 model/，实现 Model 子类。
+### 5.1 新能力应当放哪里？
 
-要接新外部能力
-  放 tools/，实现 Tool 子类。
+当你在开发新功能或解决 Bug 时，请对照下表决定你的代码归属：
 
-要改模型-工具循环策略
-  改 core/loop.ts。
+| 你的开发目标 | 推荐的开发路径 |
+| :--- | :--- |
+| **接入新的模型接口 / Provider** | 在 `model/` 目录下，实现或继承 `Model` 基类及其对应子类。 |
+| **增加新的外部能力（如文件读写、网页搜索）** | 在 `tools/` 目录下，实现一个新的 `Tool` 子类并注册。 |
+| **优化或修改模型与工具之间的循环调度策略** | 修改 `core/loop.ts` 中的状态机驱动逻辑。 |
+| **处理或展示聊天历史的树状结构** | 修改 `chat/` 目录下的 `Message`、`Plan`、`Round` 或 `Action` 结构。 |
+| **通用的 Token 计算、SSE 解析、错误统一包装** | 归纳到 `utils/` 通用工具目录下。 |
 
-要记录或展示聊天历史
-  放 chat/ 的 Message / Plan / Round / Action。
+### 5.2 目录内文件说明
 
-要估算 token、解析 JSON、处理 SSE、错误封装
-  放 utils/。
-```
-
-## 文件说明
-
-```text
-loop.ts
-  标准 agent 状态机，驱动 model/tool/sub-agent。
-
-helper.ts
-  loop 的局部辅助函数，例如事件包装、工具回问和 action 合并。
-
-Context.ts
-  空文件。当前不定义公共 Context，避免出现第二状态源。
-
-CONTEXT.md
-  关于 Message / Plan / Round / Action 如何作为公共状态源的设计说明。
-```
+*   `loop.ts`：标准 Agent 状态机驱动器，协调 model、tool 和 sub-agent 的并发流转。
+*   `helper.ts`：`loop` 内部局部的辅助纯函数，主要用于事件包装、action 合并以及工具回问工厂。
+*   `Context.ts`：**空文件**。为了防止开发人员在 TS 层面引入第二状态源或第二线性消息缓存，该文件故意留空不写任何代码。所有关于上下文流转的规则和核心设计理念（Message-driven）均已在本文档（README.md）中进行了终极定义与沉淀。

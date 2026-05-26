@@ -68,7 +68,8 @@ export class SubAgentTool extends Tool {
 
         let content = '';
         const events: JsonObject[] = [];
-        const subContext = [Message.user(prompt)];
+        const subAssistant = Message.assistant();
+        const subContext = [Message.user(prompt), subAssistant];
 
         for await (const event of subAgent.run({ messages: subContext, signal: context.signal })) {
             events.push(agentEventToJson(event));
@@ -90,6 +91,9 @@ export class SubAgentTool extends Tool {
             }
         }
 
+        if (content.length === 0) {
+            content = subAssistant.content;
+        }
         const result = truncate(content.trim(), this.maxResultChars) || '[Sub-agent returned no content]';
 
         return {

@@ -157,17 +157,21 @@ export class OpenAIModel extends Model {
     }
 
     protected expandMessageToProviderMessages(message: Message): ProviderMessage[] {
-        if (message.local === true || message.content.length === 0) {
+        if (message.local === true) {
             return [];
         }
         if (message.role === 'user') {
-            return [{ content: this.textContent(message.content), role: 'user' }];
+            return message.content.length > 0
+                ? [{ content: this.textContent(message.content), role: 'user' }]
+                : [];
         }
 
         const result: JsonObject[] = [];
-        result.push({ content: this.textContent(message.content, 'output_text'), role: 'assistant' });
-
-        result.push(...this.roundsToProviderMessages(message));
+        const roundMessages = this.roundsToProviderMessages(message);
+        if (message.content.length > 0) {
+            result.push({ content: this.textContent(message.content, 'output_text'), role: 'assistant' });
+        }
+        result.push(...roundMessages);
 
         return result;
     }

@@ -96,11 +96,13 @@ export class GeminiModel extends Model {
     }
 
     protected expandMessageToProviderMessages(message: Message): ProviderMessage[] {
-        if (message.local === true || message.content.length === 0) {
+        if (message.local === true) {
             return [];
         }
         if (message.role === 'user') {
-            return [{ parts: [{ text: message.content }], role: 'user' }];
+            return message.content.length > 0
+                ? [{ parts: [{ text: message.content }], role: 'user' }]
+                : [];
         }
 
         const parts: JsonValue[] = [];

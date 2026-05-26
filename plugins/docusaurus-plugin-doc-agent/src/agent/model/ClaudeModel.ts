@@ -266,12 +266,14 @@ export class ClaudeModel extends Model {
             return this.messageToChatCompletionsMessages(message);
         }
 
-        if (message.local === true || message.content.length === 0) {
+        if (message.local === true) {
             return [];
         }
 
         if (message.role === 'user') {
-            return [{ content: message.content, role: 'user' }];
+            return message.content.length > 0
+                ? [{ content: message.content, role: 'user' }]
+                : [];
         }
 
         const content: JsonValue[] = [];
@@ -303,11 +305,13 @@ export class ClaudeModel extends Model {
     }
 
     private messageToChatCompletionsMessages(message: Message): JsonObject[] {
-        if (message.local === true || message.content.length === 0) {
+        if (message.local === true) {
             return [];
         }
         if (message.role === 'user') {
-            return [{ content: message.content, role: 'user' }];
+            return message.content.length > 0
+                ? [{ content: message.content, role: 'user' }]
+                : [];
         }
         const actions = this.roundActions(message);
         const toolCalls = actions
