@@ -52,9 +52,9 @@ export type ModelActionEventKind = 'add' | 'update';
 
 /** 模型输出事件。agent loop 默认消费这个事件流。 */
 export type ModelEvent =
-    /** 过程文本，进入 Plan/Round/Action 轨迹。流式阶段所有文本统一走此事件。 */
+    /** 过程文本，进入 Plan/Round/Action 轨迹。 */
     | { type: 'content_delta'; content: string }
-    // !!!!!! message_delta 当前未被 adapter 发出；最终正文由 Agent 从 done.response.content 回填
+    /** 最终回答文本，直接进入 Message.content。!!!!!! 流式阶段的判断存在边界风险，待后续优化。 */
     | { type: 'message_delta'; content: string }
     | { type: 'action'; action: ModelAction; kind: ModelActionEventKind }
     | { type: 'done'; response: ModelResponse }

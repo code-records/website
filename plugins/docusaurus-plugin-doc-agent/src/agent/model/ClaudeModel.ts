@@ -85,8 +85,8 @@ export class ClaudeModel extends Model {
                     if (textContent.length > 0) {
                         content += textContent;
                         yield {
-                        // !!!!!! 流式阶段无法可靠区分过程文本和最终正文，暂时统一发 content_delta
-                        type: 'content_delta',
+                        // !!!!!! 流式阶段判断存在边界风险（先文本后 tool call 场景），待后续优化
+                        type: toolCalls.length > 0 ? 'content_delta' : 'message_delta',
                             content: textContent,
                         };
                     }
@@ -118,8 +118,8 @@ export class ClaudeModel extends Model {
                     if (text.length > 0) {
                         content += text;
                         yield {
-                        // !!!!!! 流式阶段无法可靠区分过程文本和最终正文，暂时统一发 content_delta
-                        type: 'content_delta',
+                        // !!!!!! 流式阶段判断存在边界风险（先文本后 tool call 场景），待后续优化
+                        type: toolCalls.length > 0 ? 'content_delta' : 'message_delta',
                             content: text,
                         };
                     }
@@ -169,8 +169,8 @@ export class ClaudeModel extends Model {
                     const text = requireString(delta.text, 'Claude text delta');
                     content += text;
                     yield {
-                        // !!!!!! 流式阶段无法可靠区分过程文本和最终正文，暂时统一发 content_delta
-                        type: 'content_delta',
+                        // !!!!!! 流式阶段判断存在边界风险（先文本后 tool call 场景），待后续优化
+                        type: toolCalls.length > 0 ? 'content_delta' : 'message_delta',
                         content: text,
                     };
                     continue;

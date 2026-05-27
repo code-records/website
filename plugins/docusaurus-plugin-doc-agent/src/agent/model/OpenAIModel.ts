@@ -73,8 +73,8 @@ export class OpenAIModel extends Model {
                 const delta = requireString(event.delta, 'OpenAI output text delta');
                 content += delta;
                 yield {
-                    // !!!!!! 流式阶段无法可靠区分过程文本和最终正文，暂时统一发 content_delta
-                    type: 'content_delta',
+                    // !!!!!! 流式阶段判断存在边界风险（先文本后 tool call 场景），待后续优化
+                    type: toolCalls.length > 0 ? 'content_delta' : 'message_delta',
                     content: delta,
                 };
                 continue;
