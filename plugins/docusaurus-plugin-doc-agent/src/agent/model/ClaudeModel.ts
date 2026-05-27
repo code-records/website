@@ -32,7 +32,7 @@ type RoundProviderAction =
     | { type: 'tool'; call?: ModelToolCall; callId?: string; content: string };
 
 export class ClaudeModel extends Model {
-    constructor({ url = DEFAULT_ANTHROPIC_ENDPOINT, streamUrl = DEFAULT_ANTHROPIC_STREAM_ENDPOINT, ...rest }: ModelConfig = {}) {
+    constructor({ url = DEFAULT_ANTHROPIC_ENDPOINT, streamUrl = DEFAULT_ANTHROPIC_STREAM_ENDPOINT, ...rest }: ModelConfig) {
         super({
             url: url || DEFAULT_ANTHROPIC_ENDPOINT,
             streamUrl: streamUrl || DEFAULT_ANTHROPIC_STREAM_ENDPOINT,

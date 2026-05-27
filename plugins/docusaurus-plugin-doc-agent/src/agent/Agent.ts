@@ -1,8 +1,15 @@
-import type { Model, ModelEvent, ModelResponse } from './model/Model';
+import type { Model, ModelConfig, ModelEvent, ModelResponse } from './model/Model';
+import { OpenAIModel } from './model/OpenAIModel';
+import { ClaudeModel } from './model/ClaudeModel';
+import { GeminiModel } from './model/GeminiModel';
 import { Message } from './chat/Message';
 import type { ContextPatch, Tool, ToolEvent, ToolResult } from './tools/tool/Tool';
 import { toError } from './utils/errors';
 import { loop } from './core/loop';
+
+export interface CreateModelConfig extends ModelConfig {
+    adapter: 'openai' | 'anthropic' | 'gemini';
+}
 
 /** agent 单次运行输入。 */
 export interface AgentInput {
@@ -13,7 +20,6 @@ export interface AgentInput {
 /** agent 运行上下文。 */
 export interface AgentContext {
     maxRounds?: number;
-    model: Model;
     signal?: AbortSignal;
     toolTimeoutMs?: number;
 }
@@ -35,26 +41,67 @@ export type AgentEvent =
 /**
  * 可继承的 agent 基类。
  *
- * Agent 表示“一个有目的的 AI”：它绑定一段 instructions、一组 tools、
+ * Agent 表示“一个有目的的 AI”：它绑定一段 systemPrompt、一组 tools、
  * 可选 subAgents，并默认用标准 loop 运行。
  */
 export abstract class Agent {
     abstract name: string;
-    abstract instructions: string;
+    abstract systemPrompt: string;
+    abstract model: Model;
 
     tools: Tool[] = [];
     subAgents: Agent[] = [];
 
     constructor(protected context: AgentContext) { }
 
-    setModel(model: Model): void {
-        this.context.model = model;
+    /**
+     * 根据通用配置创建具体 provider 的 Model 实例。
+     *
+     * 这是 Agent 层的模型工厂快捷入口，只负责 adapter -> Model 子类的映射；
+     * 业务侧的默认模型、模型列表、展示名等配置仍应放在具体 Agent 中。
+     *
+     * 用法：
+     * ```ts
+     * const model = Agent.createModel({
+     *     adapter: 'openai',
+     *     model: 'gpt-5.4',
+     *     personalAccessToken: token,
+     *     url: '/v1/responses',
+     *     streamUrl: '/v1/responses',
+     * });
+     * ```
+     */
+    static createModel({ adapter, ...config }: CreateModelConfig): Model {
+        if (adapter === 'openai') return new OpenAIModel(config);
+        if (adapter === 'anthropic') return new ClaudeModel(config);
+        if (adapter === 'gemini') return new GeminiModel(config);
+
+        throw new Error(`Unknown adapter type: ${String(adapter)}`);
+    }
+
+    /**
+     * 替换当前 Agent 后续运行使用的模型实例。
+     *
+     * 历史消息不需要跟着重建；切换模型时创建一个新的 Model 后注入即可。
+     * 注意不要在一次 run() 正在执行时切换同一个 Agent 的 model。
+     *
+     * 用法：
+     * ```ts
+     * agent.changeModel(Agent.createModel({
+     *     adapter: 'gemini',
+     *     model: 'gemini-2.5-flash',
+     *     personalAccessToken: token,
+     * }));
+     * ```
+     */
+    changeModel(model: Model): void {
+        this.model = model;
     }
 
     /**
      * 标准 agent 运行入口。
      *
-     * 子类通常只需要声明 name / instructions / tools / subAgents。
+     * 子类通常只需要声明 name / systemPrompt / tools / subAgents。
      * 特殊 agent 如果需要自定义编排策略，可以覆盖此方法。
      */
     async *run(input: AgentInput): AsyncGenerator<AgentEvent, void, void> {
@@ -67,11 +114,11 @@ export abstract class Agent {
 
             for await (const event of loop({
                 agentName: this.name,
-                model: this.context.model,
+                model: this.model,
                 maxRounds: this.context.maxRounds,
                 tools: this.tools,
                 subAgents: this.subAgents,
-                system: this.instructions,
+                system: this.systemPrompt,
                 messages: input.messages,
                 signal: input.signal ?? this.context.signal,
                 toolTimeoutMs: this.context.toolTimeoutMs,

@@ -6,6 +6,7 @@ import type { ModelToolCall } from '../model/Model';
 import type { Tool, ToolResult } from '../tools/tool/Tool';
 import { ToolManager } from '../tools/tool/ToolManager';
 import { applyContextPatch, createAskFactory, mergeAction, toAgentModelEvent } from './helper';
+import { logger } from '../utils/logger';
 
 // ─── 类型 (公开 API) ───────────────────────────────────
 
@@ -49,6 +50,8 @@ export async function* loop(options: LoopOptions): AsyncGenerator<AgentEvent, vo
         tools,
     } = options;
 
+    logger('agent.loop.start', { agentName, maxRounds, messageCount: options.messages.length });
+
     // 1. 本次运行使用 Message 引用作为状态源；临时追加只影响当前 run。
     let runMessages = [...options.messages];
 
@@ -68,6 +71,7 @@ export async function* loop(options: LoopOptions): AsyncGenerator<AgentEvent, vo
 
     // 4. 一轮 round = 一次 model 调用，以及可能跟随的一批工具执行。
     for (let round = 0; round < maxRounds && !signal?.aborted; round++) {
+        logger('agent.loop.round.start', { round });
         const actions: ModelAction[] = [];
         const toolCalls: ModelToolCall[] = [];
         let status: 'tool' | 'continue' | 'final' = 'final';
@@ -88,6 +92,7 @@ export async function* loop(options: LoopOptions): AsyncGenerator<AgentEvent, vo
 
             // 8. done 表示本轮 model 输出结束；保存状态、raw 消息和最终 actions。
             if (event.type === 'done') {
+                logger('agent.loop.round.model_done', { status, actions: event.response.actions.map(a => a.type) });
                 status = event.response.status;
                 actions.splice(0, actions.length, ...event.response.actions);
             }
@@ -105,6 +110,7 @@ export async function* loop(options: LoopOptions): AsyncGenerator<AgentEvent, vo
 
         // 11. final 表示模型已经给出最终回复，本次 agent loop 结束。
         if (status === 'final') {
+            logger('agent.loop.final', { agentName });
             return;
         }
 
@@ -121,6 +127,7 @@ export async function* loop(options: LoopOptions): AsyncGenerator<AgentEvent, vo
             }
 
             // 14. 启动全部工具调用；这里先发 tool_start，再并发等待结果。
+            logger('agent.loop.tools.start', { toolCalls: toolCalls.map(c => c.name) });
             const pending: Array<{
                 promise: Promise<SettledToolCall>;
                 token: symbol;
@@ -157,6 +164,7 @@ export async function* loop(options: LoopOptions): AsyncGenerator<AgentEvent, vo
                 if (index >= 0) pending.splice(index, 1);
 
                 const { call, result, tool } = settled;
+                logger('agent.loop.tool.done', { tool, callId: call.id, resultSummary: result.result });
 
                 // 18. 通知工具完成；UI 可以更新对应 action 的状态和展示文本。
                 yield {

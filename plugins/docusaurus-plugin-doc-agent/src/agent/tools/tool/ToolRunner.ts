@@ -74,7 +74,8 @@ export class ToolRunner {
             return record.result;
         }
 
-        throw new ToolError(call.name, `Tool ${call.name} failed with status ${record.status}`);
+        const details = record.error ? `: ${record.error}` : '';
+        throw new ToolError(call.name, `Tool ${call.name} failed with status ${record.status}${details}`);
     }
 
     async runPlan(plan: ToolRunPlan): Promise<ToolRunRecord[]> {

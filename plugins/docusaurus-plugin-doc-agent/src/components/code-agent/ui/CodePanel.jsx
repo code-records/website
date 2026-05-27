@@ -3,47 +3,34 @@ import { Chat } from '../../../agent';
 import { CodeAgent } from '../CodeAgent';
 import ChatMessage from '../../doc-agent/ui/ChatMessage.jsx';
 import SuggestMessage from '../../doc-agent/ui/SuggestMessage.jsx';
-import { 
-    queryFileSystemDirectoryHandle, 
-    requestFileSystemDirectoryHandle, 
-    disposeFileSystemDirectoryHandle 
+import {
+    queryFileSystemDirectoryHandle,
+    requestFileSystemDirectoryHandle,
+    disposeFileSystemDirectoryHandle
 } from '../../../agent/tools/browser/browserFileSystemHelper';
 
 const WELCOME_MESSAGE = '你好！我是 CodeAgent 极客编程助手。我已经搭载了物理文件读写工具，授权连接本地代码库后，我可以直接读取、诊断并物理重写你工作区下的代码，让我们开始吧！';
 
-function getProviderByModel(providers, modelId) {
-    for (const provider of Object.values(providers || {})) {
-        if (Object.prototype.hasOwnProperty.call(provider.models || {}, modelId)) {
-            return provider;
-        }
-    }
-    return null;
-}
-
 export class CodePanel extends React.Component {
     constructor(props) {
         super(props);
-        const pluginOptions = props.pluginOptions;
-        if (!getProviderByModel(pluginOptions.providers, pluginOptions.defaultModel)) {
-            throw new Error(
-                `docusaurus-plugin-doc-agent defaultModel "${pluginOptions.defaultModel}" must exist in providers.`,
-            );
-        }
+        this.agent = CodeAgent.instance;
+        const defaultModel = this.agent.defaultModelId;
+        this.agent.setCurrentModel(defaultModel);
+        const currentModel = this.agent.currentModelId;
+
         this.state = {
             inputValue: '',
-            model: pluginOptions.defaultModel,
+            model: currentModel,
             directoryHandle: null,
             workspaceFiles: [],
         };
         this.messagesAreaRef = React.createRef();
         this.inputRef = React.createRef();
 
-        this.agent = CodeAgent.instance;
-        this.agent.configure(pluginOptions);
-
         this.chat = new Chat({
             agent: this.agent,
-            model: pluginOptions.defaultModel,
+            model: currentModel,
             setAgentModel: (agent, model) => agent.setCurrentModel(model),
             onChange: () => {
                 this.forceUpdate();
@@ -135,15 +122,13 @@ export class CodePanel extends React.Component {
     };
 
     pushSuggestions = async () => {
-        const { directoryHandle, workspaceFiles, model } = this.state;
-
-        // 1. 若已连接工作区且有文件列表，由 AI 根据项目结构动态生成高匹配度推荐问题
+        /* 暂时注释掉动态从 AI 模型生成推荐问题的逻辑，以提升加载速度与稳定性
+        const { directoryHandle, workspaceFiles } = this.state;
         if (directoryHandle && workspaceFiles.length > 0) {
             try {
                 // 仅提取前 20 个根目录条目名称作为项目简要特征
                 const files = workspaceFiles.slice(0, 20).map(f => `${f.name} [${f.kind}]`);
                 const dynamicQuestions = await this.agent.suggestWorkspaceQuestions({
-                    model,
                     files
                 });
 
@@ -165,12 +150,26 @@ export class CodePanel extends React.Component {
                 console.warn('[CodeAgent] 动态推荐问题生成异常:', err);
             }
         }
+        */
 
-        // 2. 兜底策略：未授权或无文件列表时，保持界面彻底纯白清净，删除任何多余的静态推荐消息
+        // 2. 直接展示写死的三大通用经典代码能力测试问题！
         const lastMsg = this.chat.messages[this.chat.messages.length - 1];
         if (lastMsg && lastMsg.custom === 'suggest') {
             this.chat.removeLastMessage();
         }
+
+        const defaultSuggestions = [
+            "依赖关系梳理",
+            "检测代码问题",
+            "给出改进建议"
+        ].join('\n');
+
+        this.chat.addMessage({
+            role: 'assistant',
+            content: defaultSuggestions,
+            local: true,
+            custom: 'suggest',
+        });
     };
 
     scrollToBottom = () => {
@@ -196,7 +195,7 @@ export class CodePanel extends React.Component {
     handleModelChange = (e) => {
         const model = e.target.value;
         if (!this.chat.setModel(model)) return;
-        this.setState({ model });
+        this.setState({ model: this.agent.currentModelId });
     };
 
     handleSend = async () => {
@@ -280,7 +279,7 @@ export class CodePanel extends React.Component {
                             WORKSPACE EXPLORER
                         </span>
                         {directoryHandle && (
-                            <button 
+                            <button
                                 onClick={this.loadWorkspaceTree}
                                 className="p-1 border-none bg-transparent text-[var(--ifm-color-emphasis-500)] hover:text-[var(--ifm-color-primary)] cursor-pointer flex items-center transition-colors"
                                 title="刷新目录"
@@ -304,7 +303,7 @@ export class CodePanel extends React.Component {
                                             {directoryHandle.name}
                                         </span>
                                     </div>
-                                    <button 
+                                    <button
                                         onClick={this.handleDisconnectDirectory}
                                         className="p-1 border-none bg-transparent text-[var(--ifm-color-emphasis-500)] hover:text-rose-500 cursor-pointer flex items-center transition-colors"
                                         title="断开本地目录"
@@ -345,9 +344,9 @@ export class CodePanel extends React.Component {
                                     </svg>
                                 </div>
                                 <span className="text-[11px] font-bold text-[var(--ifm-color-emphasis-500)] leading-relaxed">
-                                    未授权工作区<br/>AI 无法操纵本地代码
+                                    未授权工作区<br />AI 无法操纵本地代码
                                 </span>
-                                <button 
+                                <button
                                     onClick={this.handleConnectDirectory}
                                     className="mt-4 px-3 py-1.5 rounded-lg bg-[var(--ifm-color-primary)] text-white text-[11px] font-bold border-none hover:opacity-90 cursor-pointer shadow-lg flex items-center gap-1 transition-all"
                                 >
@@ -370,7 +369,7 @@ export class CodePanel extends React.Component {
                         <div className="flex items-center gap-2">
                             {hasRealMessages && (
                                 <div className="flex items-center gap-1">
-                                    <button 
+                                    <button
                                         onClick={this.handleCopyDisplay}
                                         className="w-7 h-7 border-none rounded bg-transparent text-[var(--ifm-color-emphasis-600)] hover:text-[var(--ifm-color-emphasis-900)] hover:bg-[var(--ifm-color-emphasis-200)] cursor-pointer flex items-center justify-center transition-all"
                                         title="复制对话文本"
@@ -380,7 +379,7 @@ export class CodePanel extends React.Component {
                                             <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
                                         </svg>
                                     </button>
-                                    <button 
+                                    <button
                                         onClick={this.handleClearHistory}
                                         className="w-7 h-7 border-none rounded bg-transparent text-[var(--ifm-color-emphasis-600)] hover:text-rose-500 hover:bg-rose-500/5 cursor-pointer flex items-center justify-center transition-all"
                                         title="重置当前会话"
@@ -420,7 +419,7 @@ export class CodePanel extends React.Component {
                     {/* 输入控制区 */}
                     <div className="px-6 py-4 border-t border-[var(--ifm-color-emphasis-200)] bg-[var(--ifm-color-emphasis-100)] shrink-0">
                         <div className="flex items-end gap-3 bg-[var(--ifm-background-color)] border border-[var(--ifm-color-emphasis-200)] rounded-xl pl-4 pr-1.5 py-1.5 transition-colors focus-within:border-[var(--ifm-color-primary)] focus-within:shadow-[0_0_12px_rgba(var(--ifm-color-primary-rgb),0.05)]">
-                            <textarea 
+                            <textarea
                                 ref={this.inputRef}
                                 className="flex-1 border-none bg-transparent text-[var(--ifm-font-color-base)] text-xs leading-normal py-2.5 resize-none outline-none font-mono placeholder-[var(--ifm-color-emphasis-500)] overflow-y-auto [&::-webkit-scrollbar]:w-[5px] [&::-webkit-scrollbar-thumb]:bg-[var(--ifm-color-emphasis-300)] [&::-webkit-scrollbar-thumb]:rounded"
                                 value={inputValue}
@@ -431,7 +430,7 @@ export class CodePanel extends React.Component {
                                 disabled={isLoading}
                             />
                             {isLoading ? (
-                                <button 
+                                <button
                                     onClick={this.handleStop}
                                     className="w-8 h-8 rounded-lg border-none flex items-center justify-center cursor-pointer bg-[var(--ifm-color-emphasis-200)] text-[var(--ifm-color-emphasis-600)] hover:bg-[var(--ifm-color-emphasis-300)] transition-all shrink-0"
                                     title="停止生成"
@@ -441,14 +440,13 @@ export class CodePanel extends React.Component {
                                     </svg>
                                 </button>
                             ) : (
-                                <button 
+                                <button
                                     onClick={this.handleSend}
                                     disabled={!inputValue.trim()}
-                                    className={`w-8 h-8 rounded-lg border-none flex items-center justify-center cursor-pointer transition-all shrink-0 ${
-                                        inputValue.trim() 
-                                            ? 'bg-[var(--ifm-color-primary)] text-white hover:opacity-90 shadow-md shadow-[var(--ifm-color-primary-light)]' 
-                                            : 'bg-[var(--ifm-color-emphasis-200)] text-[var(--ifm-color-emphasis-400)] cursor-not-allowed'
-                                    }`}
+                                    className={`w-8 h-8 rounded-lg border-none flex items-center justify-center cursor-pointer transition-all shrink-0 ${inputValue.trim()
+                                        ? 'bg-[var(--ifm-color-primary)] text-white hover:opacity-90 shadow-md shadow-[var(--ifm-color-primary-light)]'
+                                        : 'bg-[var(--ifm-color-emphasis-200)] text-[var(--ifm-color-emphasis-400)] cursor-not-allowed'
+                                        }`}
                                 >
                                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                                         <line x1="22" y1="2" x2="11" y2="13" />
@@ -462,18 +460,14 @@ export class CodePanel extends React.Component {
                         <div className="flex items-center justify-between mt-3 text-[10px] text-[var(--ifm-color-emphasis-500)]">
                             <label className="flex items-center gap-1.5">
                                 <span>MODEL SELECT:</span>
-                                <select 
+                                <select
                                     className="h-6 rounded border border-[var(--ifm-color-emphasis-200)] bg-[var(--ifm-background-color)] px-2 text-[10px] text-[var(--ifm-font-color-base)] font-mono outline-none cursor-pointer focus:border-[var(--ifm-color-primary)]"
                                     value={model}
                                     onChange={this.handleModelChange}
                                     disabled={isLoading}
                                 >
-                                    {Object.entries(this.props.pluginOptions.providers || {}).map(([providerId, provider]) => (
-                                        <optgroup key={providerId} label={providerId.toUpperCase()} className="font-mono">
-                                            {Object.entries(provider.models || {}).map(([modelId, label]) => (
-                                                <option key={`${providerId}:${modelId}`} value={modelId}>{String(label)}</option>
-                                            ))}
-                                        </optgroup>
+                                    {this.agent.modelOptions.map(({ id, label }) => (
+                                        <option key={id} value={id}>{label}</option>
                                     ))}
                                 </select>
                             </label>

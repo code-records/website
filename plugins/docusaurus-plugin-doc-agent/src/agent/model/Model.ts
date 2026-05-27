@@ -4,9 +4,9 @@ import type { Message } from '../chat/Message';
 // ─── 通用类型 ────────────────────────────────────────
 
 export interface ModelConfig {
-    model?: string;
-    streamUrl?: string;
+    model: string;
     url?: string;
+    streamUrl?: string;
     personalAccessToken?: string;
 }
 
@@ -70,7 +70,7 @@ export abstract class Model {
     protected url: string;
     protected personalAccessToken?: string;
 
-    constructor({ model = '', personalAccessToken, streamUrl, url = '' }: ModelConfig = {}) {
+    constructor({ model, personalAccessToken, streamUrl, url = '' }: ModelConfig) {
         this.model = model;
         this.streamUrl = streamUrl;
         this.url = url;

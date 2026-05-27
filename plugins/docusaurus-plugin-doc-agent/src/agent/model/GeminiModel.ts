@@ -22,7 +22,7 @@ const DEFAULT_GEMINI_STREAM_URL = 'https://generativelanguage.googleapis.com/v1b
 export class GeminiModel extends Model {
     private readonly toolNamesById = new Map<string, string>();
 
-    constructor({ url = DEFAULT_GEMINI_GENERATE_URL, streamUrl = DEFAULT_GEMINI_STREAM_URL, ...rest }: ModelConfig = {}) {
+    constructor({ url = DEFAULT_GEMINI_GENERATE_URL, streamUrl = DEFAULT_GEMINI_STREAM_URL, ...rest }: ModelConfig) {
         super({
             url: url || DEFAULT_GEMINI_GENERATE_URL,
             streamUrl: streamUrl || DEFAULT_GEMINI_STREAM_URL,

@@ -88,11 +88,11 @@ class TestFileTool extends FileTool {
 // ─── 3. 构造测试 Agent 实例 ──────────────────────────────
 class TestAgent extends Agent {
     name = 'TestFileAgent';
-    instructions = '你是一个用于测试 File 只读工具的测试助手。';
+    systemPrompt = '你是一个用于测试 File 只读工具的测试助手。';
+    model = new MockModel();
 
     constructor() {
         super({
-            model: new MockModel(),
             maxRounds: 5
         });
         // 绑定我们的真实只读 FileTool 实现

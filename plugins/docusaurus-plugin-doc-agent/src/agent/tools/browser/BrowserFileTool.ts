@@ -19,7 +19,7 @@ export class BrowserFileTool extends FileTool {
         const { operation, path: pathStr, content } = input;
 
         // 统一处理斜杠，避免跨系统路径解析差异
-        const normalizedPath = pathStr.replace(/\\/g, '/');
+        const normalizedPath = this.normalizePath(pathStr);
 
         switch (operation) {
             case 'read': {
@@ -83,6 +83,20 @@ export class BrowserFileTool extends FileTool {
     }
 
     // ─── 核心句柄寻址辅助 ────────────────────────────────────────────────────────
+
+    private normalizePath(pathStr: string): string {
+        const parts = pathStr
+            .replace(/\\/g, '/')
+            .split('/')
+            .map(part => part.trim())
+            .filter(part => part.length > 0 && part !== '.');
+
+        if (parts.some(part => part === '..')) {
+            throw new Error(`不允许访问工作区之外的路径: ${pathStr}`);
+        }
+
+        return parts.join('/');
+    }
 
     /**
      * 按路径向下层层查找，返回目标父级目录句柄。

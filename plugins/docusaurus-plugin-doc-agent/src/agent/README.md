@@ -1,10 +1,17 @@
-# AskSky Agent 架构设计与实现文档
+# Agent 架构设计与实现文档
+
 Model  = 适配器
 Tool   = 能力扩展点
 loop   = 编排模型和工具的循环
 Agent  = 对外入口和业务目的封装
 
 `src/agent/` 是 AskSky 的 Agent 运行编排层。它将大语言模型（Model）、工具箱（Tools）、会话状态（Chat）与核心执行循环（core/loop）完美融合，封装为一个对外可声明、可继承、可灵活扩展的 AI 智能体单元。
+
+---
+
+## 备用名字
+AskSky
+NOIF
 
 ---
 

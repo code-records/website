@@ -19,7 +19,7 @@ const DEFAULT_OPENAI_ENDPOINT = 'https://api.openai.com/v1/responses';
 const DEFAULT_OPENAI_STREAM_ENDPOINT = DEFAULT_OPENAI_ENDPOINT;
 
 export class OpenAIModel extends Model {
-    constructor({ url = DEFAULT_OPENAI_ENDPOINT, streamUrl = DEFAULT_OPENAI_STREAM_ENDPOINT, ...rest }: ModelConfig = {}) {
+    constructor({ url = DEFAULT_OPENAI_ENDPOINT, streamUrl = DEFAULT_OPENAI_STREAM_ENDPOINT, ...rest }: ModelConfig) {
         super({
             url: url || DEFAULT_OPENAI_ENDPOINT,
             streamUrl: streamUrl || DEFAULT_OPENAI_STREAM_ENDPOINT,

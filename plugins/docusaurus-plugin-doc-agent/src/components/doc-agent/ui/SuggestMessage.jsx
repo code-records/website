@@ -1,11 +1,17 @@
 import React from 'react';
 
 function parseSuggestItems(content) {
+    const seen = new Set();
     return String(content || '')
         .split(/\r?\n|<br\s*\/?>/i)
         .map(line => line.replace(/^\s*(?:[-*]|\d+[.)])\s*/, '').trim())
-        .filter(Boolean)
-        .slice(0, 4);
+        .filter(line => {
+            if (!line) return false;
+            if (seen.has(line)) return false;
+            seen.add(line);
+            return true;
+        })
+        .slice(0, 3);
 }
 
 export default function SuggestMessage({ message, onSelectSuggestion, floating = false }) {
