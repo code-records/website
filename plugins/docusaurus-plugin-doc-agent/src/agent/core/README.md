@@ -84,7 +84,7 @@ for round in maxRounds:
      │     └── [本次运行结束] ──> 直接 return 终止循环
      │
      ├── status === 'continue'
-     │     └── [模型输出被截断] ──> 在 runMessages 追加 Message.user('继续') ──> 进入下一轮 round
+     │     └── [模型输出被截断或只产出过渡说明] ──> 在 runMessages 追加明确续跑指令 ──> 进入下一轮 round
      │
      └── status === 'tool'
            └── [触发工具调用] 

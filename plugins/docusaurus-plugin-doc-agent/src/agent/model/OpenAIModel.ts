@@ -41,7 +41,6 @@ export class OpenAIModel extends Model {
         const toolCalls: ModelToolCall[] = [];
         const toolArgs = new Map<string, string>();
         const toolByItemId = new Map<string, ModelToolCall>();
-        let finalStatus = '';
         let providerResponse: JsonObject = {};
         let content = '';
         let outputText = '';
@@ -73,7 +72,6 @@ export class OpenAIModel extends Model {
                 const delta = requireString(event.delta, 'OpenAI output text delta');
                 content += delta;
                 yield {
-                    // !!!!!! 流式阶段判断存在边界风险（先文本后 tool call 场景），待后续优化
                     type: toolCalls.length > 0 ? 'thinking_delta' : 'message_delta',
                     content: delta,
                 };
@@ -114,8 +112,8 @@ export class OpenAIModel extends Model {
 
             if (type === 'response.completed' || type === 'response.incomplete') {
                 providerResponse = requireJsonObject(event.response, 'OpenAI response');
-                finalStatus = requireString(providerResponse.status, 'OpenAI response status');
-                outputText = optionalString(providerResponse.output_text);
+                requireString(providerResponse.status, 'OpenAI response status');
+                outputText = this.readResponseOutputText(providerResponse);
                 if (output.length === 0) {
                     output.push(...optionalArray(providerResponse.output));
                 }
@@ -131,10 +129,10 @@ export class OpenAIModel extends Model {
         }
 
         const finalContent = outputText || content;
+        const status = this.resolveStatus(providerResponse);
         if (finalContent.length > 0 && content.length === 0) {
             yield {
-                // !!!!!! 流式阶段无法可靠区分过程文本和最终正文，暂时统一发 thinking_delta
-                type: 'thinking_delta',
+                type: status === 'continue' ? 'thinking_delta' : 'message_delta',
                 content: finalContent,
             };
         }
@@ -145,7 +143,7 @@ export class OpenAIModel extends Model {
             response: {
                 actions,
                 content: finalContent,
-                status: this.resolveStatus(providerResponse),
+                status,
             },
         };
     }
@@ -153,6 +151,7 @@ export class OpenAIModel extends Model {
     protected resolveStatus(response: JsonObject): ModelResponseStatus {
         if (optionalArray(response.output).some(o => isJsonObject(o) && o.type === 'function_call')) return 'tool';
         if (optionalString(response.status) === 'incomplete') return 'continue';
+        if (isContinuationNotice(this.readResponseOutputText(response))) return 'continue';
         return 'final';
     }
 
@@ -274,6 +273,17 @@ export class OpenAIModel extends Model {
             .join('');
     }
 
+    private readResponseOutputText(response: JsonObject): string {
+        const outputText = optionalString(response.output_text);
+        if (outputText.length > 0) return outputText;
+
+        return optionalArray(response.output)
+            .filter(isJsonObject)
+            .flatMap(item => optionalArray(item.content))
+            .map(part => isJsonObject(part) ? optionalString(part.text) : '')
+            .join('');
+    }
+
     private createActions(thinking: string, toolCalls: readonly ModelToolCall[]): ModelAction[] {
         return [
             ...(thinking.length > 0 ? [{ type: 'thinking' as const, content: thinking }] : []),
@@ -284,4 +294,22 @@ export class OpenAIModel extends Model {
 
 function isJsonObject(value: unknown): value is JsonObject {
     return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function normalizeOutputText(content: string): string {
+    return content
+        .replace(/^[\s"'“”‘’`*_#>-]+/, '')
+        .replace(/\s+/g, ' ')
+        .trimStart()
+        .toLowerCase();
+}
+
+function isContinuationNotice(text: string): boolean {
+    text = normalizeOutputText(text);
+    return /^抱歉[^。.!?\n]{0,40}刚才[^。.!?\n]{0,80}(?:参数|工具|调用|写错|失败|出错)/.test(text)
+        || /^刚才[^。.!?\n]{0,80}(?:参数|工具|调用|写错|失败|出错)/.test(text)
+        || /^让我[^。.!?\n]{0,80}(?:继续|再|进一步|深入|查看|读取|调用|梳理|分析)/.test(text)
+        || /^我(?:会|将)?继续[^。.!?\n]{0,80}(?:查看|读取|调用|梳理|分析|处理|执行)/.test(text)
+        || /^let me[^.\n]{0,80}(?:continue|check|inspect|read|call|analyze|look)/.test(text)
+        || /^i(?:'ll| will) continue[^.\n]{0,80}(?:checking|inspect|reading|analyzing|with|to)/.test(text);
 }

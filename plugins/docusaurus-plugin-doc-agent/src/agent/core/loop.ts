@@ -101,9 +101,9 @@ export async function* loop(options: LoopOptions): AsyncGenerator<AgentEvent, vo
 
             // 8. done 表示本轮 model 输出结束；保存状态、raw 消息和最终 actions。
             if (event.type === 'done') {
-                logger('agent.loop.round.model_done', { status, actions: event.response.actions.map(a => a.type) });
                 status = event.response.status;
                 actions.splice(0, actions.length, ...event.response.actions);
+                logger('agent.loop.round.model_done', { status, actions: event.response.actions.map(a => a.type) });
             }
 
             // 9. model 明确报错时，中断 loop，让 Agent.run 包装成 agent_error。
@@ -123,9 +123,9 @@ export async function* loop(options: LoopOptions): AsyncGenerator<AgentEvent, vo
             return;
         }
 
-        // 12. continue 表示模型输出被截断；写回 raw，并追加“继续”让模型续写。
+        // 12. continue 表示模型输出被截断，或只产出了过渡说明；追加明确续跑指令让模型继续。
         if (status === 'continue') {
-            runMessages = [...runMessages, Message.user('继续')];
+            runMessages = [...runMessages, Message.user('继续完成上一轮未完成的任务。若需要工具，请直接调用工具；否则直接续写最终回答，不要只说明你将继续。')];
             continue;
         }
 

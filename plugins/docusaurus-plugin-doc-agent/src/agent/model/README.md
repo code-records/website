@@ -140,7 +140,7 @@ tool
   模型请求工具，loop 执行 ModelToolCall。
 
 continue
-  模型输出被截断，loop 在本次 run 内追加“继续”后再次调用 model。
+  模型输出被截断，或只产出“我将继续查看”这类过渡说明；loop 在本次 run 内追加明确续跑指令后再次调用 model。
 ```
 
 `ModelResponse.content` 是本轮聚合文本。`ModelResponse.actions` 是本轮聚合动作，loop 会以它为最终准。
