@@ -15,7 +15,7 @@ export interface MessageJSON {
 }
 
 export class Message {
-    readonly plan?: Plan;
+    readonly plans: Plan[] = [];
     readonly role: MessageRole;
     content: string;
     custom?: string;
@@ -24,11 +24,15 @@ export class Message {
     local = false;
     streaming = false;
 
-    private constructor(role: MessageRole, content = '', plan?: Plan) {
+    private constructor(role: MessageRole, content = '', plans: Plan[] = []) {
         this.role = role;
         this.content = content;
-        this.plan = plan;
+        this.plans = plans;
         this.streaming = role === 'assistant';
+    }
+
+    get plan(): Plan | undefined {
+        return this.plans[0];
     }
 
     static user(content: string): Message {
@@ -36,15 +40,15 @@ export class Message {
     }
 
     static assistant(): Message {
-        return new Message('assistant', '', new Plan());
+        return new Message('assistant', '', [new Plan()]);
     }
 
     static fromJSON(json: MessageJSON): Message {
-        const planJson = json.plan ?? json.plans?.[0];
+        const plansJson = json.plans ?? (json.plan ? [json.plan] : []);
         const message = new Message(
             json.role,
             json.content,
-            planJson !== undefined ? Plan.fromJSON(planJson) : undefined,
+            plansJson.map(p => Plan.fromJSON(p)),
         );
         message.custom = json.custom;
         message.error = json.error;
@@ -61,7 +65,7 @@ export class Message {
             ...(this.error !== undefined ? { error: this.error } : {}),
             ...(this.isError ? { isError: true } : {}),
             ...(this.local ? { local: true } : {}),
-            ...(this.plan !== undefined ? { plan: this.plan.toJSON(), plans: [this.plan.toJSON()] } : {}),
+            ...(this.plans.length > 0 ? { plan: this.plans[0].toJSON(), plans: this.plans.map(p => p.toJSON()) } : {}),
             role: this.role,
             ...(this.streaming ? { streaming: true } : {}),
         };

@@ -14,16 +14,20 @@ export interface PlanJSON {
 }
 
 export class Plan {
-    private readonly rounds: Round[] = [];
+    private readonly _rounds: Round[] = [];
     expanded = false;
     status: PlanStatus = 'active';
 
+    get rounds(): readonly Round[] {
+        return this._rounds;
+    }
+
     get items(): readonly Round[] {
-        return this.rounds;
+        return this._rounds;
     }
 
     get hasContent(): boolean {
-        return this.rounds.some(round => round.hasContent);
+        return this._rounds.some(round => round.hasContent);
     }
 
     get isActive(): boolean {
@@ -31,7 +35,7 @@ export class Plan {
     }
 
     get label(): string {
-        const last = this.rounds[this.rounds.length - 1];
+        const last = this._rounds[this._rounds.length - 1];
         return last?.label || (this.status === 'completed' ? '分析完毕' : '正在工作');
     }
 
@@ -40,7 +44,7 @@ export class Plan {
         plan.expanded = json.expanded === true;
         plan.status = json.status;
         for (const round of json.rounds) {
-            plan.rounds.push(Round.fromJSON(round));
+            plan._rounds.push(Round.fromJSON(round));
         }
         return plan;
     }
@@ -82,23 +86,23 @@ export class Plan {
             hasContent: this.hasContent,
             isActive: this.isActive,
             label: this.label,
-            rounds: this.rounds.map(round => round.toJSON()),
+            rounds: this._rounds.map(round => round.toJSON()),
             status: this.status,
         };
     }
 
     private ensureRound(): Round {
-        const last = this.rounds[this.rounds.length - 1];
+        const last = this._rounds[this._rounds.length - 1];
         if (last !== undefined && !last.done) {
             return last;
         }
         const round = new Round();
-        this.rounds.push(round);
+        this._rounds.push(round);
         return round;
     }
 
     private finishOpenRound(): void {
-        const last = this.rounds[this.rounds.length - 1];
+        const last = this._rounds[this._rounds.length - 1];
         if (last !== undefined) {
             last.finish();
         }

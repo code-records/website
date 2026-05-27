@@ -9,15 +9,19 @@ export interface RoundJSON {
 }
 
 export class Round {
-    private readonly actions: Action[] = [];
+    private readonly _actions: Action[] = [];
     done = false;
 
+    get actions(): readonly Action[] {
+        return this._actions;
+    }
+
     get items(): readonly Action[] {
-        return this.actions;
+        return this._actions;
     }
 
     get hasContent(): boolean {
-        return this.actions.some(action => action.content.length > 0);
+        return this._actions.some(action => action.content.length > 0);
     }
 
     get isActive(): boolean {
@@ -25,7 +29,7 @@ export class Round {
     }
 
     get label(): string {
-        const last = this.actions[this.actions.length - 1];
+        const last = this._actions[this._actions.length - 1];
         return last?.label || '';
     }
 
@@ -39,11 +43,11 @@ export class Round {
     }
 
     add(action: Action): void {
-        this.actions.push(action);
+        this._actions.push(action);
     }
 
     appendToLast(type: Action['type'], content: string): boolean {
-        const last = this.actions[this.actions.length - 1];
+        const last = this._actions[this._actions.length - 1];
         if (last === undefined || last.type !== type || last.done) {
             return false;
         }
@@ -52,7 +56,7 @@ export class Round {
     }
 
     updateLast(action: Action): boolean {
-        const last = this.actions[this.actions.length - 1];
+        const last = this._actions[this._actions.length - 1];
         if (last === undefined || last.type !== action.type || last.done) {
             return false;
         }
@@ -69,22 +73,22 @@ export class Round {
 
     finish(): void {
         this.done = true;
-        for (const action of this.actions) {
+        for (const action of this._actions) {
             action.finish();
         }
     }
 
     removeContentActions(): void {
-        for (let index = this.actions.length - 1; index >= 0; index--) {
-            if (this.actions[index].type === 'content') {
-                this.actions.splice(index, 1);
+        for (let index = this._actions.length - 1; index >= 0; index--) {
+            if (this._actions[index].type === 'content') {
+                this._actions.splice(index, 1);
             }
         }
     }
 
     toJSON(): RoundJSON {
         return {
-            actions: this.actions.map(action => action.toJSON()),
+            actions: this._actions.map(action => action.toJSON()),
             done: this.done,
             hasContent: this.hasContent,
             isActive: this.isActive,

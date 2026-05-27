@@ -4,7 +4,7 @@ import { toError } from '../../utils/errors';
 import type { AskModel, JsonObject, ToolResult } from './Tool';
 import { applyContextPatch } from './contextPatch';
 import { ToolRegistry } from './ToolRegistry';
-import { TOOL_ERROR_CORE_PROMPT } from '../../core/corePrompt';
+import { TOOL_ERROR_CORE_PROMPT } from '../../core/prompt';
 
 export type ToolRunMode = 'parallel' | 'serial';
 export type ToolTimeoutAction = 'continue' | 'kill';
