@@ -44,8 +44,7 @@ model.stream(request)
 
 ```text
 ModelEvent
-  thinking_delta
-  message_delta
+  content
   action
   done
   error
@@ -102,11 +101,8 @@ Tool.askModel()
 模型输出被规范成四类事件：
 
 ```text
-thinking_delta
-  模型生成的分析过程文本增量，进入 Plan/Round/Action 的 thinking 轨迹。
-
-message_delta
-  模型生成给用户看的最终回答文本增量，进入 Message.content。
+content
+  模型生成给用户看的正文文本增量，进入 Message.content。
 
 action
   模型生成的结构化动作，目前包括 thinking 和 tool。

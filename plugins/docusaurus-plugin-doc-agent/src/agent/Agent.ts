@@ -181,7 +181,7 @@ export abstract class Agent {
      */
     private applyEventToAssistantMessage(assistant: Message, event: AgentEvent): void {
         assistant.plan?.apply(event);
-        if (event.type === 'model_event' && event.event.type === 'message_delta') {
+        if (event.type === 'model_event' && event.event.type === 'content') {
             assistant.content += event.event.content;
         }
     }

@@ -52,10 +52,8 @@ export type ModelActionEventKind = 'add' | 'update';
 
 /** 模型输出事件。agent loop 默认消费这个事件流。 */
 export type ModelEvent =
-    /** 分析过程文本，进入 Plan/Round/Action 的 thinking 轨迹。 */
-    | { type: 'thinking_delta'; content: string }
-    /** 最终回答文本，直接进入 Message.content。!!!!!! 流式阶段的判断存在边界风险，待后续优化。 */
-    | { type: 'message_delta'; content: string }
+    /** 模型生成给用户看的正文文本增量，直接进入 Message.content。 */
+    | { type: 'content'; content: string }
     | { type: 'action'; action: ModelAction; kind: ModelActionEventKind }
     | { type: 'done'; response: ModelResponse }
     | { type: 'error'; error: Error };

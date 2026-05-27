@@ -74,8 +74,7 @@ interface LoopOptions {
 ```text
 for round in maxRounds:
   1. 调用 model.stream() 消费流式事件
-     ├── thinking_delta -> 实时吐出分析过程
-     ├── message_delta  -> 实时吐出最终回答
+     ├── content        -> 实时吐出正文内容
      ├── action         -> 捕获 thinking/tool 动作并合并
      └── done(status)   -> 本轮流式输出结束，获取终止状态
 
@@ -95,13 +94,13 @@ for round in maxRounds:
 ```
 
 > [!IMPORTANT]
-> `core` 状态机在模型输出的 actions 中，**只负责执行** `ModelAction.type === 'tool'` 的动作。对于 `thinking` 以及流式的 `thinking_delta` 等事件，仅作为展示/记录层状态透传给上层，不干涉其内容。
+> `core` 状态机在模型输出的 actions 中，**只负责执行** `ModelAction.type === 'tool'` 的动作。对于 `thinking` 等非工具动作，仅作为展示/记录层状态透传给上层，不干涉其内容。
 
 ### 2.3 事件流 (AgentEvent)
 
 为了保障层级解耦，`loop` 对外仅发射统一的 `AgentEvent` 异步生成器，上层（如 GUI、日志、父 agent、调度工具）应消费事件流，而不应该读取或修改 `core` 内部的变量：
 
-*   `model_event`：模型层事件，透传包含 `thinking_delta`、`message_delta`、`action`、`done`、`error` 的底层状态。
+*   `model_event`：模型层事件，透传包含 `content`、`action`、`done`、`error` 的底层状态。
 *   `tool_start`：表示某个 `ModelToolCall` 已经开始调度并执行。
 *   `tool_done`：工具执行完毕，返回 `ToolResult`，UI 可以此更新动作的完成状态。
 *   `tool_event`：工具在执行过程中产生的额外副作用事件。

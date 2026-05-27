@@ -88,13 +88,6 @@ export class Action {
         }
 
         const modelEvent = event.event;
-        if (modelEvent.type === 'thinking_delta') {
-            return new Action({
-                content: modelEvent.content,
-                done: false,
-                type: 'thinking',
-            });
-        }
         if (modelEvent.type === 'action' && modelEvent.action.type === 'thinking') {
             return new Action({
                 content: modelEvent.action.content,
