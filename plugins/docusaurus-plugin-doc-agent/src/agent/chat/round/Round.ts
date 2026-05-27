@@ -78,14 +78,6 @@ export class Round {
         }
     }
 
-    removeContentActions(): void {
-        for (let index = this._actions.length - 1; index >= 0; index--) {
-            if (this._actions[index].type === 'content') {
-                this._actions.splice(index, 1);
-            }
-        }
-    }
-
     toJSON(): RoundJSON {
         return {
             actions: this._actions.map(action => action.toJSON()),

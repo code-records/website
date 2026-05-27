@@ -14,12 +14,6 @@ const ACTION_META = {
         dotClassName: 'bg-sky-500',
         title: '工具调用',
     },
-    content: {
-        badge: '正文',
-        className: 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/20',
-        dotClassName: 'bg-emerald-500',
-        title: '正文生成',
-    },
     context: {
         badge: '上下文',
         className: 'bg-violet-500/10 text-violet-700 dark:text-violet-300 border-violet-500/20',
@@ -157,7 +151,7 @@ function ToolActionBody({ action }) {
 }
 
 function TextActionBody({ action }) {
-    const content = clipText(action.content, action.type === 'content' ? 500 : 1200);
+    const content = clipText(action.content, 1200);
     if (!content) return null;
 
     return (

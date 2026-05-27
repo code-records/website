@@ -55,7 +55,7 @@ export class GeminiModel extends Model {
                 content += parsed.content;
                 yield {
                     // !!!!!! 流式阶段判断存在边界风险（先文本后 tool call 场景），待后续优化
-                    type: toolCalls.length > 0 ? 'content_delta' : 'message_delta',
+                    type: toolCalls.length > 0 ? 'thinking_delta' : 'message_delta',
                     content: parsed.content,
                 };
             }

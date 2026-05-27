@@ -3,7 +3,6 @@ import type { ModelToolCall } from '../../model/Model';
 import type { ToolEvent } from '../../tools/tool/Tool';
 
 export type ActionType =
-    | 'content'
     | 'context'
     | 'error'
     | 'thinking'
@@ -89,11 +88,11 @@ export class Action {
         }
 
         const modelEvent = event.event;
-        if (modelEvent.type === 'content_delta') {
+        if (modelEvent.type === 'thinking_delta') {
             return new Action({
                 content: modelEvent.content,
                 done: false,
-                type: 'content',
+                type: 'thinking',
             });
         }
         if (modelEvent.type === 'action' && modelEvent.action.type === 'thinking') {

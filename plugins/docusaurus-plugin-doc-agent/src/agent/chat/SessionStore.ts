@@ -266,8 +266,7 @@ function parsePlanStatus(value: unknown): PlanStatus {
 
 function parseActionType(value: unknown): ActionType | null {
     if (
-        value === 'content'
-        || value === 'context'
+        value === 'context'
         || value === 'error'
         || value === 'thinking'
         || value === 'tool'

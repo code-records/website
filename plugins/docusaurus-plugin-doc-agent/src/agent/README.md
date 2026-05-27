@@ -78,7 +78,7 @@ graph TD
        ┌───────────────▼───────────────┐
        │   1. model.stream(messages)   │◄──────────────────────────┐
        └───────────────┬───────────────┘                           │
-                       │ (Yields: content_delta / action / done)   │
+                       │ (Yields: thinking_delta / message_delta / action / done) │
        ┌───────────────▼───────────────┐                           │
        │   2. UI 消费事件并实时更新界面  │                           │
        └───────────────┬───────────────┘                           │

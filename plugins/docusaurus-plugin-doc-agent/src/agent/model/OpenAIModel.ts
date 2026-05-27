@@ -74,7 +74,7 @@ export class OpenAIModel extends Model {
                 content += delta;
                 yield {
                     // !!!!!! 流式阶段判断存在边界风险（先文本后 tool call 场景），待后续优化
-                    type: toolCalls.length > 0 ? 'content_delta' : 'message_delta',
+                    type: toolCalls.length > 0 ? 'thinking_delta' : 'message_delta',
                     content: delta,
                 };
                 continue;
@@ -133,8 +133,8 @@ export class OpenAIModel extends Model {
         const finalContent = outputText || content;
         if (finalContent.length > 0 && content.length === 0) {
             yield {
-                // !!!!!! 流式阶段无法可靠区分过程文本和最终正文，暂时统一发 content_delta
-                type: 'content_delta',
+                // !!!!!! 流式阶段无法可靠区分过程文本和最终正文，暂时统一发 thinking_delta
+                type: 'thinking_delta',
                 content: finalContent,
             };
         }

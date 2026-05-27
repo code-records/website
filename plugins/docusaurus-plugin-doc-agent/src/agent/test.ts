@@ -1,6 +1,6 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import { Model, type ModelEvent, type ModelRequest } from './model/Model';
+import { Model, type ModelEvent, type ModelRequest, type ModelResponseStatus } from './model/Model';
 import { Agent } from './Agent';
 import { Message } from './chat/Message';
 import { ToolRunContext } from './tools/tool/Tool';
@@ -55,6 +55,7 @@ class MockModel extends Model {
         }
     }
 
+    protected resolveStatus(): ModelResponseStatus { return 'final'; }
     protected async request(): Promise<any> { return {}; }
     protected async *requestStream(): AsyncGenerator<any> { }
     protected expandMessageToProviderMessages(): any[] { return []; }
@@ -123,7 +124,7 @@ async function runAgentTest() {
 
             if (event.type === 'model_event') {
                 console.log(`   └─ 模型事件细分: ${event.event.type}`);
-                if (event.event.type === 'content_delta' || event.event.type === 'message_delta') {
+                if (event.event.type === 'thinking_delta' || event.event.type === 'message_delta') {
                     console.log(`   └─ 模型文本增量: "${event.event.content}"`);
                 }
             } else if (event.type === 'tool_start') {
