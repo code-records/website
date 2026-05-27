@@ -1,9 +1,10 @@
 import { Message } from '../../chat/Message';
 import type { Model, ModelToolCall } from '../../model/Model';
-import { ToolError, toError } from '../../utils/errors';
+import { toError } from '../../utils/errors';
 import type { AskModel, JsonObject, ToolResult } from './Tool';
 import { applyContextPatch } from './contextPatch';
 import { ToolRegistry } from './ToolRegistry';
+import { TOOL_ERROR_CORE_PROMPT } from '../../core/corePrompt';
 
 export type ToolRunMode = 'parallel' | 'serial';
 export type ToolTimeoutAction = 'continue' | 'kill';
@@ -75,7 +76,12 @@ export class ToolRunner {
         }
 
         const details = record.error ? `: ${record.error}` : '';
-        throw new ToolError(call.name, `Tool ${call.name} failed with status ${record.status}${details}`);
+        const errorMessage = `Tool ${call.name} failed with status ${record.status}${details}`;
+        const formattedPrompt = TOOL_ERROR_CORE_PROMPT.replace('{{error}}', errorMessage);
+
+        return {
+            result: formattedPrompt,
+        };
     }
 
     async runPlan(plan: ToolRunPlan): Promise<ToolRunRecord[]> {

@@ -162,14 +162,14 @@ export class OpenAIModel extends Model {
         }
         if (message.role === 'user') {
             return message.content.length > 0
-                ? [{ content: this.textContent(message.content), role: 'user' }]
+                ? [{ content: message.content, role: 'user' }]
                 : [];
         }
 
         const result: JsonObject[] = [];
         const roundMessages = this.roundsToProviderMessages(message);
         if (message.content.length > 0) {
-            result.push({ content: this.textContent(message.content, 'output_text'), role: 'assistant' });
+            result.push({ content: message.content, role: 'assistant' });
         }
         result.push(...roundMessages);
 
@@ -177,7 +177,7 @@ export class OpenAIModel extends Model {
     }
 
     protected expandToolAskToProviderMessages(toolAsk: string): ProviderMessage[] {
-        return [{ content: this.textContent(toolAsk), role: 'user' }];
+        return [{ content: toolAsk, role: 'user' }];
     }
 
     private roundsToProviderMessages(message: Message): JsonObject[] {
