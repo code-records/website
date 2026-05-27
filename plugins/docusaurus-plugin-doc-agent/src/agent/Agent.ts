@@ -110,7 +110,7 @@ export abstract class Agent {
 
         try {
             runAssistant = this.ensureCurrentAssistant(input.messages);
-            let response: ModelResponse | undefined;
+            let finalResponse: ModelResponse | undefined;
 
             for await (const event of loop({
                 agentName: this.name,
@@ -125,17 +125,19 @@ export abstract class Agent {
             })) {
                 this.applyEventToAssistantMessage(runAssistant, event);
                 if (event.type === 'model_event' && event.event.type === 'done') {
-                    response = event.event.response;
+                    if (event.event.response.status === 'final') {
+                        finalResponse = event.event.response;
+                    }
                 }
                 yield event;
             }
 
-            if (runAssistant.content.length === 0 && response?.content) {
-                runAssistant.content = response.content;
+            if (runAssistant.content.length === 0 && finalResponse?.content) {
+                runAssistant.content = finalResponse.content;
             }
             runAssistant.finish();
-            runAssistant.plan?.apply({ type: 'agent_done', agent: this.name, response });
-            yield { type: 'agent_done', agent: this.name, response };
+            runAssistant.plan?.apply({ type: 'agent_done', agent: this.name, response: finalResponse });
+            yield { type: 'agent_done', agent: this.name, response: finalResponse };
         } catch (error) {
             const err = toError(error);
             runAssistant?.fail(err.message);
@@ -179,7 +181,7 @@ export abstract class Agent {
      */
     private applyEventToAssistantMessage(assistant: Message, event: AgentEvent): void {
         assistant.plan?.apply(event);
-        if (event.type === 'model_event' && event.event.type === 'content_delta') {
+        if (event.type === 'model_event' && event.event.type === 'message_delta') {
             assistant.content += event.event.content;
         }
     }

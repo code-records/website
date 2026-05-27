@@ -4,6 +4,7 @@ import {
     type ModelConfig,
     type ModelEvent,
     type ModelRequest,
+    type ModelResponseStatus,
     type ProviderMessage,
     type ProviderRequestBody,
     type ProviderResponseBody,
@@ -41,6 +42,7 @@ export class OpenAIModel extends Model {
         const toolArgs = new Map<string, string>();
         const toolByItemId = new Map<string, ModelToolCall>();
         let finalStatus = '';
+        let providerResponse: JsonObject = {};
         let content = '';
         let outputText = '';
         let thinking = '';
@@ -70,7 +72,11 @@ export class OpenAIModel extends Model {
             if (type === 'response.output_text.delta') {
                 const delta = requireString(event.delta, 'OpenAI output text delta');
                 content += delta;
-                yield { type: 'content_delta', content: delta };
+                yield {
+                    // !!!!!! 流式阶段无法可靠区分过程文本和最终正文，暂时统一发 content_delta
+                    type: 'content_delta',
+                    content: delta,
+                };
                 continue;
             }
 
@@ -107,11 +113,11 @@ export class OpenAIModel extends Model {
             }
 
             if (type === 'response.completed' || type === 'response.incomplete') {
-                const response = requireJsonObject(event.response, 'OpenAI response');
-                finalStatus = requireString(response.status, 'OpenAI response status');
-                outputText = optionalString(response.output_text);
+                providerResponse = requireJsonObject(event.response, 'OpenAI response');
+                finalStatus = requireString(providerResponse.status, 'OpenAI response status');
+                outputText = optionalString(providerResponse.output_text);
                 if (output.length === 0) {
-                    output.push(...optionalArray(response.output));
+                    output.push(...optionalArray(providerResponse.output));
                 }
                 break;
             }
@@ -126,7 +132,11 @@ export class OpenAIModel extends Model {
 
         const finalContent = outputText || content;
         if (finalContent.length > 0 && content.length === 0) {
-            yield { type: 'content_delta', content: finalContent };
+            yield {
+                // !!!!!! 流式阶段无法可靠区分过程文本和最终正文，暂时统一发 content_delta
+                type: 'content_delta',
+                content: finalContent,
+            };
         }
 
         const actions = this.createActions(thinking, toolCalls);
@@ -135,13 +145,15 @@ export class OpenAIModel extends Model {
             response: {
                 actions,
                 content: finalContent,
-                status: toolCalls.length > 0
-                    ? 'tool'
-                    : finalStatus === 'incomplete'
-                        ? 'continue'
-                        : 'final',
+                status: this.resolveStatus(providerResponse),
             },
         };
+    }
+
+    protected resolveStatus(response: JsonObject): ModelResponseStatus {
+        if (optionalArray(response.output).some(o => isJsonObject(o) && o.type === 'function_call')) return 'tool';
+        if (optionalString(response.status) === 'incomplete') return 'continue';
+        return 'final';
     }
 
     protected async request(body: ProviderRequestBody, signal?: AbortSignal): Promise<ProviderResponseBody> {

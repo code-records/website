@@ -4,6 +4,7 @@ import {
     type ModelConfig,
     type ModelEvent,
     type ModelRequest,
+    type ModelResponseStatus,
     type ProviderMessage,
     type ProviderRequestBody,
     type ProviderResponseBody,
@@ -83,7 +84,11 @@ export class ClaudeModel extends Model {
 
                     if (textContent.length > 0) {
                         content += textContent;
-                        yield { type: 'content_delta', content: textContent };
+                        yield {
+                        // !!!!!! 流式阶段无法可靠区分过程文本和最终正文，暂时统一发 content_delta
+                        type: 'content_delta',
+                            content: textContent,
+                        };
                     }
 
                     for (const toolCallDelta of optionalArray(delta.tool_calls)) {
@@ -95,9 +100,7 @@ export class ClaudeModel extends Model {
                     }
 
                     const finishReason = optionalString(choice.finish_reason);
-                    if (finishReason === 'length') {
-                        stopReason = 'max_tokens';
-                    } else if (finishReason.length > 0) {
+                    if (finishReason.length > 0) {
                         stopReason = finishReason;
                     }
                 }
@@ -114,7 +117,11 @@ export class ClaudeModel extends Model {
                     const text = optionalString(block.text);
                     if (text.length > 0) {
                         content += text;
-                        yield { type: 'content_delta', content: text };
+                        yield {
+                        // !!!!!! 流式阶段无法可靠区分过程文本和最终正文，暂时统一发 content_delta
+                        type: 'content_delta',
+                            content: text,
+                        };
                     }
                     continue;
                 }
@@ -161,7 +168,11 @@ export class ClaudeModel extends Model {
                 if (deltaType === 'text_delta') {
                     const text = requireString(delta.text, 'Claude text delta');
                     content += text;
-                    yield { type: 'content_delta', content: text };
+                    yield {
+                        // !!!!!! 流式阶段无法可靠区分过程文本和最终正文，暂时统一发 content_delta
+                        type: 'content_delta',
+                        content: text,
+                    };
                     continue;
                 }
 
@@ -221,13 +232,18 @@ export class ClaudeModel extends Model {
             response: {
                 actions,
                 content,
-                status: toolCalls.length > 0
-                    ? 'tool'
-                    : stopReason === 'max_tokens'
-                        ? 'continue'
-                        : 'final',
+                status: this.resolveStatus({ stop_reason: stopReason }),
             },
         };
+    }
+
+    protected resolveStatus(response: JsonObject): ModelResponseStatus {
+        const stopReason = optionalString(response.stop_reason);
+        // Claude 原生 API: 'tool_use' | 'max_tokens' | 'end_turn'
+        // Claude chat completions: 'tool_calls' | 'length' | 'stop'
+        if (stopReason === 'tool_use' || stopReason === 'tool_calls') return 'tool';
+        if (stopReason === 'max_tokens' || stopReason === 'length') return 'continue';
+        return 'final';
     }
 
     protected async request(body: ProviderRequestBody, signal?: AbortSignal): Promise<ProviderResponseBody> {

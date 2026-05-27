@@ -5,6 +5,7 @@ import {
     type ModelEvent,
     type ModelRequest,
     type ModelResponse,
+    type ModelResponseStatus,
     type ProviderMessage,
     type ProviderRequestBody,
     type ProviderResponseBody,
@@ -52,7 +53,11 @@ export class GeminiModel extends Model {
 
             if (parsed.content.length > 0) {
                 content += parsed.content;
-                yield { type: 'content_delta', content: parsed.content };
+                yield {
+                    // !!!!!! 流式阶段无法可靠区分过程文本和最终正文，暂时统一发 content_delta
+                    type: 'content_delta',
+                    content: parsed.content,
+                };
             }
 
             for (const call of parsed.toolCalls) {
@@ -68,13 +73,17 @@ export class GeminiModel extends Model {
             response: {
                 actions,
                 content,
-                status: toolCalls.length > 0
-                    ? 'tool'
-                    : finishReason === 'MAX_TOKENS'
-                        ? 'continue'
-                        : 'final',
+                status: this.resolveStatus({ finishReason, parts }),
             },
         };
+    }
+
+    protected resolveStatus(response: JsonObject): ModelResponseStatus {
+        const finishReason = optionalString(response.finishReason);
+        const parts = Array.isArray(response.parts) ? response.parts as JsonValue[] : [];
+        if (parts.some(p => isJsonObject(p) && p.functionCall !== undefined)) return 'tool';
+        if (finishReason === 'MAX_TOKENS') return 'continue';
+        return 'final';
     }
 
     override async complete(request: ModelRequest): Promise<ModelResponse> {
@@ -198,11 +207,7 @@ export class GeminiModel extends Model {
         return {
             actions,
             content: parsed.content,
-            status: parsed.toolCalls.length > 0
-                ? 'tool'
-                : parsed.finishReason === 'MAX_TOKENS'
-                    ? 'continue'
-                    : 'final',
+            status: this.resolveStatus({ finishReason: parsed.finishReason, parts: parsed.parts }),
         };
     }
 

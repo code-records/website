@@ -64,16 +64,9 @@ export class Chat {
         const runSignal = signal ?? this.abortController.signal;
 
         try {
-            let responseContent = '';
             for await (const event of this.agent.run({ messages: this.history.items, signal: runSignal })) {
-                if (event.type === 'agent_done') {
-                    responseContent = event.response?.content ?? responseContent;
-                }
                 this.notify();
                 yield event;
-            }
-            if (assistant.content.length === 0 && responseContent.length > 0) {
-                assistant.content = responseContent;
             }
         } catch (error) {
             assistant.fail(error instanceof Error ? error.message : String(error));

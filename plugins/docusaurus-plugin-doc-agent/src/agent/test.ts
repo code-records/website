@@ -43,7 +43,7 @@ class MockModel extends Model {
             const fileContent = fileActionResult?.content ?? '未读取到内容';
 
             const reply = `[测试成功] File工具已成功读取 package.json。内容预览（前120字符）:\n\n${fileContent.slice(0, 120)}...`;
-            yield { type: 'content_delta', content: reply };
+            yield { type: 'message_delta', content: reply };
             yield {
                 type: 'done',
                 response: {
@@ -123,7 +123,7 @@ async function runAgentTest() {
 
             if (event.type === 'model_event') {
                 console.log(`   └─ 模型事件细分: ${event.event.type}`);
-                if (event.event.type === 'content_delta') {
+                if (event.event.type === 'content_delta' || event.event.type === 'message_delta') {
                     console.log(`   └─ 模型文本增量: "${event.event.content}"`);
                 }
             } else if (event.type === 'tool_start') {

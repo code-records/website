@@ -39,18 +39,23 @@ export interface ModelRequest {
     toolChoice?: 'auto' | 'none' | { name: string };
 }
 
+export type ModelResponseStatus = 'tool' | 'continue' | 'final';
+
 /** 聚合后的模型响应，主要给非流式调用和测试使用。 */
 export interface ModelResponse {
     content: string;
     actions: ModelAction[];
-    status: 'tool' | 'continue' | 'final';
+    status: ModelResponseStatus;
 }
 
 export type ModelActionEventKind = 'add' | 'update';
 
 /** 模型输出事件。agent loop 默认消费这个事件流。 */
 export type ModelEvent =
+    /** 过程文本，进入 Plan/Round/Action 轨迹。流式阶段所有文本统一走此事件。 */
     | { type: 'content_delta'; content: string }
+    // !!!!!! message_delta 当前未被 adapter 发出；最终正文由 Agent 从 done.response.content 回填
+    | { type: 'message_delta'; content: string }
     | { type: 'action'; action: ModelAction; kind: ModelActionEventKind }
     | { type: 'done'; response: ModelResponse }
     | { type: 'error'; error: Error };
@@ -86,6 +91,16 @@ export abstract class Model {
      * 或用非流式响应模拟事件流；对 agent loop 来说只认统一事件。
      */
     abstract stream(request: ModelRequest): AsyncGenerator<ModelEvent, void, void>;
+
+    /**
+     * 从 provider 原始响应数据中推断本轮的统一响应状态。
+     *
+     * 子类实现此方法时直接从原始 JSON 中读取自己需要的字段，
+     * 把"用什么数据、怎么判断"的所有逻辑收敛在一处。
+     *
+     * 调用方只需在流结束后把原始数据传入，不做任何预处理。
+     */
+    protected abstract resolveStatus(providerResponse: JsonObject): ModelResponseStatus;
 
     /**
      * 发起 provider 非流式请求。
