@@ -22,6 +22,7 @@
     "react-dom": "^19.0.0"
   },
   "scripts": {
+    "test": "npx tsx src/agent/test.ts",
     "build:agent": "npx --yes rollup src/agent/index.ts --file dist/agent.umd.js --format umd --name AgentCore --sourcemap --plugin \"node-resolve={browser:true,preferBuiltins:false}\" --plugin commonjs --plugin typescript"
   }
 }
