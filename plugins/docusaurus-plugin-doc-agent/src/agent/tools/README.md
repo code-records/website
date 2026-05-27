@@ -63,7 +63,7 @@ tool/ToolRunner.ts
 abstract class Tool {
   name: string;
   description: string;
-  input_schema: ToolInputSchema;
+  prompt: ToolPromptSchema;
 
   run(input: ToolInput, context: ToolRunContext): Promise<ToolResult>;
 }
@@ -92,7 +92,7 @@ idle -> running -> error
 interface ToolDefinition {
   name: string;
   description: string;
-  input_schema: ToolInputSchema;
+  prompt: ToolPromptSchema;
 }
 ```
 
@@ -285,7 +285,7 @@ protected executeFileOperation(input, context): Promise<FileToolOutput>
 
 ```text
 1. 继承 Tool。
-2. 声明 name、description、input_schema。
+2. 声明 name、description、prompt。
 3. 实现 execute(input, context)。
 4. 需要模型判断时使用 this.askModel()。
 5. 需要修改下一轮上下文时返回 contextPatch。

@@ -210,7 +210,7 @@ export class OpenAIModel extends Model {
         return tools.map(tool => ({
             description: tool.description,
             name: tool.name,
-            parameters: tool.input_schema,
+            parameters: tool.prompt,
             strict: false,
             type: 'function',
         }));

@@ -420,7 +420,7 @@ export class ClaudeModel extends Model {
     private formatToolDefs(tools: readonly ToolDefinition[]): JsonObject[] {
         return tools.map(tool => ({
             description: tool.description,
-            input_schema: tool.input_schema,
+            input_schema: tool.prompt,
             name: tool.name,
         }));
     }
@@ -430,7 +430,7 @@ export class ClaudeModel extends Model {
             function: {
                 description: tool.description,
                 name: tool.name,
-                parameters: tool.input_schema,
+                parameters: tool.prompt,
             },
             type: 'function',
         }));

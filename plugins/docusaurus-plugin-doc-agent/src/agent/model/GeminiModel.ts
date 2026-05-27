@@ -176,7 +176,7 @@ export class GeminiModel extends Model {
         return tools.map(tool => ({
             description: tool.description,
             name: tool.name,
-            parameters: normalizeSchema(tool.input_schema),
+            parameters: normalizeSchema(tool.prompt),
         }));
     }
 

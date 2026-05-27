@@ -1,4 +1,4 @@
-import { Tool, type JsonObject, type ToolInput, type ToolInputSchema, type ToolResult, type ToolRunContext } from './tool/Tool';
+import { Tool, type JsonObject, type ToolInput, type ToolPromptSchema, type ToolResult, type ToolRunContext } from './tool/Tool';
 
 export interface PlanStep extends JsonObject {
     description: string;
@@ -10,7 +10,7 @@ export interface PlanStep extends JsonObject {
 export class MakePlanTool extends Tool {
     name = 'make_plan';
     description = 'Create a step-by-step plan before executing a complex task.';
-    input_schema: ToolInputSchema = {
+    prompt: ToolPromptSchema = {
         properties: {
             goal: {
                 description: 'The overall goal of this plan',
@@ -62,7 +62,7 @@ export class MakePlanTool extends Tool {
 export class UpdatePlanTool extends Tool {
     name = 'update_plan';
     description = 'Update the status of a plan step.';
-    input_schema: ToolInputSchema = {
+    prompt: ToolPromptSchema = {
         properties: {
             note: {
                 description: 'Optional note about the result',

@@ -1,6 +1,6 @@
 import type { Agent, AgentEvent } from '../Agent';
 import { Message } from '../chat/Message';
-import { Tool, type JsonObject, type ToolInput, type ToolInputSchema, type ToolResult, type ToolRunContext } from './tool/Tool';
+import { Tool, type JsonObject, type ToolInput, type ToolPromptSchema, type ToolResult, type ToolRunContext } from './tool/Tool';
 
 export interface SubAgentToolOptions {
     maxResultChars?: number;
@@ -16,7 +16,7 @@ interface SubAgentRunInput {
 export class SubAgentTool extends Tool {
     name = 'run_sub_agent';
     description: string;
-    input_schema: ToolInputSchema;
+    prompt: ToolPromptSchema;
 
     private readonly maxResultChars: number;
     private readonly subAgents: ReadonlyMap<string, Agent>;
@@ -32,7 +32,7 @@ export class SubAgentTool extends Tool {
             names.length > 0 ? `Available sub-agents: ${names.join(', ')}.` : 'No sub-agents are currently registered.',
         ].join(' ');
 
-        this.input_schema = {
+        this.prompt = {
             properties: {
                 agent: {
                     description: 'Sub-agent name',

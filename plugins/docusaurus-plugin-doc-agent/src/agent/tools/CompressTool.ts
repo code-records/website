@@ -5,7 +5,7 @@ import {
     type JsonObject,
     type ToolAskPrompt,
     type ToolInput,
-    type ToolInputSchema,
+    type ToolPromptSchema,
     type ToolResult,
     type ToolRunContext,
 } from './tool/Tool';
@@ -28,7 +28,7 @@ interface CompressAskOutput extends JsonObject {
 export class CompressTool extends Tool {
     name = 'compress_context';
     description = 'Compact the current agent context when it grows too large. Use this before continuing if context is near the model limit.';
-    input_schema: ToolInputSchema = {
+    prompt: ToolPromptSchema = {
         properties: {
             reason: {
                 description: 'Why context compaction is needed',

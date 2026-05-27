@@ -1,4 +1,4 @@
-import { Tool, type JsonObject, type ToolInput, type ToolInputSchema, type ToolResult, type ToolRunContext } from './tool/Tool';
+import { Tool, type JsonObject, type ToolInput, type ToolPromptSchema, type ToolResult, type ToolRunContext } from './tool/Tool';
 
 export interface ModeToolDefinition extends JsonObject {
     description: string;
@@ -12,7 +12,7 @@ export interface ModeToolOptions {
 export class ModeTool extends Tool {
     name = 'switch_mode';
     description: string;
-    input_schema: ToolInputSchema;
+    prompt: ToolPromptSchema;
 
     private readonly modes: ReadonlyMap<string, ModeToolDefinition>;
 
@@ -26,7 +26,7 @@ export class ModeTool extends Tool {
             `Available modes: ${modeNames.join(', ')}.`,
         ].join(' ');
 
-        this.input_schema = {
+        this.prompt = {
             properties: {
                 mode: {
                     description: 'Target mode',

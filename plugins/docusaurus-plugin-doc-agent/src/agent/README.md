@@ -170,14 +170,14 @@ graph TD
 3. **实现 Provider 请求映射**：
    * 实现 `expandMessageToProviderMessages()`：将公共结构化的 `Message / Plan / Round / Action` 提炼映射为新模型需要的线性 Messages JSON 数组。
    * 实现 `expandToolAskToProviderMessages()`：映射工具内部回问（Tool Ask）的消息格式。
-4. **工具描述转换**：将 `ToolDefinition` 映射为对应模型所要求的 JSON Schema（例如把 input_schema 格式化为 OpenAI/Gemini 特定的 parameters 字段）。
+4. **工具描述转换**：将 `ToolDefinition` 映射为对应模型所要求的 JSON Schema（例如把 prompt 格式化为 OpenAI/Gemini 特定的 parameters 字段）。
 5. **结束标志映射**：在新模型响应结束时，将其结束状态（Finish Reason）安全映射为标准状态 `final`、`tool` 或 `continue`。
 6. **导出**：在 `src/agent/model/index.ts` 中导出。
 
 ### 6.2 新增外部能力工具（Tool Extension）
 当需要为 Agent 提供新技能（如代码执行沙箱、数据库访问、API 触发）时：
 1. **新建工具文件**：在 `src/agent/tools/` 创建 `MyTool.ts` 继承自 `Tool`。
-2. **定义元数据**：声明 `name`、清晰的 `description`、以及严谨的 `input_schema`（包括每个字段的 description，这对 LLM 正确调用至关重要）。
+2. **定义元数据**：声明 `name`、清晰的 `description`、以及严谨的 `prompt`（包括每个字段的 description，这对 LLM 正确调用至关重要）。
 3. **实现主逻辑**：实现 `execute(input, context)`，主逻辑仅在 `Tool` 的沙箱环境中运行。
 4. **合理应用高级特性**：
    * **需要模型决策**：如有歧义，使用 `this.askModel("提示词内容")` 发起独立局部决策。

@@ -9,7 +9,7 @@ export type JsonObject = { [key: string]: JsonValue };
 
 export type ToolInput = JsonObject;
 export type ToolOutput = string;
-export type ToolInputSchema = JsonObject;
+export type ToolPromptSchema = JsonObject;
 export type ToolAskOutput = JsonValue;
 
 /** 工具副作用事件，供 UI、日志、调度工具或父 agent 消费。 */
@@ -51,7 +51,8 @@ export interface ToolRunContext {
 export interface ToolDefinition {
     name: string;
     description: string;
-    input_schema: ToolInputSchema;
+    /** 工具的输入规范模式（JSON Schema格式），模型以此识别参数结构并生成工具指令 */
+    prompt: ToolPromptSchema;
 }
 
 /**
@@ -86,7 +87,9 @@ export type ToolStatus = 'idle' | 'running' | 'paused' | 'done' | 'error';
 export abstract class Tool {
     abstract name: string;
     abstract description: string;
-    abstract input_schema: ToolInputSchema;
+    
+    /** 工具的输入参数定义（采用 JSON Schema 格式），供 Model 识别并生成工具调用指令 */
+    abstract prompt: ToolPromptSchema;
 
     /** 当前状态，供调度工具观察 */
     status: ToolStatus = 'idle';
@@ -187,7 +190,7 @@ export abstract class Tool {
         return {
             name: this.name,
             description: this.description,
-            input_schema: this.input_schema,
+            prompt: this.prompt,
         };
     }
 }

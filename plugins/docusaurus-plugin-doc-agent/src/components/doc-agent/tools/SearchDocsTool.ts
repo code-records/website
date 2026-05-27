@@ -1,5 +1,5 @@
 import { logger } from '../../../agent/utils/logger';
-import { Tool, type JsonObject, type ToolInput, type ToolInputSchema, type ToolResult, type ToolRunContext } from '../../../agent';
+import { Tool, type JsonObject, type ToolInput, type ToolPromptSchema, type ToolResult, type ToolRunContext } from '../../../agent';
 
 function errorMessage(error: unknown): string {
     return error instanceof Error ? error.message : String(error);
@@ -64,7 +64,7 @@ async function searchDocsIndex(query: string, log?: (event: string, data?: JsonO
 class SearchDocsTool extends Tool {
     name = 'search_docs';
     description = '搜索文档。输入关键词，返回匹配的文档标题和链接。用于找到与用户问题相关的文档。';
-    input_schema: ToolInputSchema = {
+    prompt: ToolPromptSchema = {
         type: 'object',
         properties: {
             query: {

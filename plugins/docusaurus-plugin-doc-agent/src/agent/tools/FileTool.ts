@@ -1,4 +1,4 @@
-import { Tool, type JsonObject, type ToolInput, type ToolInputSchema, type ToolResult, type ToolRunContext } from './tool/Tool';
+import { Tool, type JsonObject, type ToolInput, type ToolPromptSchema, type ToolResult, type ToolRunContext } from './tool/Tool';
 
 export type FileToolOperation =
     | 'delete'
@@ -25,7 +25,7 @@ export interface FileToolOutput {
 export abstract class FileTool extends Tool {
     name = 'file';
     description = 'Access files through a concrete agent-provided filesystem implementation.';
-    input_schema: ToolInputSchema = {
+    prompt: ToolPromptSchema = {
         properties: {
             content: {
                 description: 'Content to write when operation is write',

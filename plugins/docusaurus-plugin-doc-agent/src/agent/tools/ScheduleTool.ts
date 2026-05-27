@@ -13,7 +13,7 @@ import {
     type JsonValue,
     type ToolEvent,
     type ToolInput,
-    type ToolInputSchema,
+    type ToolPromptSchema,
     type ToolResult,
     type ToolRunContext,
 } from './tool/Tool';
@@ -45,7 +45,7 @@ export class ScheduleTool extends Tool {
         'Use this when several independent tool calls can run in parallel, or when a sequence must run serially with timeouts.',
     ].join(' ');
 
-    input_schema: ToolInputSchema = {
+    prompt: ToolPromptSchema = {
         properties: {
             items: {
                 description: 'Tool calls to execute. Do not include schedule_tools itself.',

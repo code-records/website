@@ -1,5 +1,5 @@
 import { readonlyClient } from './api';
-import { Tool, type ToolInput, type ToolInputSchema, type ToolResult, type ToolRunContext } from '../../../agent';
+import { Tool, type ToolInput, type ToolPromptSchema, type ToolResult, type ToolRunContext } from '../../../agent';
 
 function errorMessage(error: unknown): string {
     return error instanceof Error ? error.message : String(error);
@@ -8,7 +8,7 @@ function errorMessage(error: unknown): string {
 class BrowseTreeTool extends Tool {
     name = 'browse_tree';
     description = '浏览仓库目录结构。传入目录路径，返回该目录下的文件和子目录列表。';
-    input_schema: ToolInputSchema = {
+    prompt: ToolPromptSchema = {
         type: 'object',
         properties: {
             path: {

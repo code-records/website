@@ -1,6 +1,6 @@
 import { readonlyClient } from './api';
 import { logger } from '../../../agent/utils/logger';
-import { Tool, type ToolInput, type ToolInputSchema, type ToolResult, type ToolRunContext } from '../../../agent';
+import { Tool, type ToolInput, type ToolPromptSchema, type ToolResult, type ToolRunContext } from '../../../agent';
 
 const READ_DOC_MAX_CHARS = 8000;
 
@@ -41,7 +41,7 @@ export async function readDocByUrl(url: string) {
 class ReadDocTool extends Tool {
     name = 'read_doc';
     description = '读取指定文档的完整内容。传入 search_docs 返回的 URL 路径，获取文档的 Markdown 原文。需要读取多篇文档时，可以对多个 URL 分别发起 read_doc 调用，系统会并发执行。';
-    input_schema: ToolInputSchema = {
+    prompt: ToolPromptSchema = {
         type: 'object',
         properties: {
             url: {

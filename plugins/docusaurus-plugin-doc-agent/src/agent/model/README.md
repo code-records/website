@@ -252,7 +252,7 @@ protected abstract requestStream(body, signal?)
 interface ToolDefinition {
   name: string;
   description: string;
-  input_schema: JsonObject;
+  prompt: JsonObject;
 }
 ```
 

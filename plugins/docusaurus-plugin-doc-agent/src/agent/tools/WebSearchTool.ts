@@ -1,4 +1,4 @@
-import { Tool, type JsonObject, type JsonValue, type ToolAskPrompt, type ToolInput, type ToolInputSchema, type ToolResult, type ToolRunContext } from './tool/Tool';
+import { Tool, type JsonObject, type JsonValue, type ToolAskPrompt, type ToolInput, type ToolPromptSchema, type ToolResult, type ToolRunContext } from './tool/Tool';
 
 export interface WebSearchToolOptions {
     endpoint?: string;
@@ -19,7 +19,7 @@ interface WebSearchAskOutput extends JsonObject {
 export class WebSearchTool extends Tool {
     name = 'web_search';
     description = 'Search the internet for up-to-date information when local context is insufficient.';
-    input_schema: ToolInputSchema = {
+    prompt: ToolPromptSchema = {
         properties: {
             query: {
                 description: 'Search query',
