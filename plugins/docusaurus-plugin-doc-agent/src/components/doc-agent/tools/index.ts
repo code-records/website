@@ -1,7 +1,7 @@
 import browseTree from './BrowseTreeTool';
 import readDoc from './ReadDocTool';
 import searchDocs from './SearchDocsTool';
-import type { Tool } from '../../../agent/tools';
+import type { Tool } from '../../../agent';
 
 // A2UI is temporarily disabled. Keep the tool implementation in ./a2ui.ts for
 // later re-enable, but do not import/register it while disabled.

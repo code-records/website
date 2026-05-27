@@ -1,5 +1,5 @@
 import { readonlyClient } from './api';
-import { Tool, type ToolInput, type ToolInputSchema, type ToolResult, type ToolRunContext } from '../../../agent/tools';
+import { Tool, type ToolInput, type ToolInputSchema, type ToolResult, type ToolRunContext } from '../../../agent';
 
 function errorMessage(error: unknown): string {
     return error instanceof Error ? error.message : String(error);

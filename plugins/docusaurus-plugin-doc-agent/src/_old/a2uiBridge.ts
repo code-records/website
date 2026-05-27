@@ -1,4 +1,4 @@
-import type { Message } from '../agent/chat';
+import type { Message } from '../agent/chat/Message';
 import type { DocAgentConfig } from '../components/doc-agent/DocAgent';
 
 export const A2UI_ENABLED = false;
