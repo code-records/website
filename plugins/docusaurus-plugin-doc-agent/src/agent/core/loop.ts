@@ -85,6 +85,14 @@ export async function* loop(options: LoopOptions): AsyncGenerator<AgentEvent, vo
             // 6. 先把 model 事件透传给上层 UI/日志，让界面可以实时更新。
             yield toAgentModelEvent(agentName, event);
 
+            if (event.type === 'content_delta') {
+                logger('agent.loop.round.model_content_delta', { delta: event.content });
+            }
+
+            if (event.type === 'action' && event.action.type === 'thinking') {
+                logger('agent.loop.round.model_thinking_delta', { content: event.action.content });
+            }
+
             // 7. thinking/tool 这类动作进入本轮 actions；content 仍走 content_delta。
             if (event.type === 'action') {
                 mergeAction(actions, event.action);
