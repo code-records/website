@@ -7,6 +7,14 @@ function flattenRoundActions(rounds) {
         .filter(action => action?.label);
 }
 
+function getPlanContent(plans) {
+    return (Array.isArray(plans) ? plans : [])
+        .flatMap(plan => Array.isArray(plan?.rounds) ? plan.rounds : [])
+        .filter(round => round?.status === 'final' || round?.status === 'continue' || (round?.status === undefined && round?.isActive))
+        .map(round => typeof round?.text === 'string' ? round.text : '')
+        .join('');
+}
+
 function PlanItem({ plan, idx, onToggle, isLast, isCompleted, isError }) {
     const [localExpanded, setLocalExpanded] = useState(false);
     const scrollRef = React.useRef(null);
@@ -93,7 +101,8 @@ export default function ChatMessage({ message, isStreaming, onTogglePlan }) {
     const [copied, setCopied] = useState(false);
     const textRef = React.useRef(null);
     const isUser = message.role === 'user';
-    const content = typeof message.content === 'string' ? message.content : '';
+    const plans = Array.isArray(message.plans) ? message.plans : [];
+    const content = getPlanContent(plans);
     const error = message.error || (message.isError && !content ? '生成失败，请稍后重试。' : '');
 
     const handleCopy = () => {
@@ -117,7 +126,6 @@ export default function ChatMessage({ message, isStreaming, onTogglePlan }) {
         );
     }
 
-    const plans = Array.isArray(message.plans) ? message.plans : [];
     return (
         <div className="px-4 py-1.5 animate-[msg-fade-in_0.3s_ease-out]">
             <div className="flex flex-col gap-0.5 w-full">

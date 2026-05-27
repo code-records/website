@@ -52,7 +52,7 @@ export type ModelActionEventKind = 'add' | 'update';
 
 /** 模型输出事件。agent loop 默认消费这个事件流。 */
 export type ModelEvent =
-    /** 模型生成给用户看的正文文本增量，直接进入 Message.content。 */
+    /** 模型生成给用户看的正文文本增量，由当前 Round.text 累积。 */
     | { type: 'content'; content: string }
     | { type: 'action'; action: ModelAction; kind: ModelActionEventKind }
     | { type: 'done'; response: ModelResponse }

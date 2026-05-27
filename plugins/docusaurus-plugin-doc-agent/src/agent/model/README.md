@@ -102,7 +102,7 @@ Tool.askModel()
 
 ```text
 content
-  模型生成给用户看的正文文本增量，进入 Message.content。
+  模型生成给用户看的正文文本增量，进入当前 Round.text。
 
 action
   模型生成的结构化动作，目前包括 thinking 和 tool。

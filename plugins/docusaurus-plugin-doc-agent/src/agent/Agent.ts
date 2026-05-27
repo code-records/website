@@ -132,9 +132,6 @@ export abstract class Agent {
                 yield event;
             }
 
-            if (runAssistant.content.length === 0 && finalResponse?.content) {
-                runAssistant.content = finalResponse.content;
-            }
             runAssistant.finish();
             runAssistant.plan?.apply({ type: 'agent_done', agent: this.name, response: finalResponse });
             yield { type: 'agent_done', agent: this.name, response: finalResponse };
@@ -177,13 +174,10 @@ export abstract class Agent {
 
     /**
      * 将 Agent 运行时事件应用到当前的助理消息中。
-     * 用以就地（in-place）累积 content 并回放事件以推进其 Plan/Round/Action 状态。
+     * 用以就地（in-place）回放事件以推进其 Plan/Round/Action 状态。
      */
     private applyEventToAssistantMessage(assistant: Message, event: AgentEvent): void {
         assistant.plan?.apply(event);
-        if (event.type === 'model_event' && event.event.type === 'content') {
-            assistant.content += event.event.content;
-        }
     }
 
 }

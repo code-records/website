@@ -179,12 +179,10 @@ function parseHistory(value: unknown): HistoryJSON | null {
 function parseMessage(value: unknown): MessageJSON | null {
     if (!isRecord(value)) return null;
 
-    const content = typeof value.content === 'string' ? value.content : '';
     const role = value.role === 'assistant' ? 'assistant' : 'user';
     const plan = parsePlan(value.plan);
 
     return {
-        content,
         ...(plan !== null ? { plan } : {}),
         role,
     };
@@ -204,11 +202,15 @@ function parsePlan(value: unknown): PlanJSON | null {
 function parseRound(value: unknown): RoundJSON | null {
     if (!isRecord(value) || !Array.isArray(value.actions)) return null;
 
+    const text = typeof value.text === 'string' ? value.text : undefined;
+
     return {
         actions: value.actions
             .map(parseAction)
             .filter(action => action !== null),
         done: value.done === true,
+        status: parseRoundStatus(value.status),
+        ...(text !== undefined ? { text } : {}),
     };
 }
 
@@ -219,15 +221,15 @@ function parseAction(value: unknown): ActionJSON | null {
 
     const call = parseToolCall(value.call);
     const event = parseToolEvent(value.event);
-    const content = typeof value.content === 'string' ? value.content : undefined;
     const label = typeof value.label === 'string' ? value.label : undefined;
+    const text = typeof value.text === 'string' ? value.text : undefined;
 
     return {
         ...(call !== null ? { call } : {}),
-        ...(content !== undefined ? { content } : {}),
         done: value.done === true,
         ...(event !== null ? { event } : {}),
         ...(label !== undefined ? { label } : {}),
+        ...(text !== undefined ? { text } : {}),
         type,
     };
 }
@@ -262,6 +264,13 @@ function parsePlanStatus(value: unknown): PlanStatus {
         return value;
     }
     return 'active';
+}
+
+function parseRoundStatus(value: unknown): RoundJSON['status'] {
+    if (value === 'tool' || value === 'continue' || value === 'final') {
+        return value;
+    }
+    return undefined;
 }
 
 function parseActionType(value: unknown): ActionType | null {

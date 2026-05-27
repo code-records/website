@@ -3,7 +3,6 @@ import { Plan, type PlanJSON } from './round/Plan';
 export type MessageRole = 'assistant' | 'user';
 
 export interface MessageJSON {
-    content: string;
     custom?: string;
     error?: string;
     isError?: boolean;
@@ -17,16 +16,14 @@ export interface MessageJSON {
 export class Message {
     readonly plans: Plan[] = [];
     readonly role: MessageRole;
-    content: string;
     custom?: string;
     error?: string;
     isError = false;
     local = false;
     streaming = false;
 
-    private constructor(role: MessageRole, content = '', plans: Plan[] = []) {
+    private constructor(role: MessageRole, plans: Plan[] = []) {
         this.role = role;
-        this.content = content;
         this.plans = plans;
         this.streaming = role === 'assistant';
     }
@@ -35,19 +32,27 @@ export class Message {
         return this.plans[0];
     }
 
-    static user(content: string): Message {
-        return new Message('user', content);
+    /**
+     * Message deliberately has no text/content field.
+     * User/local text is stored in Round.text so every textual payload stays inside Plan/Round/Action.
+     */
+    static user(text: string): Message {
+        const plan = new Plan();
+        if (text.length > 0) {
+            plan.appendUserText(text);
+        }
+        plan.finish();
+        return new Message('user', [plan]);
     }
 
     static assistant(): Message {
-        return new Message('assistant', '', [new Plan()]);
+        return new Message('assistant', [new Plan()]);
     }
 
     static fromJSON(json: MessageJSON): Message {
         const plansJson = json.plans ?? (json.plan ? [json.plan] : []);
         const message = new Message(
             json.role,
-            json.content,
             plansJson.map(p => Plan.fromJSON(p)),
         );
         message.custom = json.custom;
@@ -60,7 +65,6 @@ export class Message {
 
     toJSON(): MessageJSON {
         return {
-            content: this.content,
             ...(this.custom !== undefined ? { custom: this.custom } : {}),
             ...(this.error !== undefined ? { error: this.error } : {}),
             ...(this.isError ? { isError: true } : {}),

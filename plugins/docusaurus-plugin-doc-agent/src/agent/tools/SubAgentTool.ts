@@ -87,7 +87,7 @@ export class SubAgentTool extends Tool {
             }
         }
 
-        const content = subAssistant.content;
+        const content = subAssistant.plan?.text ?? '';
         const result = truncate(content.trim(), this.maxResultChars) || '[Sub-agent returned no content]';
 
         return {

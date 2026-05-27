@@ -11,26 +11,26 @@ export type ActionType =
 export interface ActionJSON {
     callId?: string;
     call?: ModelToolCall;
-    content?: string;
     done: boolean;
     event?: ToolEvent;
     label?: string;
+    text?: string;
     type: ActionType;
 }
 
 export class Action {
     callId?: string;
     call?: ModelToolCall;
-    content = '';
     done = false;
     event?: ToolEvent;
     label = '';
+    text = '';
     type: ActionType;
 
     constructor(json: ActionJSON) {
         this.type = json.type;
         this.callId = json.callId;
-        this.content = json.content ?? '';
+        this.text = json.text ?? '';
         this.call = json.call;
         this.done = json.done;
         this.event = json.event;
@@ -54,9 +54,9 @@ export class Action {
             if (event.type === 'tool_done') {
                 return new Action({
                     callId: event.callId,
-                    content: event.result.result,
                     done: true,
                     label: event.tool,
+                    text: event.result.result,
                     type: 'tool',
                 });
             }
@@ -70,17 +70,17 @@ export class Action {
             }
             if (event.type === 'context_patch') {
                 return new Action({
-                    content: event.patch.type,
                     done: true,
                     label: 'context',
+                    text: event.patch.type,
                     type: 'context',
                 });
             }
             if (event.type === 'agent_error') {
                 return new Action({
-                    content: event.error.message,
                     done: true,
                     label: 'error',
+                    text: event.error.message,
                     type: 'error',
                 });
             }
@@ -90,8 +90,8 @@ export class Action {
         const modelEvent = event.event;
         if (modelEvent.type === 'action' && modelEvent.action.type === 'thinking') {
             return new Action({
-                content: modelEvent.action.content,
                 done: false,
+                text: modelEvent.action.content,
                 type: 'thinking',
             });
         }
@@ -106,17 +106,17 @@ export class Action {
         }
         if (modelEvent.type === 'error') {
             return new Action({
-                content: modelEvent.error.message,
                 done: true,
                 label: 'model',
+                text: modelEvent.error.message,
                 type: 'error',
             });
         }
         return null;
     }
 
-    append(content: string): void {
-        this.content += content;
+    append(text: string): void {
+        this.text += text;
     }
 
     finish(): void {
@@ -127,10 +127,10 @@ export class Action {
         return {
             callId: this.callId,
             call: this.call,
-            content: this.content.length > 0 ? this.content : undefined,
             done: this.done,
             event: this.event,
             label: this.label.length > 0 ? this.label : undefined,
+            text: this.text.length > 0 ? this.text : undefined,
             type: this.type,
         };
     }

@@ -137,9 +137,17 @@ export class CodePanel extends React.Component {
                 if (dynamicQuestions && dynamicQuestions.trim().length > 0) {
                     const suggestionsMsg = {
                         role: 'assistant',
-                        content: dynamicQuestions,
                         local: true,
                         custom: 'suggest',
+                        plan: {
+                            rounds: [{
+                                actions: [],
+                                done: true,
+                                status: 'final',
+                                text: dynamicQuestions,
+                            }],
+                            status: 'completed',
+                        },
                     };
                     const lastMsg = this.chat.messages[this.chat.messages.length - 1];
                     if (lastMsg && lastMsg.custom === 'suggest') {
@@ -167,9 +175,17 @@ export class CodePanel extends React.Component {
 
         this.chat.addMessage({
             role: 'assistant',
-            content: defaultSuggestions,
             local: true,
             custom: 'suggest',
+            plan: {
+                rounds: [{
+                    actions: [],
+                    done: true,
+                    status: 'final',
+                    text: defaultSuggestions,
+                }],
+                status: 'completed',
+            },
         });
     };
 
@@ -254,7 +270,6 @@ export class CodePanel extends React.Component {
                 key={idx}
                 message={message}
                 isStreaming={message.streaming}
-                onTogglePlan={message.streaming ? i => this.chat.togglePlan(i) : undefined}
             />
         );
     };

@@ -30,6 +30,14 @@ export class Plan {
         return this._rounds.some(round => round.hasContent);
     }
 
+    get text(): string {
+        return this._rounds
+            .filter(round => round.status === 'final' || round.status === 'continue')
+            .map(round => round.text)
+            .filter(text => text.length > 0)
+            .join('');
+    }
+
     get isActive(): boolean {
         return this.status === 'active';
     }
@@ -63,17 +71,38 @@ export class Plan {
             return;
         }
 
+        if (event.type === 'model_event' && event.event.type === 'content') {
+            this.ensureModelRound().appendText(event.event.content);
+            return;
+        }
+
+        if (event.type === 'model_event' && event.event.type === 'done') {
+            this.ensureModelRound().status = event.event.response.status;
+            return;
+        }
+
         const action = Action.fromAgentEvent(event);
         if (action === null) return;
 
-        const round = this.ensureRound();
+        const round = event.type === 'model_event' ? this.ensureModelRound() : this.ensureRound();
         if (event.type === 'model_event' && event.event.type === 'action' && event.event.kind === 'update') {
             if (round.updateLast(action)) return;
         }
-        if (action.type === 'thinking' && round.appendToLast(action.type, action.content)) {
+        if (action.type === 'thinking' && round.appendToLast(action.type, action.text)) {
             return;
         }
         round.add(action);
+    }
+
+    appendUserText(text: string): void {
+        const round = this.ensureRound();
+        round.appendText(text);
+        round.status = 'final';
+    }
+
+    finish(): void {
+        this.status = 'completed';
+        this.finishOpenRound();
     }
 
     toggle(): void {
@@ -99,6 +128,14 @@ export class Plan {
         const round = new Round();
         this._rounds.push(round);
         return round;
+    }
+
+    private ensureModelRound(): Round {
+        const last = this._rounds[this._rounds.length - 1];
+        if (last !== undefined && !last.done && last.status !== undefined) {
+            last.finish();
+        }
+        return this.ensureRound();
     }
 
     private finishOpenRound(): void {

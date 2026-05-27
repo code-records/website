@@ -1,4 +1,5 @@
 import { Action, type ActionJSON } from './Action';
+import type { ModelResponseStatus } from '../../model/Model';
 
 export interface RoundJSON {
     actions: ActionJSON[];
@@ -6,11 +7,15 @@ export interface RoundJSON {
     hasContent?: boolean;
     isActive?: boolean;
     label?: string;
+    status?: ModelResponseStatus;
+    text?: string;
 }
 
 export class Round {
     private readonly _actions: Action[] = [];
     done = false;
+    status?: ModelResponseStatus;
+    text = '';
 
     get actions(): readonly Action[] {
         return this._actions;
@@ -21,7 +26,7 @@ export class Round {
     }
 
     get hasContent(): boolean {
-        return this._actions.some(action => action.content.length > 0);
+        return this.text.length > 0 || this._actions.some(action => action.text.length > 0);
     }
 
     get isActive(): boolean {
@@ -35,23 +40,29 @@ export class Round {
 
     static fromJSON(json: RoundJSON): Round {
         const round = new Round();
+        round.text = json.text ?? '';
         round.done = json.done;
+        round.status = json.status;
         for (const action of json.actions) {
             round.add(Action.fromJSON(action));
         }
         return round;
     }
 
+    appendText(text: string): void {
+        this.text += text;
+    }
+
     add(action: Action): void {
         this._actions.push(action);
     }
 
-    appendToLast(type: Action['type'], content: string): boolean {
+    appendToLast(type: Action['type'], text: string): boolean {
         const last = this._actions[this._actions.length - 1];
         if (last === undefined || last.type !== type || last.done) {
             return false;
         }
-        last.append(content);
+        last.append(text);
         return true;
     }
 
@@ -60,10 +71,10 @@ export class Round {
         if (last === undefined || last.type !== action.type || last.done) {
             return false;
         }
-        if (last.type === 'tool' && action.call === undefined && action.content.length > 0) {
+        if (last.type === 'tool' && action.call === undefined && action.text.length > 0) {
             return false;
         }
-        last.content = action.content;
+        last.text = action.text;
         last.callId = action.callId;
         last.call = action.call;
         last.event = action.event;
@@ -71,7 +82,8 @@ export class Round {
         return true;
     }
 
-    finish(): void {
+    finish(status = this.status): void {
+        this.status = status;
         this.done = true;
         for (const action of this._actions) {
             action.finish();
@@ -85,6 +97,8 @@ export class Round {
             hasContent: this.hasContent,
             isActive: this.isActive,
             label: this.label,
+            status: this.status,
+            text: this.text.length > 0 ? this.text : undefined,
         };
     }
 }

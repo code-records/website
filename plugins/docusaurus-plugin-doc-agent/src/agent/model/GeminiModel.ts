@@ -108,16 +108,19 @@ export class GeminiModel extends Model {
             return [];
         }
         if (message.role === 'user') {
-            return message.content.length > 0
-                ? [{ parts: [{ text: message.content }], role: 'user' }]
+            const text = message.plan?.text ?? '';
+            return text.length > 0
+                ? [{ parts: [{ text }], role: 'user' }]
                 : [];
         }
 
         const parts: JsonValue[] = [];
-        if (message.content.length > 0) {
-            parts.push({ text: message.content });
-        }
         const toolResultMessages: JsonObject[] = [];
+        for (const round of message.plan?.items ?? []) {
+            if ((round.status === 'final' || round.status === 'continue') && round.text.length > 0) {
+                parts.push({ text: round.text });
+            }
+        }
         for (const action of this.roundToolActions(message)) {
             if (action.call !== undefined) {
                 parts.push({
@@ -129,14 +132,14 @@ export class GeminiModel extends Model {
                 });
                 continue;
             }
-            if (action.callId !== undefined && action.content.length > 0) {
+            if (action.callId !== undefined && action.text.length > 0) {
                 const name = this.toolNamesById.get(action.callId) || action.callId;
                 toolResultMessages.push({
                     parts: [{
                         functionResponse: {
                             id: action.callId,
                             name,
-                            response: { result: action.content },
+                            response: { result: action.text },
                         },
                     }],
                     role: 'user',
@@ -167,7 +170,7 @@ export class GeminiModel extends Model {
         };
     }
 
-    private roundToolActions(message: Message): Array<{ call?: ModelToolCall; callId?: string; content: string }> {
+    private roundToolActions(message: Message): Array<{ call?: ModelToolCall; callId?: string; text: string }> {
         return (message.plan?.items ?? []).flatMap(round => round.items.flatMap(action => {
             if (action.type !== 'tool') {
                 return [];
@@ -175,7 +178,7 @@ export class GeminiModel extends Model {
             return [{
                 call: action.call,
                 callId: action.callId,
-                content: action.content,
+                text: action.text,
             }];
         }));
     }

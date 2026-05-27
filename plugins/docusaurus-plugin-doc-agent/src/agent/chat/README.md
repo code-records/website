@@ -68,11 +68,20 @@ Chat
    loop 结束，不返回业务数据
 
 10. assistant Message 收尾
-    从 final Round 的 content action 汇总 assistant.content
-    移除 final Round 里的 content action
+    正文保留在 Round.text
     Plan.status = completed
     assistant.streaming = false
 ```
+
+## Content 归属
+
+`Message` 层完全不保存文本字段；不要添加 `Message.text` 或 `Message.content`。
+文本只属于 `Round.text` 或 `Action.text`。
+
+- `Round.text`：只保存本轮模型输出到用户可见正文通道的文本增量。
+- `Action.text`：只保存该 action 自身的文本，例如 thinking 文本、工具结果、错误信息或上下文变更说明。
+- `thinking` action 的 `text` 来自模型返回的 reasoning / thinking 字段，它属于 action 内部数据，不等同于接口语义上的正文。
+- `tool` 状态轮里的 `Round.text` 可以作为临时过渡文本存在，但不会进入最终回答汇总，也不会作为 assistant 正文写回 provider history。
 
 ## 边界规则
 

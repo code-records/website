@@ -29,8 +29,9 @@ interface ChatToolTracker {
 }
 
 type RoundProviderAction =
-    | { type: 'thinking'; content: string }
-    | { type: 'tool'; call?: ModelToolCall; callId?: string; content: string };
+    | { type: 'content'; text: string }
+    | { type: 'thinking'; text: string }
+    | { type: 'tool'; call?: ModelToolCall; callId?: string; text: string };
 
 export class ClaudeModel extends Model {
     constructor({ url = DEFAULT_ANTHROPIC_ENDPOINT, streamUrl = DEFAULT_ANTHROPIC_STREAM_ENDPOINT, ...rest }: ModelConfig) {
@@ -284,18 +285,19 @@ export class ClaudeModel extends Model {
         }
 
         if (message.role === 'user') {
-            return message.content.length > 0
-                ? [{ content: message.content, role: 'user' }]
+            const text = message.plan?.text ?? '';
+            return text.length > 0
+                ? [{ content: text, role: 'user' }]
                 : [];
         }
 
         const content: JsonValue[] = [];
-        if (message.content.length > 0) {
-            content.push({ text: message.content, type: 'text' });
-        }
         for (const action of this.roundActions(message)) {
-            if (action.type === 'thinking' && action.content.length > 0) {
-                content.push({ thinking: action.content, type: 'thinking' });
+            if (action.type === 'content' && action.text.length > 0) {
+                content.push({ text: action.text, type: 'text' });
+            }
+            if (action.type === 'thinking' && action.text.length > 0) {
+                content.push({ thinking: action.text, type: 'thinking' });
             }
             if (action.type === 'tool' && action.call !== undefined) {
                 content.push({
@@ -305,8 +307,8 @@ export class ClaudeModel extends Model {
                     type: 'tool_use',
                 });
             }
-            if (action.type === 'tool' && action.callId !== undefined && action.call === undefined && action.content.length > 0) {
-                content.push({ content: action.content, tool_use_id: action.callId, type: 'tool_result' });
+            if (action.type === 'tool' && action.callId !== undefined && action.call === undefined && action.text.length > 0) {
+                content.push({ content: action.text, tool_use_id: action.callId, type: 'tool_result' });
             }
         }
 
@@ -322,13 +324,14 @@ export class ClaudeModel extends Model {
             return [];
         }
         if (message.role === 'user') {
-            return message.content.length > 0
-                ? [{ content: message.content, role: 'user' }]
+            const text = message.plan?.text ?? '';
+            return text.length > 0
+                ? [{ content: text, role: 'user' }]
                 : [];
         }
         const actions = this.roundActions(message);
         const toolCalls = actions
-            .filter((action): action is { type: 'tool'; call: ModelToolCall; callId?: string; content: string } => action.type === 'tool' && action.call !== undefined)
+            .filter((action): action is { type: 'tool'; call: ModelToolCall; callId?: string; text: string } => action.type === 'tool' && action.call !== undefined)
             .map(action => ({
                 function: {
                     arguments: JSON.stringify(action.call.input ?? {}),
@@ -338,14 +341,14 @@ export class ClaudeModel extends Model {
                 type: 'function',
             }));
         const result: JsonObject[] = [{
-            content: toolCalls.length > 0 ? null : message.content,
+            content: toolCalls.length > 0 ? null : this.chatCompletionsAssistantContent(actions),
             ...(toolCalls.length > 0 ? { tool_calls: toolCalls } : {}),
             role: 'assistant',
         }];
         for (const action of actions) {
-            if (action.type === 'tool' && action.callId !== undefined && action.call === undefined && action.content.length > 0) {
+            if (action.type === 'tool' && action.callId !== undefined && action.call === undefined && action.text.length > 0) {
                 result.push({
-                    content: this.stringifyToolContent(action.content),
+                    content: this.stringifyToolContent(action.text),
                     role: 'tool',
                     tool_call_id: action.callId,
                 });
@@ -464,21 +467,31 @@ export class ClaudeModel extends Model {
     private roundActions(message: Message): RoundProviderAction[] {
         const actions: RoundProviderAction[] = [];
         for (const round of message.plan?.items ?? []) {
+            if ((round.status === 'final' || round.status === 'continue') && round.text.length > 0) {
+                actions.push({ text: round.text, type: 'content' });
+            }
             for (const action of round.items) {
                 if (action.type === 'thinking') {
-                    actions.push({ content: action.content, type: 'thinking' });
+                    actions.push({ text: action.text, type: 'thinking' });
                 }
                 if (action.type === 'tool') {
                     actions.push({
                         call: action.call,
                         callId: action.callId,
-                        content: action.content,
+                        text: action.text,
                         type: 'tool',
                     });
                 }
             }
         }
         return actions;
+    }
+
+    private chatCompletionsAssistantContent(actions: readonly RoundProviderAction[]): string {
+        return actions
+            .filter((action): action is Extract<RoundProviderAction, { type: 'content' }> => action.type === 'content')
+            .map(action => action.text)
+            .join('');
     }
 
     private createActions(thinking: string, toolCalls: readonly ModelToolCall[]): ModelAction[] {

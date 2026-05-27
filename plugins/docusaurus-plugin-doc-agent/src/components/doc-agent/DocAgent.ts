@@ -161,9 +161,17 @@ export class DocAgent extends Agent {
 
         return {
             role: 'assistant',
-            content: responseContent,
             local: true,
             custom: 'suggest',
+            plan: {
+                rounds: [{
+                    actions: [],
+                    done: true,
+                    status: 'final',
+                    text: responseContent,
+                }],
+                status: 'completed',
+            },
         };
     }
 

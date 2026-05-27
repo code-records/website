@@ -164,16 +164,14 @@ export class OpenAIModel extends Model {
             return [];
         }
         if (message.role === 'user') {
-            return message.content.length > 0
-                ? [{ content: message.content, role: 'user' }]
+            const text = message.plan?.text ?? '';
+            return text.length > 0
+                ? [{ content: text, role: 'user' }]
                 : [];
         }
 
         const result: JsonObject[] = [];
         const roundMessages = this.roundsToProviderMessages(message);
-        if (message.content.length > 0) {
-            result.push({ content: message.content, role: 'assistant' });
-        }
         result.push(...roundMessages);
 
         return result;
@@ -186,6 +184,9 @@ export class OpenAIModel extends Model {
     private roundsToProviderMessages(message: Message): JsonObject[] {
         const result: JsonObject[] = [];
         for (const round of message.plan?.items ?? []) {
+            if ((round.status === 'final' || round.status === 'continue') && round.text.length > 0) {
+                result.push({ content: round.text, role: 'assistant' });
+            }
             for (const action of round.items) {
                 if (action.type !== 'tool') continue;
                 if (action.call !== undefined) {
@@ -197,10 +198,10 @@ export class OpenAIModel extends Model {
                     });
                     continue;
                 }
-                if (action.callId !== undefined && action.content.length > 0) {
+                if (action.callId !== undefined && action.text.length > 0) {
                     result.push({
                         call_id: action.callId,
-                        output: action.content,
+                        output: action.text,
                         type: 'function_call_output',
                     });
                 }
