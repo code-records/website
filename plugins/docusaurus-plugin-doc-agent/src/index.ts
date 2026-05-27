@@ -65,6 +65,11 @@ const docAgentPlugin: PluginModule = (_context, options) => {
         component: path.join(__dirname, 'pages/ChatPage.jsx'),
         exact: true,
       });
+      actions.addRoute({
+        path: '/code',
+        component: path.join(__dirname, 'pages/CodePage.jsx'),
+        exact: true,
+      });
     },
 
     getPathsToWatch() {
