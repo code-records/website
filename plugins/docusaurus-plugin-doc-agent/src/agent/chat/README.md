@@ -7,9 +7,66 @@ Chat
 └── Message[]
     ├── user Message
     └── assistant Message
-        └── Plan
+        └── Plan[]
             └── Round[]
                 └── Action[]
+```
+
+```json
+{
+  "messages": [
+    {
+      "id": "msg-user-1",
+      "role": "user",
+      "text": "帮我解释这段代码"
+    },
+    {
+      "id": "msg-assistant-1",
+      "role": "assistant",
+      "streaming": false,
+      "plans": [
+        {
+          "id": "plan-1",
+          "status": "completed",
+          "folded": false,
+          "rounds": [
+            {
+              "id": "round-1",
+              "status": "tool",
+              "text": "我先查看相关文件...",
+              "actions": [
+                {
+                  "id": "action-1",
+                  "type": "thinking",
+                  "status": "completed",
+                  "text": "需要读取代码上下文。"
+                },
+                {
+                  "id": "action-2",
+                  "type": "tool",
+                  "status": "completed",
+                  "name": "readFile",
+                  "input": {
+                    "path": "src/example.js"
+                  },
+                  "result": {
+                    "summary": "文件内容较长，省略..."
+                  }
+                }
+              ]
+            },
+            {
+              "id": "round-2",
+              "status": "final",
+              "text": "这段代码主要做了三件事：初始化状态、读取数据、更新 UI。细节较长，省略...",
+              "actions": []
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
 ```
 
 `Message / Plan / Round / Action` 是唯一运行状态源。JSON 只作为保存、导出、恢复时的快照格式，不参与正常流转。

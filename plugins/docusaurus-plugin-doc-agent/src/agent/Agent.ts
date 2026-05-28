@@ -65,8 +65,8 @@ export abstract class Agent {
      */
     protected defaultTools(): Tool[] {
         return [
-            new ScheduleTool(),
-            new CompressTool(),
+            // new ScheduleTool(),
+            // new CompressTool(),
             // new MakePlanTool(),
             // new UpdatePlanTool(),
         ];
