@@ -66,7 +66,7 @@ class ReadDocTool extends Tool {
             filePaths = resolveDocFilePathCandidates(url);
         } catch (error) {
             const message = errorMessage(error);
-            logger('tool.read_doc.error', { url, error: message });
+            logger.log('tool.read_doc.error', { url, error: message });
             return {
                 result: `读取文档失败: ${url}\n\n${message}`,
                 events: [{ type: 'read_doc', data: { status: 'error', url, error: message } }],
@@ -74,14 +74,14 @@ class ReadDocTool extends Tool {
         }
 
         if (filePaths.length === 0) {
-            logger('tool.read_doc.not_found', { url });
+            logger.log('tool.read_doc.not_found', { url });
             return {
                 result: `未找到文档: ${url}`,
                 events: [{ type: 'read_doc', data: { status: 'not_found', url } }],
             };
         }
 
-        logger('tool.read_doc.start', { url, filePaths });
+        logger.log('tool.read_doc.start', { url, filePaths });
 
         let content: string | null;
         let filePath: string | null = null;
@@ -97,7 +97,7 @@ class ReadDocTool extends Tool {
             }
         } catch (error) {
             const message = errorMessage(error);
-            logger('tool.read_doc.error', { url, filePaths, error: message });
+            logger.log('tool.read_doc.error', { url, filePaths, error: message });
             return {
                 result: `读取文档失败: ${url}\n\n${message}`,
                 events: [{ type: 'read_doc', data: { status: 'error', url, error: message } }],
@@ -105,7 +105,7 @@ class ReadDocTool extends Tool {
         }
 
         if (!content) {
-            logger('tool.read_doc.not_found', { url, filePaths });
+            logger.log('tool.read_doc.not_found', { url, filePaths });
             return {
                 result: `未找到文档: ${url}`,
                 events: [{ type: 'read_doc', data: { status: 'not_found', url } }],
@@ -116,7 +116,7 @@ class ReadDocTool extends Tool {
             ? content
             : `${content.slice(0, READ_DOC_MAX_CHARS)}\n\n... (文档内容已截断，共 ${content.length} 字符)`;
 
-        logger('tool.read_doc.end', {
+        logger.log('tool.read_doc.end', {
             requestedUrl: url,
             filePath,
             contentLength: content.length,

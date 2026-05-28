@@ -3,11 +3,13 @@ import { OpenAIModel } from './model/OpenAIModel';
 import { ClaudeModel } from './model/ClaudeModel';
 import { GeminiModel } from './model/GeminiModel';
 import { Message } from './chat/Message';
+import { Plan } from './chat/round/Plan';
 import type { ContextPatch, Tool, ToolEvent, ToolResult } from './tools/tool/Tool';
 import { CompressTool } from './tools/CompressTool';
 import { MakePlanTool, UpdatePlanTool } from './tools/PlanTool';
 import { ScheduleTool } from './tools/ScheduleTool';
 import { toError } from './utils/errors';
+import { logger } from './utils/logger';
 import { loop } from './core/loop';
 
 export interface CreateModelConfig extends ModelConfig {
@@ -33,7 +35,7 @@ export type AgentEvent =
     | { type: 'model_event'; agent: string; event: ModelEvent }
     | { type: 'tool_start'; agent: string; tool: string; callId: string; label: string }
     | { type: 'tool_done'; agent: string; tool: string; callId: string; label: string; result: ToolResult }
-    | { type: 'tool_event'; agent: string; tool: string; event: ToolEvent }
+    | { type: 'tool_event'; agent: string; tool: string; callId: string; label: string; event: ToolEvent }
     | { type: 'context_patch'; agent: string; tool: string; patch: ContextPatch }
     | { type: 'sub_agent_start'; agent: string; subAgent: string }
     | { type: 'sub_agent_event'; agent: string; subAgent: string; event: AgentEvent }
@@ -70,6 +72,10 @@ export abstract class Agent {
             // new MakePlanTool(),
             // new UpdatePlanTool(),
         ];
+    }
+
+    definePlans(): Plan[] {
+        return [new Plan()];
     }
 
     /**
@@ -132,6 +138,7 @@ export abstract class Agent {
             if (plan === undefined) {
                 throw new Error('Agent.run() requires the active assistant Message to have a Plan');
             }
+            logger.plan(plan.toJSON());
             let finalResponse: ModelResponse | undefined;
 
             for await (const event of loop({
@@ -157,12 +164,17 @@ export abstract class Agent {
             const doneEvent: AgentEvent = { type: 'agent_done', agent: this.name, response: finalResponse };
             runAssistant.finish();
             plan.apply(doneEvent);
+            logger.plan(plan.toJSON());
             yield doneEvent;
         } catch (error) {
             const err = toError(error);
             const errorEvent: AgentEvent = { type: 'agent_error', agent: this.name, error: err };
             runAssistant?.fail(err.message);
-            runAssistant?.plan?.apply(errorEvent);
+            const plan = runAssistant?.plan;
+            plan?.apply(errorEvent);
+            if (plan !== undefined) {
+                logger.plan(plan.toJSON());
+            }
             yield errorEvent;
         }
     }

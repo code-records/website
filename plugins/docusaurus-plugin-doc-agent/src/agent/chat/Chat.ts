@@ -54,7 +54,7 @@ export class Chat {
         if (this.activeMessage !== undefined) return;
 
         const user = Message.user(content);
-        const assistant = Message.assistant();
+        const assistant = Message.assistant(this.agent.definePlans());
         this.history.add(user);
         this.history.add(assistant);
         this.activeMessage = assistant;

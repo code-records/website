@@ -45,8 +45,8 @@ export class Message {
         return new Message('user', [plan]);
     }
 
-    static assistant(): Message {
-        return new Message('assistant', [new Plan()]);
+    static assistant(plans: Plan[] = [new Plan()]): Message {
+        return new Message('assistant', plans);
     }
 
     static fromJSON(json: MessageJSON): Message {

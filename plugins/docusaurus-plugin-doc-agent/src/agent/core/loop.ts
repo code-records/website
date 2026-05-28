@@ -72,6 +72,8 @@ export async function* loop(options: LoopOptions): AsyncGenerator<AgentEvent, vo
         tools,
     });
 
+    const loggedRoundStarts = new WeakSet<Round>();
+
     // 4. 一轮 round = 一次 model 调用，以及可能跟随的一批工具执行。
     for (let count = 1; count <= maxRounds && !signal?.aborted; count++) {
         let round: Round | undefined;
@@ -87,6 +89,8 @@ export async function* loop(options: LoopOptions): AsyncGenerator<AgentEvent, vo
             round = plan.apply(agentEvent) ?? round;
             if (round !== undefined) {
                 round.count = count;
+                loggerRoundStart(round, loggedRoundStarts);
+                loggerRoundAction(round);
             }
             yield agentEvent;
 
@@ -185,7 +189,9 @@ export async function* loop(options: LoopOptions): AsyncGenerator<AgentEvent, vo
                     const toolEvent: AgentEvent = {
                         type: 'tool_event',
                         agent: agentName,
+                        callId: call.id,
                         event,
+                        label,
                         tool,
                     };
                     plan.apply(toolEvent);
@@ -230,7 +236,19 @@ function getRoundToolCalls(round: Round): ModelToolCall[] {
 }
 
 function loggerRoundDone(round: Round): void {
-    logger('agent.loop.round.done', round.toJSON());
+    logger.round(round.toJSON());
+}
+
+function loggerRoundStart(round: Round, loggedRoundStarts: WeakSet<Round>): void {
+    if (loggedRoundStarts.has(round)) return;
+    loggedRoundStarts.add(round);
+    logger.round(round.toJSON());
+}
+
+function loggerRoundAction(round: Round): void {
+    const action = round.actions[round.actions.length - 1];
+    if (action === undefined) return;
+    logger.action(action.toJSON());
 }
 
 

@@ -139,7 +139,7 @@ function agentEventToJson(event: AgentEvent): JsonObject {
         case 'tool_done':
             return { agent: event.agent, callId: event.callId, label: event.label, tool: event.tool, type: event.type };
         case 'tool_event':
-            return { agent: event.agent, eventType: event.event.type, tool: event.tool, type: event.type };
+            return { agent: event.agent, callId: event.callId, eventType: event.event.type, label: event.label, tool: event.tool, type: event.type };
         case 'context_patch':
             return { agent: event.agent, patchType: event.patch.type, tool: event.tool, type: event.type };
         case 'sub_agent_start':

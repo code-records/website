@@ -297,7 +297,6 @@ export class CodePanel extends React.Component {
 
                 <div className="flex-1 flex flex-col bg-[var(--ifm-background-color)]">
                     <CodeHeader
-                        hasRealMessages={hasRealMessages}
                         onCopyDisplay={this.handleCopyDisplay}
                         onClearHistory={this.handleClearHistory}
                     />
@@ -327,5 +326,3 @@ export class CodePanel extends React.Component {
 }
 
 export default CodePanel;
-
-

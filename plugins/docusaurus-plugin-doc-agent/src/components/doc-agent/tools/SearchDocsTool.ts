@@ -79,14 +79,14 @@ class SearchDocsTool extends Tool {
         const query = typeof input.query === 'string' ? input.query : '';
         if (!query) return { result: '请提供搜索关键词' };
 
-        logger('tool.search_docs.start', { query });
+        logger.log('tool.search_docs.start', { query });
 
         let search: { results: PagefindResult[] };
         try {
-            search = await searchDocsIndex(query, logger);
+            search = await searchDocsIndex(query, logger.log.bind(logger));
         } catch (error) {
             const message = errorMessage(error);
-            logger('tool.search_docs.error', { query, error: message });
+            logger.log('tool.search_docs.error', { query, error: message });
             return {
                 result: `检索「${query}」失败：检索引擎异常。`,
                 events: [{ type: 'search_error', data: { query, error: message } }],
@@ -109,7 +109,7 @@ class SearchDocsTool extends Tool {
             });
         }
 
-        logger('tool.search_docs.end', {
+        logger.log('tool.search_docs.end', {
             query,
             count: results.length,
             results: results.map(({ title, url, score }) => ({ title, url, score })),

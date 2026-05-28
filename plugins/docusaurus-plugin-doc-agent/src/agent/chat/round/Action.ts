@@ -62,9 +62,10 @@ export class Action {
             }
             if (event.type === 'tool_event') {
                 return new Action({
+                    callId: event.callId,
                     done: true,
                     event: event.event,
-                    label: event.tool,
+                    label: event.label,
                     type: 'tool',
                 });
             }

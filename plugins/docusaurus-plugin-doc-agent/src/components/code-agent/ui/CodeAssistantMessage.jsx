@@ -69,7 +69,7 @@ function buildSegments(message) {
             .map(({ item, kind, index }) => {
                 const isRound = kind === 'round';
                 const type = item?.type;
-                const text = type === 'tool'
+                const text = type === 'tool' || item?.status === 'tool_calls'
                     ? ''
                     : typeof item?.text === 'string' ? item.text.trim() : '';
                 const hasToolLabel = type === 'tool' && typeof item?.label === 'string' && item.label.length > 0;

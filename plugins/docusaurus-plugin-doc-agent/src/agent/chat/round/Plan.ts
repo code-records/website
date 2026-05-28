@@ -1,4 +1,4 @@
-﻿import type { AgentEvent } from '../../Agent';
+import type { AgentEvent } from '../../Agent';
 import { Action } from './Action';
 import { Round, type RoundJSON } from './Round';
 
@@ -54,7 +54,8 @@ export class Plan {
     apply(event: AgentEvent): Round | null {
         if (event.type === 'agent_error') {
             const round = this.ensureRound();
-            round.add(Action.fromAgentEvent(event) as Action);
+            const action = Action.fromAgentEvent(event) as Action;
+            round.add(action);
             this.status = 'failed';
             this.finishOpenRound();
             return round;
@@ -142,6 +143,5 @@ export class Plan {
             last.finish();
         }
     }
+
 }
-
-
