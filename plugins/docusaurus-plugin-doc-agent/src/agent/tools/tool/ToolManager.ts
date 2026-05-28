@@ -2,7 +2,7 @@ import type { Message } from '../../chat/Message';
 import type { Agent } from '../../Agent';
 import type { Model, ModelToolCall } from '../../model/Model';
 import { ToolError } from '../../utils/errors';
-import type { AskModel, Tool, ToolDefinition, ToolDisplay, ToolDisplayPhase, ToolResult } from './Tool';
+import type { AskModel, Tool, ToolDefinition, ToolResult } from './Tool';
 import { SubAgentTool } from '../SubAgentTool';
 import { ToolRegistry } from './ToolRegistry';
 import { ToolRunner, type CompletedToolRunRecord } from './ToolRunner';
@@ -54,28 +54,11 @@ export class ToolManager {
         return this.registry.require(name);
     }
 
-    createDisplay(call: ModelToolCall, phase: ToolDisplayPhase = 'start'): ToolDisplay {
+    createLabel(call: ModelToolCall): string {
         const tool = this.registry.require(call.name);
-        return tool.createDisplay(call.input, {
+        return tool.createLabel(call.input, {
             call,
             input: call.input,
-            phase,
-        });
-    }
-
-    updateDisplay(
-        display: ToolDisplay,
-        call: ModelToolCall,
-        phase: ToolDisplayPhase,
-        payload: { error?: Error; result?: ToolResult } = {},
-    ): ToolDisplay {
-        const tool = this.registry.require(call.name);
-        return tool.updateDisplay(display, phase, {
-            call,
-            error: payload.error,
-            input: call.input,
-            phase,
-            result: payload.result,
         });
     }
 
@@ -84,18 +67,13 @@ export class ToolManager {
     }
 
     async runCall(call: ModelToolCall, timeoutMs?: number): Promise<ToolResult>;
-    async runCall(call: ModelToolCall, display?: ToolDisplay, timeoutMs?: number): Promise<ToolResult>;
-    async runCall(call: ModelToolCall, displayOrTimeout?: ToolDisplay | number, timeoutMs?: number): Promise<ToolResult> {
-        return (await this.runCallRecord(call, displayOrTimeout as ToolDisplay, timeoutMs)).result;
+    async runCall(call: ModelToolCall, timeoutMs?: number): Promise<ToolResult> {
+        return (await this.runCallRecord(call, timeoutMs)).result;
     }
 
     async runCallRecord(call: ModelToolCall, timeoutMs?: number): Promise<CompletedToolRunRecord>;
-    async runCallRecord(call: ModelToolCall, display?: ToolDisplay, timeoutMs?: number): Promise<CompletedToolRunRecord>;
-    async runCallRecord(call: ModelToolCall, displayOrTimeout?: ToolDisplay | number, timeoutMs?: number): Promise<CompletedToolRunRecord> {
-        const display = typeof displayOrTimeout === 'number' ? undefined : displayOrTimeout;
-        const resolvedTimeoutMs = typeof displayOrTimeout === 'number'
-            ? displayOrTimeout
-            : timeoutMs ?? this.defaultTimeoutMs;
+    async runCallRecord(call: ModelToolCall, timeoutMs?: number): Promise<CompletedToolRunRecord> {
+        const resolvedTimeoutMs = timeoutMs ?? this.defaultTimeoutMs;
         const runner = new ToolRunner({
             context: this.context,
             createAsk: this.createAsk,
@@ -105,7 +83,7 @@ export class ToolManager {
             signal: this.signal,
         });
 
-        const record = await runner.runCallRecord(call, display, resolvedTimeoutMs);
+        const record = await runner.runCallRecord(call, resolvedTimeoutMs);
         if (record.result === undefined) {
             throw new ToolError(call.name, `Tool ${call.name} did not return a result`);
         }

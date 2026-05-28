@@ -85,7 +85,7 @@ for round in maxRounds:
      ├── status === 'continue'
      │     └── [模型输出被截断或只产出过渡说明] ──> 在 runMessages 追加明确续跑指令 ──> 进入下一轮 round
      │
-     └── status === 'tool'
+     └── status === 'tool_calls'
            └── [触发工具调用] 
                  ├── 提取 ModelToolCall 动作
                  ├── 触发并并发执行 ToolManager.runCall()
@@ -274,3 +274,5 @@ model (模型)
 *   `loop.ts`：标准 Agent 状态机驱动器，协调 model、tool 和 sub-agent 的并发流转。
 *   `helper.ts`：`loop` 内部局部的辅助纯函数，主要用于事件包装、action 合并以及工具回问工厂。
 *   `Context.ts`：**空文件**。为了防止开发人员在 TS 层面引入第二状态源或第二线性消息缓存，该文件故意留空不写任何代码。所有关于上下文流转的规则和核心设计理念（Message-driven）均已在本文档（README.md）中进行了终极定义与沉淀。
+
+

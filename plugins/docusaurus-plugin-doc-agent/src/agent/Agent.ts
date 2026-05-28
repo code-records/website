@@ -3,7 +3,7 @@ import { OpenAIModel } from './model/OpenAIModel';
 import { ClaudeModel } from './model/ClaudeModel';
 import { GeminiModel } from './model/GeminiModel';
 import { Message } from './chat/Message';
-import type { ContextPatch, Tool, ToolDisplay, ToolEvent, ToolResult } from './tools/tool/Tool';
+import type { ContextPatch, Tool, ToolEvent, ToolResult } from './tools/tool/Tool';
 import { CompressTool } from './tools/CompressTool';
 import { MakePlanTool, UpdatePlanTool } from './tools/PlanTool';
 import { ScheduleTool } from './tools/ScheduleTool';
@@ -31,8 +31,8 @@ export interface AgentContext {
 export type AgentEvent =
     | { type: 'agent_start'; agent: string }
     | { type: 'model_event'; agent: string; event: ModelEvent }
-    | { type: 'tool_start'; agent: string; tool: string; callId: string; display?: ToolDisplay }
-    | { type: 'tool_done'; agent: string; tool: string; callId: string; display?: ToolDisplay; result: ToolResult }
+    | { type: 'tool_start'; agent: string; tool: string; callId: string; label: string }
+    | { type: 'tool_done'; agent: string; tool: string; callId: string; label: string; result: ToolResult }
     | { type: 'tool_event'; agent: string; tool: string; event: ToolEvent }
     | { type: 'context_patch'; agent: string; tool: string; patch: ContextPatch }
     | { type: 'sub_agent_start'; agent: string; subAgent: string }
@@ -128,12 +128,17 @@ export abstract class Agent {
 
         try {
             runAssistant = this.ensureCurrentAssistant(input.messages);
+            const plan = runAssistant.plan;
+            if (plan === undefined) {
+                throw new Error('Agent.run() requires the active assistant Message to have a Plan');
+            }
             let finalResponse: ModelResponse | undefined;
 
             for await (const event of loop({
                 agentName: this.name,
                 model: this.model,
                 maxRounds: this.context.maxRounds,
+                plan,
                 tools: [...this.defaultTools(), ...this.tools],
                 subAgents: this.subAgents,
                 system: this.systemPrompt,
@@ -141,23 +146,24 @@ export abstract class Agent {
                 signal: input.signal ?? this.context.signal,
                 toolTimeoutMs: this.context.toolTimeoutMs,
             })) {
-                this.applyEventToAssistantMessage(runAssistant, event);
                 if (event.type === 'model_event' && event.event.type === 'done') {
-                    if (event.event.response.status === 'final') {
+                    if (event.event.response.responseStatus === 'final') {
                         finalResponse = event.event.response;
                     }
                 }
                 yield event;
             }
 
+            const doneEvent: AgentEvent = { type: 'agent_done', agent: this.name, response: finalResponse };
             runAssistant.finish();
-            runAssistant.plan?.apply({ type: 'agent_done', agent: this.name, response: finalResponse });
-            yield { type: 'agent_done', agent: this.name, response: finalResponse };
+            plan.apply(doneEvent);
+            yield doneEvent;
         } catch (error) {
             const err = toError(error);
+            const errorEvent: AgentEvent = { type: 'agent_error', agent: this.name, error: err };
             runAssistant?.fail(err.message);
-            runAssistant?.plan?.apply({ type: 'agent_error', agent: this.name, error: err });
-            yield { type: 'agent_error', agent: this.name, error: err };
+            runAssistant?.plan?.apply(errorEvent);
+            yield errorEvent;
         }
     }
 
@@ -180,22 +186,14 @@ export abstract class Agent {
     }
     /**
      * 获取并校验当前正在运行的 assistant 消息。
-     * 核心前置断言：传入的消息列表快照尾部必须是一个处于激活状态（isActive）的助手消息。
+     * 核心前置断言：传入的消息列表快照尾部必须是一个处于激活状态的助手消息。
      */
     private ensureCurrentAssistant(messages: readonly Message[]): Message {
         const last = messages[messages.length - 1];
-        if (last?.role === 'assistant' && last.plan?.isActive === true) {
+        if (last?.role === 'assistant' && last.plan?.status === 'active') {
             return last;
         }
         throw new Error('Agent.run() requires messages to end with an active assistant Message');
     }
-
-    /**
-     * 将 Agent 运行时事件应用到当前的助理消息中。
-     * 用以就地（in-place）回放事件以推进其 Plan/Round/Action 状态。
-     */
-    private applyEventToAssistantMessage(assistant: Message, event: AgentEvent): void {
-        assistant.plan?.apply(event);
-    }
-
 }
+

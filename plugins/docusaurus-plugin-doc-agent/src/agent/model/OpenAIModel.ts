@@ -4,7 +4,7 @@ import {
     type ModelConfig,
     type ModelEvent,
     type ModelRequest,
-    type ModelResponseStatus,
+    type ModelResponseKind,
     type ProviderMessage,
     type ProviderRequestBody,
     type ProviderResponseBody,
@@ -136,13 +136,13 @@ export class OpenAIModel extends Model {
             response: {
                 actions,
                 content: finalContent,
-                status: this.resolveStatus(providerResponse),
+                responseStatus: this.resolveResponseStatus(providerResponse),
             },
         };
     }
 
-    protected resolveStatus(response: JsonObject): ModelResponseStatus {
-        if (optionalArray(response.output).some(o => isJsonObject(o) && o.type === 'function_call')) return 'tool';
+    protected resolveResponseStatus(response: JsonObject): ModelResponseKind {
+        if (optionalArray(response.output).some(o => isJsonObject(o) && o.type === 'function_call')) return 'tool_calls';
         if (optionalString(response.status) === 'incomplete') return 'continue';
         return 'final';
     }
@@ -277,3 +277,7 @@ export class OpenAIModel extends Model {
 function isJsonObject(value: unknown): value is JsonObject {
     return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
+
+
+
+

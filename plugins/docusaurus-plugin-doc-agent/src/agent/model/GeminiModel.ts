@@ -5,7 +5,7 @@ import {
     type ModelEvent,
     type ModelRequest,
     type ModelResponse,
-    type ModelResponseStatus,
+    type ModelResponseKind,
     type ProviderMessage,
     type ProviderRequestBody,
     type ProviderResponseBody,
@@ -72,15 +72,15 @@ export class GeminiModel extends Model {
             response: {
                 actions,
                 content,
-                status: this.resolveStatus({ finishReason, parts }),
+                responseStatus: this.resolveResponseStatus({ finishReason, parts }),
             },
         };
     }
 
-    protected resolveStatus(response: JsonObject): ModelResponseStatus {
+    protected resolveResponseStatus(response: JsonObject): ModelResponseKind {
         const finishReason = optionalString(response.finishReason);
         const parts = Array.isArray(response.parts) ? response.parts as JsonValue[] : [];
-        if (parts.some(p => isJsonObject(p) && p.functionCall !== undefined)) return 'tool';
+        if (parts.some(p => isJsonObject(p) && p.functionCall !== undefined)) return 'tool_calls';
         if (finishReason === 'MAX_TOKENS') return 'continue';
         return 'final';
     }
@@ -196,7 +196,7 @@ export class GeminiModel extends Model {
             return {
                 actions: [],
                 content: '',
-                status: 'final',
+                responseStatus: 'final',
             };
         }
 
@@ -209,7 +209,7 @@ export class GeminiModel extends Model {
         return {
             actions,
             content: parsed.content,
-            status: this.resolveStatus({ finishReason: parsed.finishReason, parts: parsed.parts }),
+            responseStatus: this.resolveResponseStatus({ finishReason: parsed.finishReason, parts: parsed.parts }),
         };
     }
 
@@ -355,3 +355,7 @@ function normalizeSchema(value: JsonValue): JsonObject {
 function isJsonObject(value: unknown): value is JsonObject {
     return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
+
+
+
+

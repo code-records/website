@@ -4,31 +4,31 @@ import type { ActionJSON, ActionType } from './round/Action';
 import type { PlanJSON, PlanStatus } from './round/Plan';
 import type { RoundJSON } from './round/Round';
 import type { ModelToolCall } from '../model/Model';
-import type { JsonObject, JsonValue, ToolDisplay, ToolEvent } from '../tools/tool/Tool';
+import type { JsonObject, JsonValue, ToolEvent } from '../tools/tool/Tool';
 
-export interface SessionMeta {
+export interface MessagesMeta {
     [key: string]: string | number | boolean | null;
 }
 
-export interface SessionData {
+export interface MessagesData {
     history: HistoryJSON;
-    meta: SessionMeta;
+    meta: MessagesMeta;
 }
 
-export interface SessionListItem {
+export interface MessagesListItem {
     key: string;
     messageCount: number;
-    meta: SessionMeta;
+    meta: MessagesMeta;
 }
 
-export interface SessionStoreOptions {
+export interface MessagesStorageOptions {
     maxAgeMs?: number;
     maxSessions?: number;
     prefix?: string;
     storage?: Storage | null;
 }
 
-export class SessionStore {
+export class MessagesStorage {
     private readonly maxAgeMs: number;
     private readonly maxSessions: number;
     private readonly prefix: string;
@@ -39,17 +39,17 @@ export class SessionStore {
         maxSessions = 20,
         prefix = 'agent_session:',
         storage = getDefaultStorage(),
-    }: SessionStoreOptions = {}) {
+    }: MessagesStorageOptions = {}) {
         this.maxAgeMs = maxAgeMs;
         this.maxSessions = maxSessions;
         this.prefix = prefix;
         this.storage = storage;
     }
 
-    save(key: string, history: History, meta: SessionMeta = {}): void {
+    save(key: string, history: History, meta: MessagesMeta = {}): void {
         if (this.storage === null) return;
 
-        const data: SessionData = {
+        const data: MessagesData = {
             history: history.toJSON(),
             meta: {
                 ...meta,
@@ -70,14 +70,14 @@ export class SessionStore {
         }
     }
 
-    load(key: string): SessionData | null {
+    load(key: string): MessagesData | null {
         if (this.storage === null) return null;
 
         try {
             const raw = this.storage.getItem(this.toStorageKey(key));
             if (raw === null) return null;
             const parsed: unknown = JSON.parse(raw);
-            return parseSessionData(parsed);
+            return parseMessagesData(parsed);
         } catch {
             return null;
         }
@@ -100,10 +100,10 @@ export class SessionStore {
         }
     }
 
-    list(): SessionListItem[] {
+    list(): MessagesListItem[] {
         if (this.storage === null) return [];
 
-        const items: SessionListItem[] = [];
+        const items: MessagesListItem[] = [];
         for (const storageKey of this.keys()) {
             const key = storageKey.slice(this.prefix.length);
             const data = this.load(key);
@@ -153,7 +153,7 @@ export class SessionStore {
     }
 }
 
-function parseSessionData(value: unknown): SessionData | null {
+function parseMessagesData(value: unknown): MessagesData | null {
     if (!isRecord(value)) return null;
     const history = parseHistory(value.history);
     if (history === null) return null;
@@ -202,14 +202,17 @@ function parsePlan(value: unknown): PlanJSON | null {
 function parseRound(value: unknown): RoundJSON | null {
     if (!isRecord(value) || !Array.isArray(value.actions)) return null;
 
+    const count = typeof value.count === 'number' ? value.count : undefined;
+    const status = parseRoundStatus(value.status);
     const text = typeof value.text === 'string' ? value.text : undefined;
 
     return {
         actions: value.actions
             .map(parseAction)
             .filter(action => action !== null),
+        count: count ?? 0,
         done: value.done === true,
-        status: parseRoundStatus(value.status),
+        status,
         ...(text !== undefined ? { text } : {}),
     };
 }
@@ -220,26 +223,18 @@ function parseAction(value: unknown): ActionJSON | null {
     if (type === null) return null;
 
     const call = parseToolCall(value.call);
-    const display = parseToolDisplay(value.display);
     const event = parseToolEvent(value.event);
     const label = typeof value.label === 'string' ? value.label : undefined;
     const text = typeof value.text === 'string' ? value.text : undefined;
 
     return {
         ...(call !== null ? { call } : {}),
-        ...(display !== null ? { display } : {}),
         done: value.done === true,
         ...(event !== null ? { event } : {}),
         ...(label !== undefined ? { label } : {}),
         ...(text !== undefined ? { text } : {}),
         type,
     };
-}
-
-function parseToolDisplay(value: unknown): ToolDisplay | null {
-    const display = parseJsonObject(value);
-    if (display === null || typeof display.title !== 'string') return null;
-    return display as ToolDisplay;
 }
 
 function parseToolCall(value: unknown): ModelToolCall | null {
@@ -275,7 +270,7 @@ function parsePlanStatus(value: unknown): PlanStatus {
 }
 
 function parseRoundStatus(value: unknown): RoundJSON['status'] {
-    if (value === 'tool' || value === 'continue' || value === 'final') {
+    if (value === 'tool_calls' || value === 'continue' || value === 'final') {
         return value;
     }
     return undefined;
@@ -293,10 +288,10 @@ function parseActionType(value: unknown): ActionType | null {
     return null;
 }
 
-function parseMeta(value: unknown): SessionMeta {
+function parseMeta(value: unknown): MessagesMeta {
     if (!isRecord(value)) return {};
 
-    const meta: SessionMeta = {};
+    const meta: MessagesMeta = {};
     for (const [key, item] of Object.entries(value)) {
         if (typeof item === 'string' || typeof item === 'number' || typeof item === 'boolean' || item === null) {
             meta[key] = item;

@@ -1,13 +1,13 @@
 import type { AgentEvent } from '../Agent';
 import type { Agent } from '../Agent';
 import { Message } from '../chat/Message';
-import type { Model, ModelAction } from '../model/Model';
-import type { ModelResponseStatus } from '../model/Model';
+import type { Plan } from '../chat/round/Plan';
+import type { Round } from '../chat/round/Round';
+import type { Model } from '../model/Model';
 import type { ModelToolCall } from '../model/Model';
-import type { Tool, ToolDisplay, ToolResult } from '../tools/tool/Tool';
-import type { CompletedToolRunRecord } from '../tools/tool/ToolRunner';
+import type { Tool, ToolResult } from '../tools/tool/Tool';
 import { ToolManager } from '../tools/tool/ToolManager';
-import { applyContextPatch, createAskFactory, mergeAction, toAgentModelEvent } from './helper';
+import { applyContextPatch, createAskFactory, toAgentModelEvent } from './helper';
 import { logger } from '../utils/logger';
 
 // ─── 类型 (公开 API) ───────────────────────────────────
@@ -17,6 +17,7 @@ export interface LoopOptions {
     maxRounds?: number;
     messages: readonly Message[];
     model: Model;
+    plan: Plan;
     signal?: AbortSignal;
     subAgents?: Agent[];
     system: string;
@@ -29,9 +30,8 @@ export interface LoopOptions {
 // 一个工具调用 promise 已完成
 interface SettledToolCall {
     call: ModelToolCall;
-    display?: ToolDisplay;
+    label: string;
     result: ToolResult;
-    status: CompletedToolRunRecord['status'];
     token: symbol;
     tool: string;
 }
@@ -47,14 +47,13 @@ export async function* loop(options: LoopOptions): AsyncGenerator<AgentEvent, vo
         agentName = 'agent',
         maxRounds = 16,
         model,
+        plan,
         signal,
         subAgents = [],
         system,
         toolTimeoutMs,
         tools,
     } = options;
-
-    logger('agent.loop.start', { agentName, maxRounds, messageCount: options.messages.length });
 
     // 1. 本次运行使用 Message 引用作为状态源；临时追加只影响当前 run。
     let runMessages = [...options.messages];
@@ -74,11 +73,8 @@ export async function* loop(options: LoopOptions): AsyncGenerator<AgentEvent, vo
     });
 
     // 4. 一轮 round = 一次 model 调用，以及可能跟随的一批工具执行。
-    for (let round = 0; round < maxRounds && !signal?.aborted; round++) {
-        logger('agent.loop.round.start', { round });
-        const actions: ModelAction[] = [];
-        const toolCalls: ModelToolCall[] = [];
-        let status: ModelResponseStatus = 'final';
+    for (let count = 1; count <= maxRounds && !signal?.aborted; count++) {
+        let round: Round | undefined;
         // 5. 把当前完整上下文交给 model；model 永远以统一事件流返回。
         for await (const event of model.stream({
             system,
@@ -87,59 +83,49 @@ export async function* loop(options: LoopOptions): AsyncGenerator<AgentEvent, vo
             signal,
         })) {
             // 6. 先把 model 事件透传给上层 UI/日志，让界面可以实时更新。
-            yield toAgentModelEvent(agentName, event);
-
-            if (event.type === 'content') {
-                logger('agent.loop.round.model_content', { delta: event.content });
+            const agentEvent = toAgentModelEvent(agentName, event);
+            round = plan.apply(agentEvent) ?? round;
+            if (round !== undefined) {
+                round.count = count;
             }
-
-            if (event.type === 'action' && event.action.type === 'thinking') {
-                logger('agent.loop.round.model_thinking_delta', { content: event.action.content });
-            }
-
-            // 7. thinking/tool 这类动作进入本轮 actions；正文文本走 content。
-            if (event.type === 'action') {
-                mergeAction(actions, event.action);
-            }
+            yield agentEvent;
 
             // 8. done 表示本轮 model 输出结束；保存状态、raw 消息和最终 actions。
-            if (event.type === 'done') {
-                status = event.response.status;
-                actions.splice(0, actions.length, ...event.response.actions);
-                logger('agent.loop.round.model_done', { status, actions: event.response.actions.map(a => a.type) });
-            }
-
             // 9. model 明确报错时，中断 loop，让 Agent.run 包装成 agent_error。
             if (event.type === 'error') {
                 throw event.error;
             }
         }
 
-        // 10. 从本轮 actions 中提取工具调用；loop 只执行 tool action。
-        toolCalls.push(...actions
-            .filter((action): action is Extract<ModelAction, { type: 'tool' }> => action.type === 'tool')
-            .map(action => action.call));
+        if (round === undefined || round.status === undefined) {
+            throw new Error('Model.stream() ended without updating the current round status');
+        }
+
+        // 10. 从本轮 round 中提取工具调用；loop 只执行 tool action。
+        const toolCalls = getRoundToolCalls(round);
 
         // 11. final 表示模型已经给出最终回复，本次 agent loop 结束。
-        if (status === 'final') {
-            logger('agent.loop.final', { agentName });
+        if (round.status === 'final') {
+            round.finish();
+            loggerRoundDone(round);
             return;
         }
 
         // 12. continue 表示模型输出被截断，或只产出了过渡说明；追加明确续跑指令让模型继续。
-        if (status === 'continue') {
+        if (round.status === 'continue') {
+            round.finish();
+            loggerRoundDone(round);
             runMessages = [...runMessages, Message.user('继续完成上一轮未完成的任务。若需要工具，请直接调用工具；否则直接续写最终回答，不要只说明你将继续。')];
             continue;
         }
 
         // 13. tool 表示模型要求执行工具；先把 assistant 的 raw 写入上下文。
-        if (status === 'tool') {
+        if (round.status === 'tool_calls') {
             if (toolCalls.length === 0) {
-                throw new Error('Model returned tool status without tool calls');
+                throw new Error('Model returned tool_calls response without tool calls');
             }
 
             // 14. 启动全部工具调用；这里先发 tool_start，再并发等待结果。
-            logger('agent.loop.tools.start', { toolCalls: toolCalls.map(c => c.name) });
             const pending: Array<{
                 promise: Promise<SettledToolCall>;
                 token: symbol;
@@ -148,25 +134,26 @@ export async function* loop(options: LoopOptions): AsyncGenerator<AgentEvent, vo
             for (const call of toolCalls) {
                 // 15. 先确认工具存在；实际 ask 注入和执行交给 ToolManager。
                 toolManager.require(call.name);
-                const display = toolManager.createDisplay(call, 'start');
+                const label = toolManager.createLabel(call);
 
-                yield {
+                const toolStartEvent: AgentEvent = {
                     type: 'tool_start',
                     agent: agentName,
                     callId: call.id,
-                    display,
+                    label,
                     tool: call.name,
                 };
+                plan.apply(toolStartEvent);
+                yield toolStartEvent;
 
                 // 16. 每个工具拿到同一时刻的上下文快照；完成顺序可以不同。
                 const token = Symbol(call.id);
                 pending.push({
                     token,
-                    promise: toolManager.runCallRecord(call, display).then(record => ({
+                    promise: toolManager.runCallRecord(call).then(record => ({
                         call,
-                        display,
+                        label,
                         result: record.result,
-                        status: record.status,
                         token,
                         tool: call.name,
                     })),
@@ -179,56 +166,71 @@ export async function* loop(options: LoopOptions): AsyncGenerator<AgentEvent, vo
                 const index = pending.findIndex(item => item.token === settled.token);
                 if (index >= 0) pending.splice(index, 1);
 
-                const { call, result, status, tool } = settled;
-                const phase = status === 'done' ? 'done' : 'error';
-                const display = settled.display
-                    ? toolManager.updateDisplay(settled.display, call, phase, { result })
-                    : undefined;
-                logger('agent.loop.tool.done', { tool, callId: call.id, resultSummary: result.result });
+                const { call, label, result, tool } = settled;
 
                 // 18. 通知工具完成；UI 可以更新对应 action 的状态和展示文本。
-                yield {
+                const toolDoneEvent: AgentEvent = {
                     type: 'tool_done',
                     agent: agentName,
                     callId: call.id,
-                    display,
+                    label,
                     result,
                     tool,
                 };
+                plan.apply(toolDoneEvent);
+                yield toolDoneEvent;
 
                 // 19. 工具可返回额外事件，例如搜索结果、文件变更、调度状态等。
                 for (const event of result.events ?? []) {
-                    yield {
+                    const toolEvent: AgentEvent = {
                         type: 'tool_event',
                         agent: agentName,
                         event,
                         tool,
                     };
+                    plan.apply(toolEvent);
+                    yield toolEvent;
                 }
 
                 // 20. 工具如需改写上下文，统一通过 contextPatch 交给 loop 应用。
                 if (result.contextPatch !== undefined) {
                     runMessages = applyContextPatch(runMessages, result.contextPatch);
                     toolManager.setContext(runMessages);
-                    yield {
+                    const contextPatchEvent: AgentEvent = {
                         type: 'context_patch',
                         agent: agentName,
                         patch: result.contextPatch,
                         tool,
                     };
+                    plan.apply(contextPatchEvent);
+                    yield contextPatchEvent;
                 }
 
                 // 21. 工具结果通过 tool_done 事件写入当前 assistant round；下一轮 model 从 Message 读取。
             }
 
             // 22. 工具结果已写回上下文，进入下一轮 model 调用。
+            round.finish();
+            loggerRoundDone(round);
             continue;
         }
 
         // 23. 防御未知状态，避免静默退出或死循环。
-        throw new Error(`Unsupported model response status: ${status}`);
+        throw new Error(`Unsupported model response status: ${round.status}`);
     }
 
     // 24. 超过最大轮数通常说明模型一直在请求工具或续写。
     throw new Error(`Agent loop exceeded maxRounds=${maxRounds}`);
 }
+
+function getRoundToolCalls(round: Round): ModelToolCall[] {
+    return round.actions
+        .map(action => action.call)
+        .filter((call): call is ModelToolCall => call !== undefined);
+}
+
+function loggerRoundDone(round: Round): void {
+    logger('agent.loop.round.done', round.toJSON());
+}
+
+

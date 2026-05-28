@@ -1,6 +1,6 @@
 import type { AgentEvent } from '../../Agent';
 import type { ModelToolCall } from '../../model/Model';
-import type { ToolDisplay, ToolEvent } from '../../tools/tool/Tool';
+import type { ToolEvent } from '../../tools/tool/Tool';
 
 export type ActionType =
     | 'context'
@@ -11,7 +11,6 @@ export type ActionType =
 export interface ActionJSON {
     callId?: string;
     call?: ModelToolCall;
-    display?: ToolDisplay;
     done: boolean;
     event?: ToolEvent;
     label?: string;
@@ -22,7 +21,6 @@ export interface ActionJSON {
 export class Action {
     callId?: string;
     call?: ModelToolCall;
-    display?: ToolDisplay;
     done = false;
     event?: ToolEvent;
     label = '';
@@ -34,7 +32,6 @@ export class Action {
         this.callId = json.callId;
         this.text = json.text ?? '';
         this.call = json.call;
-        this.display = json.display;
         this.done = json.done;
         this.event = json.event;
         this.label = json.label ?? '';
@@ -49,18 +46,16 @@ export class Action {
             if (event.type === 'tool_start') {
                 return new Action({
                     callId: event.callId,
-                    display: event.display,
                     done: false,
-                    label: event.tool,
+                    label: event.label,
                     type: 'tool',
                 });
             }
             if (event.type === 'tool_done') {
                 return new Action({
                     callId: event.callId,
-                    display: event.display,
                     done: true,
-                    label: event.tool,
+                    label: event.label,
                     text: event.result.result,
                     type: 'tool',
                 });
@@ -76,7 +71,7 @@ export class Action {
             if (event.type === 'context_patch') {
                 return new Action({
                     done: true,
-                    label: 'context',
+                    label: '上下文更新',
                     text: event.patch.type,
                     type: 'context',
                 });
@@ -84,7 +79,7 @@ export class Action {
             if (event.type === 'agent_error') {
                 return new Action({
                     done: true,
-                    label: 'error',
+                    label: '错误',
                     text: event.error.message,
                     type: 'error',
                 });
@@ -96,6 +91,7 @@ export class Action {
         if (modelEvent.type === 'action' && modelEvent.action.type === 'thinking') {
             return new Action({
                 done: false,
+                label: '思考',
                 text: modelEvent.action.content,
                 type: 'thinking',
             });
@@ -112,7 +108,7 @@ export class Action {
         if (modelEvent.type === 'error') {
             return new Action({
                 done: true,
-                label: 'model',
+                label: '模型错误',
                 text: modelEvent.error.message,
                 type: 'error',
             });
@@ -132,7 +128,6 @@ export class Action {
         return {
             callId: this.callId,
             call: this.call,
-            display: this.display,
             done: this.done,
             event: this.event,
             label: this.label.length > 0 ? this.label : undefined,

@@ -1,7 +1,5 @@
-import type { JsonObject } from '../tools/tool/Tool';
-
 export interface Logger {
-    (event: string, data?: JsonObject | null): void;
+    (event: string, data?: object | null): void;
 }
 
 let enabled = true; // 默认开启日志，让链路日志在调试中默认可见！

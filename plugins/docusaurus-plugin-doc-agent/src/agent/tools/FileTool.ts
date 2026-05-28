@@ -1,10 +1,8 @@
 import {
     Tool,
     type JsonObject,
-    type ToolDisplay,
-    type ToolDisplayContext,
-    type ToolDisplayPhase,
     type ToolInput,
+    type ToolLabelContext,
     type ToolPromptSchema,
     type ToolResult,
     type ToolRunContext,
@@ -55,23 +53,9 @@ export abstract class FileTool extends Tool {
         type: 'object',
     };
 
-    createDisplay(input: ToolInput, context: ToolDisplayContext = { input, phase: 'start' }): ToolDisplay {
+    createLabel(input: ToolInput, context: ToolLabelContext = { input }): string {
         const parsed = parseFileToolInput(input);
-        return {
-            title: fileOperationTitle(parsed.operation),
-            subtitle: parsed.path,
-            statusText: fileOperationStatusText(parsed.operation, context.phase),
-            variant: context.phase === 'error' ? 'danger' : context.phase === 'done' ? 'success' : 'default',
-        };
-    }
-
-    updateDisplay(display: ToolDisplay, phase: ToolDisplayPhase, context: ToolDisplayContext): ToolDisplay {
-        const parsed = parseFileToolInput(context.input);
-        display.title = fileOperationTitle(parsed.operation);
-        display.subtitle = parsed.path;
-        display.statusText = fileOperationStatusText(parsed.operation, phase);
-        display.variant = phase === 'error' ? 'danger' : phase === 'done' ? 'success' : 'default';
-        return display;
+        return fileOperationTitle(parsed.operation);
     }
 
     protected async execute(input: ToolInput, context: ToolRunContext): Promise<ToolResult> {
@@ -114,29 +98,6 @@ function fileOperationTitle(operation: FileToolOperation): string {
         case 'write':
             return 'Write file';
     }
-}
-
-function fileOperationStatusText(operation: FileToolOperation, phase: ToolDisplayPhase): string {
-    if (phase === 'error') {
-        return fileOperationVerb(operation, 'failed');
-    }
-    if (phase === 'done') {
-        return fileOperationVerb(operation, 'done');
-    }
-    return fileOperationVerb(operation, 'running');
-}
-
-function fileOperationVerb(operation: FileToolOperation, state: 'done' | 'failed' | 'running'): string {
-    const text = {
-        delete: { done: '删除完成', failed: '删除失败', running: '删除中' },
-        exists: { done: '检查完成', failed: '检查失败', running: '检查中' },
-        list: { done: '读取完成', failed: '读取失败', running: '读取中' },
-        read: { done: '读取完成', failed: '读取失败', running: '读取中' },
-        stat: { done: '检查完成', failed: '检查失败', running: '检查中' },
-        write: { done: '写入完成', failed: '写入失败', running: '写入中' },
-    } satisfies Record<FileToolOperation, Record<typeof state, string>>;
-
-    return text[operation][state];
 }
 
 function parseFileToolInput(input: ToolInput): FileToolInput {

@@ -39,7 +39,7 @@ graph TD
     subgraph "聊天层 (chat)"
         Message["Message"]
         History["History"]
-        SessionStore["SessionStore"]
+        MessagesStorage["MessagesStorage"]
         Plan["Plan"]
         Round["Round"]
         Action["Action"]
@@ -69,7 +69,7 @@ graph TD
 | **core** | [loop.ts](file:///D:/_my/code-records/website/plugins/docusaurus-plugin-doc-agent/src/agent/core/loop.ts), [helper.ts](file:///D:/_my/code-records/website/plugins/docusaurus-plugin-doc-agent/src/agent/core/helper.ts) | 核心编排循环：model ↔ tools ↔ sub-agents 交互协议 | 254 |
 | **model** | [Model.ts](file:///D:/_my/code-records/website/plugins/docusaurus-plugin-doc-agent/src/agent/model/Model.ts) + 3 个 Provider | 统一 LLM 协议差异，stream-first 设计 | ~900 |
 | **tools** | [Tool.ts](file:///D:/_my/code-records/website/plugins/docusaurus-plugin-doc-agent/src/agent/tools/tool/Tool.ts) + Manager/Registry/Runner + 7 个具体工具 | 工具抽象、注册、执行、超时、调度 | ~1200 |
-| **chat** | [Message.ts](file:///D:/_my/code-records/website/plugins/docusaurus-plugin-doc-agent/src/agent/chat/Message.ts), [Chat.ts](file:///D:/_my/code-records/website/plugins/docusaurus-plugin-doc-agent/src/agent/chat/Chat.ts), Plan/Round/Action, [SessionStore.ts](file:///D:/_my/code-records/website/plugins/docusaurus-plugin-doc-agent/src/agent/chat/SessionStore.ts) | 消息建模、UI 状态追踪、会话持久化 | ~760 |
+| **chat** | [Message.ts](file:///D:/_my/code-records/website/plugins/docusaurus-plugin-doc-agent/src/agent/chat/Message.ts), [Chat.ts](file:///D:/_my/code-records/website/plugins/docusaurus-plugin-doc-agent/src/agent/chat/Chat.ts), Plan/Round/Action, [MessagesStorage.ts](file:///D:/_my/code-records/website/plugins/docusaurus-plugin-doc-agent/src/agent/chat/MessagesStorage.ts) | 消息建模、UI 状态追踪、会话持久化 | ~760 |
 
 ---
 
@@ -185,7 +185,7 @@ Message
 
 - `loop()` 的 `maxRounds` 硬限 + 超时上限
 - `ToolRunner.withTimeout()` 带 AbortController
-- `SessionStore` 的 QuotaExceeded → prune → retry
+- `MessagesStorage` 的 QuotaExceeded → prune → retry
 - `SettledToolCall` 用 `symbol` token 做 race 消歧
 
 ---
@@ -248,18 +248,18 @@ async runCall(call: ModelToolCall, timeoutMs = this.defaultTimeoutMs): Promise<T
 
 这导致 **content 被存储了两次**（`Message.content` 和 `Plan → Round → Action(type='content')`）。在 `expandMessageToProviderMessages()` 中需要小心避免重复输出。
 
-### ❌ 4.6 `SessionStore` 与 agent 核心强耦合
+### ❌ 4.6 `MessagesStorage` 与 agent 核心强耦合
 
-[SessionStore.ts](file:///D:/_my/code-records/website/plugins/docusaurus-plugin-doc-agent/src/agent/chat/SessionStore.ts) 有 **346 行**，其中超过一半（L156-337）是手写的防御性 JSON 解析逻辑（`parseMessage`, `parsePlan`, `parseRound`, `parseAction`, `parseToolCall` 等）。
+[MessagesStorage.ts](file:///D:/_my/code-records/website/plugins/docusaurus-plugin-doc-agent/src/agent/chat/MessagesStorage.ts) 有 **346 行**，其中超过一半（L156-337）是手写的防御性 JSON 解析逻辑（`parseMessage`, `parsePlan`, `parseRound`, `parseAction`, `parseToolCall` 等）。
 
 **问题**：
 - 这些解析函数本质是在做 JSON 结构的 runtime validation，但没有使用 zod/ajv 等库
 - 与 `Plan/Round/Action` 的 JSON 接口高度耦合，任何字段变更需要同步修改两处
-- SessionStore 是持久化关注点，不应与 agent 的运行时类型绑定这么紧
+- MessagesStorage 是持久化关注点，不应与 agent 的运行时类型绑定这么紧
 
 **建议**：
 - 使用 zod schema 统一定义 JSON 类型和校验
-- 或者至少让 `Plan.fromJSON()` / `Round.fromJSON()` / `Action.fromJSON()` 自身承担校验责任，SessionStore 只做 storage 层
+- 或者至少让 `Plan.fromJSON()` / `Round.fromJSON()` / `Action.fromJSON()` 自身承担校验责任，MessagesStorage 只做 storage 层
 
 ### ❌ 4.7 缺少测试基础设施
 
@@ -305,7 +305,7 @@ Tool 实例在 ToolRegistry 中被全局共享，但 `status`、`pauseRequested`
 | **可扩展性** | ⭐⭐⭐⭐⭐ | 新 Model / 新 Tool / 新 SubAgent 都是"加一个文件"级别 |
 | **流式设计** | ⭐⭐⭐⭐⭐ | AsyncGenerator 贯穿全栈，极其优雅 |
 | **创新性** | ⭐⭐⭐⭐ | AskModel、ScheduleTool-as-Tool、ContextPatch 都是好设计 |
-| **代码质量** | ⭐⭐⭐ | 注释完整，但 ClaudeModel 臃肿、SessionStore 手写校验 |
+| **代码质量** | ⭐⭐⭐ | 注释完整，但 ClaudeModel 臃肿、MessagesStorage 手写校验 |
 | **健壮性** | ⭐⭐⭐ | 有 maxRounds/timeout/abort，但工具状态并发安全和测试覆盖不足 |
 | **可维护性** | ⭐⭐⭐ | 扁平导出 + 双重 content 存储 + 空文件增加认知成本 |
 
@@ -319,6 +319,6 @@ Tool 实例在 ToolRegistry 中被全局共享，但 `status`、`pauseRequested`
 | 🔴 P0 | Tool 实例并发安全（去除实例可变状态） | tools | 中 |
 | 🟡 P1 | ClaudeModel 拆分 / roundActions 上提 | model | 中 |
 | 🟡 P1 | 添加 core loop + ToolRunner 的单测 | 全局 | 大 |
-| 🟢 P2 | SessionStore 使用 schema validation | chat | 中 |
+| 🟢 P2 | MessagesStorage 使用 schema validation | chat | 中 |
 | 🟢 P2 | index.ts 分层导出 | 全局 | 小 |
 | 🟢 P2 | 删除 Context.ts 空文件 | core | 极小 |

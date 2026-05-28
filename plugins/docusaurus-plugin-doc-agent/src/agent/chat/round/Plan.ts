@@ -1,4 +1,4 @@
-import type { AgentEvent } from '../../Agent';
+﻿import type { AgentEvent } from '../../Agent';
 import { Action } from './Action';
 import { Round, type RoundJSON } from './Round';
 
@@ -6,9 +6,6 @@ export type PlanStatus = 'active' | 'completed' | 'failed';
 
 export interface PlanJSON {
     expanded?: boolean;
-    hasContent?: boolean;
-    isActive?: boolean;
-    label?: string;
     rounds: RoundJSON[];
     status: PlanStatus;
 }
@@ -26,10 +23,6 @@ export class Plan {
         return this._rounds;
     }
 
-    get hasContent(): boolean {
-        return this._rounds.some(round => round.hasContent);
-    }
-
     get text(): string {
         return this._rounds
             .filter(round => round.status === 'final' || round.status === 'continue')
@@ -38,13 +31,14 @@ export class Plan {
             .join('');
     }
 
-    get isActive(): boolean {
-        return this.status === 'active';
+    get label(): string {
+        const toolCount = this._rounds.reduce((count, round) => count + round.toolCount, 0);
+        if (toolCount > 0) return `工作 ${toolCount} 步`;
+        return this.status === 'completed' ? '分析完毕' : '正在工作';
     }
 
-    get label(): string {
-        const last = this._rounds[this._rounds.length - 1];
-        return last?.label || (this.status === 'completed' ? '分析完毕' : '正在工作');
+    get currentRound(): Round | undefined {
+        return this._rounds[this._rounds.length - 1];
     }
 
     static fromJSON(json: PlanJSON): Plan {
@@ -57,41 +51,48 @@ export class Plan {
         return plan;
     }
 
-    apply(event: AgentEvent): void {
+    apply(event: AgentEvent): Round | null {
         if (event.type === 'agent_error') {
-            this.ensureRound().add(Action.fromAgentEvent(event) as Action);
+            const round = this.ensureRound();
+            round.add(Action.fromAgentEvent(event) as Action);
             this.status = 'failed';
             this.finishOpenRound();
-            return;
+            return round;
         }
 
         if (event.type === 'agent_done') {
             this.status = 'completed';
             this.finishOpenRound();
-            return;
+            return this.currentRound ?? null;
         }
 
         if (event.type === 'model_event' && event.event.type === 'content') {
-            this.ensureModelRound().appendText(event.event.content);
-            return;
+            const round = this.ensureModelRound();
+            round.appendText(event.event.content);
+            return round;
         }
 
         if (event.type === 'model_event' && event.event.type === 'done') {
-            this.ensureModelRound().status = event.event.response.status;
-            return;
+            const round = this.ensureModelRound();
+            round.status = event.event.response.responseStatus;
+            return round;
         }
 
         const action = Action.fromAgentEvent(event);
-        if (action === null) return;
+        if (action === null) return null;
 
         const round = event.type === 'model_event' ? this.ensureModelRound() : this.ensureRound();
         if (event.type === 'model_event' && event.event.type === 'action' && event.event.kind === 'update') {
-            if (round.updateLast(action)) return;
+            if (round.updateLast(action)) return round;
         }
         if (action.type === 'thinking' && round.appendToLast(action.type, action.text)) {
-            return;
+            return round;
+        }
+        if (action.type === 'tool' && round.updateTool(action)) {
+            return round;
         }
         round.add(action);
+        return round;
     }
 
     appendUserText(text: string): void {
@@ -112,9 +113,6 @@ export class Plan {
     toJSON(): PlanJSON {
         return {
             expanded: this.expanded,
-            hasContent: this.hasContent,
-            isActive: this.isActive,
-            label: this.label,
             rounds: this._rounds.map(round => round.toJSON()),
             status: this.status,
         };
@@ -145,3 +143,5 @@ export class Plan {
         }
     }
 }
+
+

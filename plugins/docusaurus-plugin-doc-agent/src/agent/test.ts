@@ -1,6 +1,6 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import { Model, type ModelEvent, type ModelRequest, type ModelResponseStatus } from './model/Model';
+import { Model, type ModelEvent, type ModelRequest, type ModelResponseKind } from './model/Model';
 import { Agent } from './Agent';
 import { Message } from './chat/Message';
 import { ToolRunContext } from './tools/tool/Tool';
@@ -31,7 +31,7 @@ class MockModel extends Model {
                 response: {
                     actions: [{ type: 'tool', call: { id: 'call_1', name: 'file', input: { operation: 'read', path: 'package.json' } } }],
                     content: '正在为您读取 package.json 文件...',
-                    status: 'tool'
+                    responseStatus: 'tool_calls'
                 }
             };
         } else {
@@ -49,13 +49,13 @@ class MockModel extends Model {
                 response: {
                     actions: [],
                     content: reply,
-                    status: 'final'
+                    responseStatus: 'final'
                 }
             };
         }
     }
 
-    protected resolveStatus(): ModelResponseStatus { return 'final'; }
+    protected resolveResponseStatus(): ModelResponseKind { return 'final'; }
     protected async request(): Promise<any> { return {}; }
     protected async *requestStream(): AsyncGenerator<any> { }
     protected expandMessageToProviderMessages(): any[] { return []; }
@@ -146,3 +146,5 @@ async function runAgentTest() {
 // 启动测试
 // npx tsx "$pwd/test.ts"
 runAgentTest();
+
+

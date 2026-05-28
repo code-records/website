@@ -4,7 +4,7 @@ import {
     type ModelConfig,
     type ModelEvent,
     type ModelRequest,
-    type ModelResponseStatus,
+    type ModelResponseKind,
     type ProviderMessage,
     type ProviderRequestBody,
     type ProviderResponseBody,
@@ -230,16 +230,16 @@ export class ClaudeModel extends Model {
             response: {
                 actions,
                 content,
-                status: this.resolveStatus({ stop_reason: stopReason }),
+                responseStatus: this.resolveResponseStatus({ stop_reason: stopReason }),
             },
         };
     }
 
-    protected resolveStatus(response: JsonObject): ModelResponseStatus {
+    protected resolveResponseStatus(response: JsonObject): ModelResponseKind {
         const stopReason = optionalString(response.stop_reason);
         // Claude 原生 API: 'tool_use' | 'max_tokens' | 'end_turn'
         // Claude chat completions: 'tool_calls' | 'length' | 'stop'
-        if (stopReason === 'tool_use' || stopReason === 'tool_calls') return 'tool';
+        if (stopReason === 'tool_use' || stopReason === 'tool_calls') return 'tool_calls';
         if (stopReason === 'max_tokens' || stopReason === 'length') return 'continue';
         return 'final';
     }
@@ -549,3 +549,7 @@ export class ClaudeModel extends Model {
 function isJsonObject(value: unknown): value is JsonObject {
     return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
+
+
+
+

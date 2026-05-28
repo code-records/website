@@ -1,5 +1,5 @@
 import type { AgentEvent } from '../Agent';
-import type { Model, ModelAction, ModelEvent } from '../model/Model';
+import type { Model, ModelEvent } from '../model/Model';
 import type { AskModel } from '../tools/tool/Tool';
 export { applyContextPatch } from '../tools/tool/contextPatch';
 
@@ -34,14 +34,3 @@ export function toAgentModelEvent(agentName: string, event: ModelEvent): AgentEv
     };
 }
 
-export function mergeAction(actions: ModelAction[], action: ModelAction): void {
-    if (action.type === 'tool') {
-        const index = actions.findIndex(item => item.type === 'tool' && item.call.id === action.call.id);
-        if (index >= 0) {
-            actions[index] = action;
-            return;
-        }
-    }
-
-    actions.push(action);
-}

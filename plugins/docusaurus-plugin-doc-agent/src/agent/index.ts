@@ -2,7 +2,7 @@ export * from './Agent';
 export * from './chat/Chat';
 export * from './chat/History';
 export * from './chat/Message';
-export * from './chat/SessionStore';
+export * from './chat/MessagesStorage';
 export * from './chat/round/Action';
 export * from './chat/round/Plan';
 export * from './chat/round/Round';

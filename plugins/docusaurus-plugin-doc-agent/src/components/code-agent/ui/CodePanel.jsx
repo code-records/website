@@ -141,6 +141,7 @@ export class CodePanel extends React.Component {
                         custom: 'suggest',
                         plan: {
                             rounds: [{
+                                count: 1,
                                 actions: [],
                                 done: true,
                                 status: 'final',
@@ -179,6 +180,7 @@ export class CodePanel extends React.Component {
             custom: 'suggest',
             plan: {
                 rounds: [{
+                    count: 1,
                     actions: [],
                     done: true,
                     status: 'final',
@@ -325,3 +327,5 @@ export class CodePanel extends React.Component {
 }
 
 export default CodePanel;
+
+

@@ -1,4 +1,4 @@
-## Flow
+﻿## Flow
 
 正常运行时只使用 class 对象图：
 
@@ -16,50 +16,104 @@ Chat
 {
   "messages": [
     {
-      "id": "msg-user-1",
       "role": "user",
-      "text": "帮我解释这段代码"
-    },
-    {
-      "id": "msg-assistant-1",
-      "role": "assistant",
-      "streaming": false,
+      "plan": {
+        "expanded": false,
+        "rounds": [
+          {
+            "count": 1,
+            "actions": [],
+            "done": true,
+            "status": "final",
+            "text": "帮我解释这段代码"
+          }
+        ],
+        "status": "completed"
+      },
       "plans": [
         {
-          "id": "plan-1",
-          "status": "completed",
-          "folded": false,
+          "expanded": false,
           "rounds": [
             {
-              "id": "round-1",
-              "status": "tool",
-              "text": "我先查看相关文件...",
+              "count": 1,
+              "actions": [],
+              "done": true,
+              "status": "final",
+              "text": "帮我解释这段代码"
+            }
+          ],
+          "status": "completed"
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "plan": {
+        "expanded": false,
+        "rounds": [
+          {
+            "count": 1,
+            "actions": [
+              {
+                "done": true,
+                "label": "思考",
+                "text": "需要读取代码上下文。",
+                "type": "thinking"
+              },
+              {
+                "callId": "readFile-1",
+                "done": true,
+                "label": "Read input",
+                "text": "文件内容较长，省略...",
+                "type": "tool"
+              }
+            ],
+            "done": true,
+            "status": "tool_calls",
+            "text": "我先查看相关文件..."
+          },
+          {
+            "count": 2,
+            "actions": [],
+            "done": true,
+            "status": "final",
+            "text": "这段代码主要做了三件事：初始化状态、读取数据、更新 UI。细节较长，省略..."
+          }
+        ],
+        "status": "completed"
+      },
+      "plans": [
+        {
+          "expanded": false,
+          "status": "completed",
+          "rounds": [
+            {
+              "count": 1,
               "actions": [
                 {
-                  "id": "action-1",
-                  "type": "thinking",
-                  "status": "completed",
-                  "text": "需要读取代码上下文。"
+                  "done": true,
+                  "label": "思考",
+                "text": "需要读取代码上下文。",
+                  "type": "thinking"
                 },
                 {
-                  "id": "action-2",
-                  "type": "tool",
-                  "status": "completed",
-                  "name": "readFile",
-                  "input": {
-                    "path": "src/example.js"
-                  },
-                  "result": {
-                    "summary": "文件内容较长，省略..."
-                  }
+                  "callId": "readFile-1",
+                  "done": true,
+                  "label": "Read input",
+                  "text": "文件内容较长，省略...",
+                  "type": "tool"
                 }
-              ]
+              ],
+              "done": true,
+              "status": "tool_calls",
+              "text": "我先查看相关文件..."
             },
             {
-              "id": "round-2",
+              "count": 2,
+              "actions": [],
+              "done": true,
               "status": "final",
-              "text": "这段代码主要做了三件事：初始化状态、读取数据、更新 UI。细节较长，省略...",
-              "actions": []
+              "text": "这段代码主要做了三件事：初始化状态、读取数据、更新 UI。细节较长，省略..."
             }
           ]
         }
@@ -161,4 +215,11 @@ Chat
 ## 接口模式与流模式
 
 详见 [adapter/MODES.md](./adapter/MODES.md)。
+
+
+
+
+
+
+
 

@@ -61,7 +61,7 @@ graph TD
 | **执行编排** | `src/agent/core/` | **无状态状态机**：消费 Model 事件，驱动 Tool 执行，协调 `Model ↔ Tool` 循环，并将状态变化打包成 `AgentEvent` 事件流向上透传。不维护长期历史。 | `loop.ts`, `helper.ts`, `CONTEXT.md` |
 | **模型适配** | `src/agent/model/` | **模型生态解耦**：将不同厂商协议（OpenAI, Claude, Gemini）抽象为统一事件（`ModelEvent`）；负责从公共状态 `Message[]` 提炼 provider 专有请求；判定模型决策状态（继续、调用工具或结束）。 | `Model.ts`, `OpenAIModel.ts`, `ClaudeModel.ts`, `GeminiModel.ts` |
 | **能力扩展** | `src/agent/tools/` | **沙箱工具箱与控制器**：暴露强类型的工具定义、执行逻辑；管理工具注册；由 `ToolRunner` 处理并发调度、超时控制、中断（Kill/Pause）与局部模型回问能力。 | `Tool.ts`, `ToolManager.ts`, `ToolRunner.ts`, `ToolRegistry.ts` |
-| **会话历史** | `src/agent/chat/` | **公共状态树结构**：保存 GUI/Session 级别的长期聊天历史，支持 Plan、Round、Action 深度结构化数据，供前端渲染与模型再次提炼。 | `Message.ts`, `Chat.ts`, `History.ts`, `SessionStore.ts`, `round/` |
+| **会话历史** | `src/agent/chat/` | **公共状态树结构**：保存 GUI/Session 级别的长期聊天历史，支持 Plan、Round、Action 深度结构化数据，供前端渲染与模型再次提炼。 | `Message.ts`, `Chat.ts`, `History.ts`, `MessagesStorage.ts`, `round/` |
 | **通用工具** | `src/agent/utils/` | **底层支持**：提供 Token 估算、JSON 安全解析、SSE 处理、错误封装与全链路日志 Trace。 | `errors.ts`, `trace.ts` |
 
 ---
@@ -204,7 +204,7 @@ src/agent/
 │   ├── Chat.ts            # 会话管理器
 │   ├── History.ts         # 长期历史定义
 │   ├── Message.ts         # 消息单元（挂载 Plan/Round 状态树）
-│   ├── SessionStore.ts    # Session 持久化与反序列化
+│   ├── MessagesStorage.ts    # Session 持久化与反序列化
 │   ├── index.ts           # chat 导出
 │   └── round/             # 执行轮次与动作细分
 │       ├── Action.ts      # 动作抽象 (thinking, tool...)

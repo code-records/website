@@ -1,6 +1,6 @@
 import type { Agent, AgentEvent } from '../Agent';
 import { Message } from '../chat/Message';
-import { Tool, type JsonObject, type ToolDisplay, type ToolInput, type ToolPromptSchema, type ToolResult, type ToolRunContext } from './tool/Tool';
+import { Tool, type JsonObject, type ToolInput, type ToolPromptSchema, type ToolResult, type ToolRunContext } from './tool/Tool';
 
 export interface SubAgentToolOptions {
     maxResultChars?: number;
@@ -135,9 +135,9 @@ function agentEventToJson(event: AgentEvent): JsonObject {
         case 'model_event':
             return { agent: event.agent, modelEvent: event.event.type, type: event.type };
         case 'tool_start':
-            return { agent: event.agent, callId: event.callId, display: toolDisplayToJson(event.display), tool: event.tool, type: event.type };
+            return { agent: event.agent, callId: event.callId, label: event.label, tool: event.tool, type: event.type };
         case 'tool_done':
-            return { agent: event.agent, callId: event.callId, display: toolDisplayToJson(event.display), tool: event.tool, type: event.type };
+            return { agent: event.agent, callId: event.callId, label: event.label, tool: event.tool, type: event.type };
         case 'tool_event':
             return { agent: event.agent, eventType: event.event.type, tool: event.tool, type: event.type };
         case 'context_patch':
@@ -149,15 +149,4 @@ function agentEventToJson(event: AgentEvent): JsonObject {
         case 'sub_agent_done':
             return { agent: event.agent, subAgent: event.subAgent, type: event.type };
     }
-}
-
-function toolDisplayToJson(display?: ToolDisplay): JsonObject | null {
-    if (display === undefined) return null;
-    const result: JsonObject = {};
-    for (const [key, value] of Object.entries(display)) {
-        if (value !== undefined) {
-            result[key] = value;
-        }
-    }
-    return result;
 }

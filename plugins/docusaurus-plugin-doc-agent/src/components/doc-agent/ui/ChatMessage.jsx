@@ -1,16 +1,20 @@
-import React, { useState } from 'react';
+﻿import React, { useState } from 'react';
 import MarkdownRenderer from './MarkdownRenderer.jsx';
 
 function flattenRoundActions(rounds) {
     return (Array.isArray(rounds) ? rounds : [])
         .flatMap(round => Array.isArray(round?.actions) ? round.actions : [])
-        .filter(action => action?.label);
+        .filter(action => action?.type === 'tool');
+}
+
+function getActionTitle(action) {
+    return action?.label || action?.call?.name || '工具';
 }
 
 function getPlanContent(plans) {
     return (Array.isArray(plans) ? plans : [])
         .flatMap(plan => Array.isArray(plan?.rounds) ? plan.rounds : [])
-        .filter(round => round?.status === 'final' || round?.status === 'continue' || (round?.status === undefined && round?.isActive))
+        .filter(round => round?.status === 'final' || round?.status === 'continue' || (round?.status === undefined && round?.done !== true))
         .map(round => typeof round?.text === 'string' ? round.text : '')
         .join('');
 }
@@ -26,16 +30,15 @@ function PlanItem({ plan, idx, onToggle, isLast, isCompleted, isError }) {
         }
     }, [actions.length]);
 
-    if (!plan?.hasContent && actions.length === 0 && !plan?.label) return null;
-
     const expanded = onToggle ? plan.expanded : localExpanded;
     const noItems = actions.length === 0;
     const failed = isError || plan?.status === 'failed';
+    const stepLabel = actions.length > 0 ? `工作 ${actions.length} 步` : '';
     const label = failed
         ? '分析异常'
         : isCompleted && isLast && noItems
             ? '分析完毕，已生成回答'
-            : plan.label;
+            : stepLabel || (plan?.status === 'active' ? '正在工作' : '分析完毕');
 
     const handleClick = () => {
         if (onToggle) {
@@ -48,7 +51,7 @@ function PlanItem({ plan, idx, onToggle, isLast, isCompleted, isError }) {
     if (noItems) {
         return (
             <div className="flex items-center gap-1.5 px-2 min-h-7 py-0.5">
-                <svg className={`w-3.5 h-3.5 ${failed ? 'text-red-500' : 'text-[var(--ifm-color-emphasis-600)]'} ${plan.isActive ? 'animate-pulse' : ''}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                <svg className={`w-3.5 h-3.5 ${failed ? 'text-red-500' : 'text-[var(--ifm-color-emphasis-600)]'} ${plan.status === 'active' ? 'animate-pulse' : ''}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
                     <path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z" />
                 </svg>
                 <span className={`text-xs ${failed ? 'text-red-500' : 'text-[var(--ifm-color-emphasis-600)]'}`}>{label}</span>
@@ -63,7 +66,7 @@ function PlanItem({ plan, idx, onToggle, isLast, isCompleted, isError }) {
                 onClick={handleClick}
                 className="group flex items-center gap-1.5 w-full text-left text-sm px-2 min-h-7 py-0.5 rounded-lg select-none text-[var(--ifm-font-color-base)] hover:bg-[var(--ifm-color-emphasis-100)] transition-colors bg-transparent border-none cursor-pointer"
             >
-                <svg className={`w-3.5 h-3.5 ${failed ? 'text-red-500' : 'text-[var(--ifm-color-emphasis-600)]'} ${plan.isActive ? 'animate-pulse' : ''}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                <svg className={`w-3.5 h-3.5 ${failed ? 'text-red-500' : 'text-[var(--ifm-color-emphasis-600)]'} ${plan.status === 'active' ? 'animate-pulse' : ''}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
                     <path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z" />
                 </svg>
                 <span className={`text-xs ${failed ? 'text-red-500' : 'text-[var(--ifm-color-emphasis-600)]'}`}>{label}</span>
@@ -85,7 +88,7 @@ function PlanItem({ plan, idx, onToggle, isLast, isCompleted, isError }) {
                     >
                         {actions.map((item, i) => (
                             <div key={i} className="text-xs text-[var(--ifm-color-emphasis-600)] py-0.5 shrink-0">
-                                {item.label}
+                                {getActionTitle(item)}
                             </div>
                         ))}
                     </div>
@@ -186,3 +189,4 @@ export default function ChatMessage({ message, isStreaming, onTogglePlan }) {
         </div>
     );
 }
+

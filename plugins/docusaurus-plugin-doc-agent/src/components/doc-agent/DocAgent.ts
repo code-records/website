@@ -165,6 +165,7 @@ export class DocAgent extends Agent {
             custom: 'suggest',
             plan: {
                 rounds: [{
+                    count: 1,
                     actions: [],
                     done: true,
                     status: 'final',
@@ -238,3 +239,6 @@ export function createDocAgentUserMessage(model: Model, content: string): Messag
     void model;
     return Message.user(content);
 }
+
+
+

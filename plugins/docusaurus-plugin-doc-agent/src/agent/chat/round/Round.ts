@@ -1,20 +1,19 @@
-import { Action, type ActionJSON } from './Action';
-import type { ModelResponseStatus } from '../../model/Model';
+﻿import { Action, type ActionJSON } from './Action';
+import type { ModelResponseKind } from '../../model/Model';
 
 export interface RoundJSON {
     actions: ActionJSON[];
+    count: number;
     done: boolean;
-    hasContent?: boolean;
-    isActive?: boolean;
-    label?: string;
-    status?: ModelResponseStatus;
+    status?: ModelResponseKind;
     text?: string;
 }
 
 export class Round {
     private readonly _actions: Action[] = [];
+    count = 0;
     done = false;
-    status?: ModelResponseStatus;
+    status?: ModelResponseKind;
     text = '';
 
     get actions(): readonly Action[] {
@@ -25,21 +24,13 @@ export class Round {
         return this._actions;
     }
 
-    get hasContent(): boolean {
-        return this.text.length > 0 || this._actions.some(action => action.text.length > 0);
-    }
-
-    get isActive(): boolean {
-        return !this.done;
-    }
-
-    get label(): string {
-        const last = this._actions[this._actions.length - 1];
-        return last?.label || '';
+    get toolCount(): number {
+        return this._actions.filter(action => action.type === 'tool').length;
     }
 
     static fromJSON(json: RoundJSON): Round {
         const round = new Round();
+        round.count = json.count ?? 0;
         round.text = json.text ?? '';
         round.done = json.done;
         round.status = json.status;
@@ -77,9 +68,27 @@ export class Round {
         last.text = action.text;
         last.callId = action.callId;
         last.call = action.call;
-        last.display = action.display;
         last.event = action.event;
-        last.label = action.label;
+        last.label = action.label || last.label;
+        return true;
+    }
+
+    updateTool(action: Action): boolean {
+        if (action.type !== 'tool' || action.callId === undefined) {
+            return false;
+        }
+
+        const existing = this._actions.find(item => item.type === 'tool' && item.callId === action.callId);
+        if (existing === undefined) {
+            return false;
+        }
+
+        existing.callId = action.callId;
+        existing.call = action.call ?? existing.call;
+        existing.done = existing.done || action.done;
+        existing.event = action.event ?? existing.event;
+        existing.label = action.label || existing.label;
+        existing.text = action.text || existing.text;
         return true;
     }
 
@@ -94,12 +103,11 @@ export class Round {
     toJSON(): RoundJSON {
         return {
             actions: this._actions.map(action => action.toJSON()),
+            count: this.count,
             done: this.done,
-            hasContent: this.hasContent,
-            isActive: this.isActive,
-            label: this.label,
             status: this.status,
             text: this.text.length > 0 ? this.text : undefined,
         };
     }
 }
+

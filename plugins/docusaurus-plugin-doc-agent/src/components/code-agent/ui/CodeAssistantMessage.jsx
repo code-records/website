@@ -1,8 +1,8 @@
 /*
  * Code assistant 消息 UI 设计约定：
- * - 把运行时对象图按 [round, ...round.actions] 平铺成正文流。
- * - round/thinking/error 读取 item.text；tool 只展示 item.display。
- * - tool 展示文案由工具基类契约提供，UI 不从 tool input/result 推断文案。
+ * - 把运行时对象图按 [...round.actions, round] 平铺成正文流。
+ * - round/thinking/error 读取 item.text；tool 展示 item.label。
+ * - tool 展示文案由工具 createLabel 契约提供，UI 不从 tool input/result 推断文案。
  * - 各 type 组件保持轻量；thinking/tool 只在同一条 timeline 上加一个小标记。
  * - thinking 文本暂时最多显示 3 行，超出部分先隐藏，等后续设计展开交互。
  * - tool result 仍保存在 Action.text 给 model 使用，默认不在 UI 展示。
@@ -39,7 +39,6 @@ function normalizeActions(actions) {
         if (existing) {
             existing.callId = existing.callId || action.callId;
             existing.call = action.call || existing.call;
-            existing.display = action.display || existing.display;
             existing.done = existing.done || action.done;
             existing.event = action.event || existing.event;
             existing.label = action.label || existing.label;
@@ -63,24 +62,27 @@ function buildSegments(message) {
     return getRounds(message).flatMap((round, roundIndex) => {
         const actions = normalizeActions(round?.actions);
 
-        return [round, ...actions]
-            .map((item, itemIndex) => {
-                const isRound = itemIndex === 0;
+        return [
+            ...actions.map((item, actionIndex) => ({ item, kind: 'action', index: actionIndex })),
+            { item: round, kind: 'round', index: actions.length },
+        ]
+            .map(({ item, kind, index }) => {
+                const isRound = kind === 'round';
                 const type = item?.type;
                 const text = type === 'tool'
                     ? ''
                     : typeof item?.text === 'string' ? item.text.trim() : '';
-                const hasToolDisplay = type === 'tool' && item?.display;
+                const hasToolLabel = type === 'tool' && typeof item?.label === 'string' && item.label.length > 0;
 
                 return {
                     key: isRound
                         ? `r-${roundIndex}`
-                        : `a-${roundIndex}-${item.callId || item.label || item.type || itemIndex}`,
-                    kind: isRound ? 'round' : 'action',
+                        : `a-${roundIndex}-${item.callId || item.call?.id || item.type || index}`,
+                    kind,
                     item,
                     text,
                     type,
-                    visible: text.length > 0 || hasToolDisplay,
+                    visible: text.length > 0 || hasToolLabel,
                 };
             })
             .filter(item => item.visible);
@@ -104,6 +106,7 @@ function TimelineItem({ children, tone = 'default' }) {
 
 function ThinkingSegment({ segment }) {
     const [expanded, setExpanded] = useState(false);
+    const label = segment.item?.label || '思考';
 
     return (
         <TimelineItem>
@@ -112,7 +115,7 @@ function ThinkingSegment({ segment }) {
                 className="mb-1 flex cursor-pointer items-center gap-1 border-none bg-transparent p-0 text-left text-xs text-[var(--ifm-color-emphasis-600)]"
                 onClick={() => setExpanded(prev => !prev)}
             >
-                <span>思考</span>
+                <span>{label}</span>
                 <span className={['transition-transform', expanded ? 'rotate-90' : ''].join(' ')}>&gt;</span>
             </button>
             {expanded && (
@@ -133,9 +136,7 @@ function ThinkingSegment({ segment }) {
 }
 
 function ToolSegment({ segment }) {
-    const display = segment.item?.display || {};
-    const label = display.title || segment.item?.label || segment.item?.call?.name || '工具';
-    const subtitle = display.subtitle || display.detail || '';
+    const label = segment.item?.label || segment.item?.call?.name || '工具';
 
     return (
         <TimelineItem tone="tool">
@@ -143,11 +144,6 @@ function ToolSegment({ segment }) {
                 <span className="font-semibold">
                     {label}
                 </span>
-                {subtitle && (
-                    <span className="ml-2 break-words font-mono text-xs text-[var(--ifm-color-emphasis-700)] [overflow-wrap:anywhere]">
-                        {subtitle}
-                    </span>
-                )}
             </div>
         </TimelineItem>
     );
