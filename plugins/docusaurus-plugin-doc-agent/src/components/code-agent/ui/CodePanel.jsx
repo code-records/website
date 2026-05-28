@@ -242,6 +242,10 @@ export class CodePanel extends React.Component {
         if (text) navigator.clipboard.writeText(text);
     };
 
+    handleCopyStructured = () => {
+        navigator.clipboard.writeText(JSON.stringify(this.chat.toJSON(), null, 2));
+    };
+
     handleClearHistory = () => {
         this.chat.clear();
         this.pushSuggestions();
@@ -298,6 +302,7 @@ export class CodePanel extends React.Component {
                 <div className="flex-1 flex flex-col bg-[var(--ifm-background-color)]">
                     <CodeHeader
                         onCopyDisplay={this.handleCopyDisplay}
+                        onCopyStructured={this.handleCopyStructured}
                         onClearHistory={this.handleClearHistory}
                     />
                     <CodeBody

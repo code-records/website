@@ -7,7 +7,7 @@ function flattenRoundActions(rounds) {
         .filter(action => action?.type === 'tool');
 }
 
-function getActionTitle(action) {
+function formatLabel(action) {
     return action?.label || action?.call?.name || '工具';
 }
 
@@ -88,7 +88,7 @@ function PlanItem({ plan, idx, onToggle, isLast, isCompleted, isError }) {
                     >
                         {actions.map((item, i) => (
                             <div key={i} className="text-xs text-[var(--ifm-color-emphasis-600)] py-0.5 shrink-0">
-                                {getActionTitle(item)}
+                                {formatLabel(item)}
                             </div>
                         ))}
                     </div>

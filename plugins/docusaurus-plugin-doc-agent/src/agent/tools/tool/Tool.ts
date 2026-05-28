@@ -106,7 +106,7 @@ export abstract class Tool {
     /** 子询问回调，由 loop 在执行前注入 */
     protected ask: AskModel | null = null;
 
-    createLabel(input: ToolInput, context: ToolLabelContext = { input }): string {
+    formatLabel(input: ToolInput, context: ToolLabelContext = { input }): string {
         return this.name;
     }
 

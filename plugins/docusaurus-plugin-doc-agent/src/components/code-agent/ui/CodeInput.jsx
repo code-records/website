@@ -13,11 +13,11 @@ export default function CodeInput({
     onModelChange,
 }) {
     return (
-        <div className="px-6 py-4 border-t border-[var(--ifm-color-emphasis-200)] bg-[var(--ifm-color-emphasis-100)] shrink-0">
-            <div className="flex items-end gap-3 bg-[var(--ifm-background-color)] border border-[var(--ifm-color-emphasis-200)] rounded-xl pl-4 pr-1.5 py-1.5 transition-colors focus-within:border-[var(--ifm-color-primary)] focus-within:shadow-[0_0_12px_rgba(var(--ifm-color-primary-rgb),0.05)]">
+        <div className="px-6 py-4 border-t border-[var(--ifm-color-emphasis-200)] shrink-0">
+            <div className="flex items-end gap-3 bg-white dark:bg-[#1e1e1e] border border-[var(--ifm-color-emphasis-300)] rounded-xl pl-4 pr-1.5 py-1.5 transition-colors focus-within:border-[var(--ifm-color-primary)] focus-within:shadow-[0_0_12px_rgba(var(--ifm-color-primary-rgb),0.1)]">
                 <textarea
                     ref={inputRef}
-                    className="flex-1 border-none bg-transparent text-[var(--ifm-font-color-base)] text-xs leading-normal py-2.5 resize-none outline-none font-mono placeholder-[var(--ifm-color-emphasis-500)] overflow-y-auto [&::-webkit-scrollbar]:w-[5px] [&::-webkit-scrollbar-thumb]:bg-[var(--ifm-color-emphasis-300)] [&::-webkit-scrollbar-thumb]:rounded"
+                    className="flex-1 border-none bg-white dark:bg-[#1e1e1e] text-[var(--ifm-font-color-base)] text-xs leading-normal py-2.5 resize-none outline-none font-mono placeholder-[var(--ifm-color-emphasis-500)] overflow-y-auto [&::-webkit-scrollbar]:w-[5px] [&::-webkit-scrollbar-thumb]:bg-[var(--ifm-color-emphasis-300)] [&::-webkit-scrollbar-thumb]:rounded"
                     value={inputValue}
                     onChange={onInputChange}
                     onKeyDown={onKeyDown}

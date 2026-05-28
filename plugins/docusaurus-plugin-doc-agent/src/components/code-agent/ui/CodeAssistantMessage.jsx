@@ -2,7 +2,7 @@
  * Code assistant 消息 UI 设计约定：
  * - 把运行时对象图按 [...round.actions, round] 平铺成正文流。
  * - round/thinking/error 读取 item.text；tool 展示 item.label。
- * - tool 展示文案由工具 createLabel 契约提供，UI 不从 tool input/result 推断文案。
+ * - tool 展示文案由工具 formatLabel 契约提供，UI 不从 tool input/result 推断文案。
  * - 各 type 组件保持轻量；thinking/tool 只在同一条 timeline 上加一个小标记。
  * - thinking 文本暂时最多显示 3 行，超出部分先隐藏，等后续设计展开交互。
  * - tool result 仍保存在 Action.text 给 model 使用，默认不在 UI 展示。

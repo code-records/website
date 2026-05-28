@@ -89,6 +89,7 @@ export async function* loop(options: LoopOptions): AsyncGenerator<AgentEvent, vo
             round = plan.apply(agentEvent) ?? round;
             if (round !== undefined) {
                 round.count = count;
+                updateToolActionLabels(round, toolManager);
                 loggerRoundStart(round, loggedRoundStarts);
                 loggerRoundAction(round);
             }
@@ -138,7 +139,7 @@ export async function* loop(options: LoopOptions): AsyncGenerator<AgentEvent, vo
             for (const call of toolCalls) {
                 // 15. 先确认工具存在；实际 ask 注入和执行交给 ToolManager。
                 toolManager.require(call.name);
-                const label = toolManager.createLabel(call);
+                const label = toolManager.formatLabel(call);
 
                 const toolStartEvent: AgentEvent = {
                     type: 'tool_start',
@@ -249,6 +250,19 @@ function loggerRoundAction(round: Round): void {
     const action = round.actions[round.actions.length - 1];
     if (action === undefined) return;
     logger.action(action.toJSON());
+}
+
+function updateToolActionLabels(round: Round, toolManager: ToolManager): void {
+    for (const action of round.actions) {
+        const call = action.call;
+        if (action.type !== 'tool' || call === undefined) continue;
+        try {
+            const label = toolManager.formatLabel(call);
+            round.updateToolLabel(call.id, label);
+        } catch {
+            // The loop will surface missing tools when it tries to execute the call.
+        }
+    }
 }
 
 

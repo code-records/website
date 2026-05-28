@@ -92,6 +92,15 @@ export class Round {
         return true;
     }
 
+    updateToolLabel(callId: string, label: string): boolean {
+        const existing = this._actions.find(item => item.type === 'tool' && item.callId === callId);
+        if (existing === undefined) {
+            return false;
+        }
+        existing.label = label;
+        return true;
+    }
+
     finish(status = this.status): void {
         this.status = status;
         this.done = true;

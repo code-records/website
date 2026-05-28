@@ -54,9 +54,9 @@ export class ToolManager {
         return this.registry.require(name);
     }
 
-    createLabel(call: ModelToolCall): string {
+    formatLabel(call: ModelToolCall): string {
         const tool = this.registry.require(call.name);
-        return tool.createLabel(call.input, {
+        return tool.formatLabel(call.input, {
             call,
             input: call.input,
         });

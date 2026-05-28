@@ -53,9 +53,9 @@ export abstract class FileTool extends Tool {
         type: 'object',
     };
 
-    createLabel(input: ToolInput, context: ToolLabelContext = { input }): string {
+    formatLabel(input: ToolInput, context: ToolLabelContext = { input }): string {
         const parsed = parseFileToolInput(input);
-        return fileOperationTitle(parsed.operation);
+        return `${fileOperationTitle(parsed.operation)}: ${parsed.path || '.'}`;
     }
 
     protected async execute(input: ToolInput, context: ToolRunContext): Promise<ToolResult> {
