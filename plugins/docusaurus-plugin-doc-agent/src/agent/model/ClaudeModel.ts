@@ -31,7 +31,7 @@ interface ChatToolTracker {
 type RoundProviderAction =
     | { type: 'content'; text: string }
     | { type: 'thinking'; text: string }
-    | { type: 'tool'; call?: ModelToolCall; callId?: string; text: string };
+    | { type: 'tool'; call: ModelToolCall; text: string };
 
 export class ClaudeModel extends Model {
     constructor({ url = DEFAULT_ANTHROPIC_ENDPOINT, streamUrl = DEFAULT_ANTHROPIC_STREAM_ENDPOINT, ...rest }: ModelConfig) {
@@ -299,7 +299,7 @@ export class ClaudeModel extends Model {
             if (action.type === 'thinking' && action.text.length > 0) {
                 content.push({ thinking: action.text, type: 'thinking' });
             }
-            if (action.type === 'tool' && action.call !== undefined) {
+            if (action.type === 'tool') {
                 content.push({
                     id: action.call.id,
                     input: action.call.input,
@@ -307,8 +307,8 @@ export class ClaudeModel extends Model {
                     type: 'tool_use',
                 });
             }
-            if (action.type === 'tool' && action.callId !== undefined && action.call === undefined && action.text.length > 0) {
-                content.push({ content: action.text, tool_use_id: action.callId, type: 'tool_result' });
+            if (action.type === 'tool' && action.text.length > 0) {
+                content.push({ content: action.text, tool_use_id: action.call.id, type: 'tool_result' });
             }
         }
 
@@ -331,7 +331,7 @@ export class ClaudeModel extends Model {
         }
         const actions = this.roundActions(message);
         const toolCalls = actions
-            .filter((action): action is { type: 'tool'; call: ModelToolCall; callId?: string; text: string } => action.type === 'tool' && action.call !== undefined)
+            .filter((action): action is Extract<RoundProviderAction, { type: 'tool' }> => action.type === 'tool')
             .map(action => ({
                 function: {
                     arguments: JSON.stringify(action.call.input ?? {}),
@@ -346,11 +346,11 @@ export class ClaudeModel extends Model {
             role: 'assistant',
         }];
         for (const action of actions) {
-            if (action.type === 'tool' && action.callId !== undefined && action.call === undefined && action.text.length > 0) {
+            if (action.type === 'tool' && action.text.length > 0) {
                 result.push({
                     content: this.stringifyToolContent(action.text),
                     role: 'tool',
-                    tool_call_id: action.callId,
+                    tool_call_id: action.call.id,
                 });
             }
         }
@@ -475,9 +475,11 @@ export class ClaudeModel extends Model {
                     actions.push({ text: action.text, type: 'thinking' });
                 }
                 if (action.type === 'tool') {
+                    if (action.call === undefined) {
+                        throw new Error('Tool action must include call before provider conversion');
+                    }
                     actions.push({
                         call: action.call,
-                        callId: action.callId,
                         text: action.text,
                         type: 'tool',
                     });

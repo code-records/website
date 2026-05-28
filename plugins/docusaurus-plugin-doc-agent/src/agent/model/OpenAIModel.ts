@@ -189,18 +189,19 @@ export class OpenAIModel extends Model {
             }
             for (const action of round.items) {
                 if (action.type !== 'tool') continue;
-                if (action.call !== undefined) {
-                    result.push({
-                        arguments: JSON.stringify(action.call.input ?? {}),
-                        call_id: action.call.id,
-                        name: action.call.name,
-                        type: 'function_call',
-                    });
-                    continue;
+                if (action.call === undefined) {
+                    throw new Error('Tool action must include call before provider conversion');
                 }
-                if (action.callId !== undefined && action.text.length > 0) {
+
+                result.push({
+                    arguments: JSON.stringify(action.call.input ?? {}),
+                    call_id: action.call.id,
+                    name: action.call.name,
+                    type: 'function_call',
+                });
+                if (action.text.length > 0) {
                     result.push({
-                        call_id: action.callId,
+                        call_id: action.call.id,
                         output: action.text,
                         type: 'function_call_output',
                     });

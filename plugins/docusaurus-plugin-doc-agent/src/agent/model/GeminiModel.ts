@@ -122,23 +122,19 @@ export class GeminiModel extends Model {
             }
         }
         for (const action of this.roundToolActions(message)) {
-            if (action.call !== undefined) {
-                parts.push({
-                    functionCall: {
-                        args: action.call.input,
-                        id: action.call.id,
-                        name: action.call.name,
-                    },
-                });
-                continue;
-            }
-            if (action.callId !== undefined && action.text.length > 0) {
-                const name = this.toolNamesById.get(action.callId) || action.callId;
+            parts.push({
+                functionCall: {
+                    args: action.call.input,
+                    id: action.call.id,
+                    name: action.call.name,
+                },
+            });
+            if (action.text.length > 0) {
                 toolResultMessages.push({
                     parts: [{
                         functionResponse: {
-                            id: action.callId,
-                            name,
+                            id: action.call.id,
+                            name: action.call.name,
                             response: { result: action.text },
                         },
                     }],
@@ -170,14 +166,16 @@ export class GeminiModel extends Model {
         };
     }
 
-    private roundToolActions(message: Message): Array<{ call?: ModelToolCall; callId?: string; text: string }> {
+    private roundToolActions(message: Message): Array<{ call: ModelToolCall; text: string }> {
         return (message.plan?.items ?? []).flatMap(round => round.items.flatMap(action => {
             if (action.type !== 'tool') {
                 return [];
             }
+            if (action.call === undefined) {
+                throw new Error('Tool action must include call before provider conversion');
+            }
             return [{
                 call: action.call,
-                callId: action.callId,
                 text: action.text,
             }];
         }));
