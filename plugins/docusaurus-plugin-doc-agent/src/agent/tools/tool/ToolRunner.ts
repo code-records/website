@@ -1,7 +1,7 @@
 import { Message } from '../../chat/Message';
 import type { Model, ModelToolCall } from '../../model/Model';
 import { toError } from '../../utils/errors';
-import type { AskModel, JsonObject, ToolResult } from './Tool';
+import type { AskModel, JsonObject, ToolDisplay, ToolResult } from './Tool';
 import { applyContextPatch } from './contextPatch';
 import { ToolRegistry } from './ToolRegistry';
 import { TOOL_ERROR_CORE_PROMPT } from '../../core/prompt';
@@ -22,12 +22,17 @@ export interface ToolRunPlan {
 }
 
 export interface ToolRunRecord {
+    display?: ToolDisplay;
     error?: string;
     input: JsonObject;
     name: string;
     result?: ToolResult;
     runId: string;
     status: 'done' | 'error' | 'killed' | 'skipped' | 'timeout';
+}
+
+export interface CompletedToolRunRecord extends ToolRunRecord {
+    result: ToolResult;
 }
 
 export interface ToolRunnerOptions {
@@ -64,15 +69,31 @@ export class ToolRunner {
         this.signal = signal;
     }
 
-    async runCall(call: ModelToolCall, timeoutMs = this.defaultTimeoutMs): Promise<ToolResult> {
+    async runCall(call: ModelToolCall, timeoutMs?: number): Promise<ToolResult>;
+    async runCall(call: ModelToolCall, display?: ToolDisplay, timeoutMs?: number): Promise<ToolResult>;
+    async runCall(call: ModelToolCall, displayOrTimeout?: ToolDisplay | number, timeoutMs?: number): Promise<ToolResult> {
+        return (await this.runCallRecord(call, displayOrTimeout as ToolDisplay, timeoutMs)).result;
+    }
+
+    async runCallRecord(call: ModelToolCall, timeoutMs?: number): Promise<CompletedToolRunRecord>;
+    async runCallRecord(call: ModelToolCall, display?: ToolDisplay, timeoutMs?: number): Promise<CompletedToolRunRecord>;
+    async runCallRecord(call: ModelToolCall, displayOrTimeout?: ToolDisplay | number, timeoutMs?: number): Promise<CompletedToolRunRecord> {
+        const display = typeof displayOrTimeout === 'number' ? undefined : displayOrTimeout;
+        const resolvedTimeoutMs = typeof displayOrTimeout === 'number'
+            ? displayOrTimeout
+            : timeoutMs ?? this.defaultTimeoutMs;
         const record = await this.runItem({
+            display,
             input: call.input,
             name: call.name,
-            timeoutMs,
+            timeoutMs: resolvedTimeoutMs,
         }, call.id);
 
         if (record.result !== undefined) {
-            return record.result;
+            return {
+                ...record,
+                result: record.result,
+            };
         }
 
         const details = record.error ? `: ${record.error}` : '';
@@ -80,7 +101,10 @@ export class ToolRunner {
         const formattedPrompt = TOOL_ERROR_CORE_PROMPT.replace('{{error}}', errorMessage);
 
         return {
-            result: formattedPrompt,
+            ...record,
+            result: {
+                result: formattedPrompt,
+            },
         };
     }
 
@@ -128,7 +152,7 @@ export class ToolRunner {
         return true;
     }
 
-    private async runItem(item: ToolRunPlanItem, runId = createRunId(item.name)): Promise<ToolRunRecord> {
+    private async runItem(item: ToolRunPlanItem & { display?: ToolDisplay }, runId = createRunId(item.name)): Promise<ToolRunRecord> {
         const controller = new AbortController();
         const timeoutMs = item.timeoutMs ?? this.defaultTimeoutMs;
         this.controllers.set(runId, controller);
@@ -145,6 +169,7 @@ export class ToolRunner {
             const run = tool.run(item.input, {
                 context: this.context,
                 createUserContextMessage: Message.user,
+                display: item.display,
                 runner: this.createScopedRunner(this.context),
                 signal: controller.signal,
                 tools: this.registry.asReadonlyMap(),
@@ -155,6 +180,7 @@ export class ToolRunner {
                 : await run;
 
             return {
+                ...(item.display !== undefined ? { display: item.display } : {}),
                 input: item.input,
                 name: item.name,
                 result,
@@ -166,6 +192,7 @@ export class ToolRunner {
             const errorMessage = err.message;
             if (err.name === 'AbortError') {
                 return {
+                    ...(item.display !== undefined ? { display: item.display } : {}),
                     error: errorMessage,
                     input: item.input,
                     name: item.name,
@@ -175,6 +202,7 @@ export class ToolRunner {
             }
             if (err instanceof ToolTimeoutError) {
                 return {
+                    ...(item.display !== undefined ? { display: item.display } : {}),
                     error: errorMessage,
                     input: item.input,
                     name: item.name,
@@ -183,6 +211,7 @@ export class ToolRunner {
                 };
             }
             return {
+                ...(item.display !== undefined ? { display: item.display } : {}),
                 error: errorMessage,
                 input: item.input,
                 name: item.name,

@@ -4,7 +4,8 @@ import { Message } from '../chat/Message';
 import type { Model, ModelAction } from '../model/Model';
 import type { ModelResponseStatus } from '../model/Model';
 import type { ModelToolCall } from '../model/Model';
-import type { Tool, ToolResult } from '../tools/tool/Tool';
+import type { Tool, ToolDisplay, ToolResult } from '../tools/tool/Tool';
+import type { CompletedToolRunRecord } from '../tools/tool/ToolRunner';
 import { ToolManager } from '../tools/tool/ToolManager';
 import { applyContextPatch, createAskFactory, mergeAction, toAgentModelEvent } from './helper';
 import { logger } from '../utils/logger';
@@ -28,7 +29,9 @@ export interface LoopOptions {
 // 一个工具调用 promise 已完成
 interface SettledToolCall {
     call: ModelToolCall;
+    display?: ToolDisplay;
     result: ToolResult;
+    status: CompletedToolRunRecord['status'];
     token: symbol;
     tool: string;
 }
@@ -145,11 +148,13 @@ export async function* loop(options: LoopOptions): AsyncGenerator<AgentEvent, vo
             for (const call of toolCalls) {
                 // 15. 先确认工具存在；实际 ask 注入和执行交给 ToolManager。
                 toolManager.require(call.name);
+                const display = toolManager.createDisplay(call, 'start');
 
                 yield {
                     type: 'tool_start',
                     agent: agentName,
                     callId: call.id,
+                    display,
                     tool: call.name,
                 };
 
@@ -157,9 +162,11 @@ export async function* loop(options: LoopOptions): AsyncGenerator<AgentEvent, vo
                 const token = Symbol(call.id);
                 pending.push({
                     token,
-                    promise: toolManager.runCall(call).then(result => ({
+                    promise: toolManager.runCallRecord(call, display).then(record => ({
                         call,
-                        result,
+                        display,
+                        result: record.result,
+                        status: record.status,
                         token,
                         tool: call.name,
                     })),
@@ -172,7 +179,11 @@ export async function* loop(options: LoopOptions): AsyncGenerator<AgentEvent, vo
                 const index = pending.findIndex(item => item.token === settled.token);
                 if (index >= 0) pending.splice(index, 1);
 
-                const { call, result, tool } = settled;
+                const { call, result, status, tool } = settled;
+                const phase = status === 'done' ? 'done' : 'error';
+                const display = settled.display
+                    ? toolManager.updateDisplay(settled.display, call, phase, { result })
+                    : undefined;
                 logger('agent.loop.tool.done', { tool, callId: call.id, resultSummary: result.result });
 
                 // 18. 通知工具完成；UI 可以更新对应 action 的状态和展示文本。
@@ -180,6 +191,7 @@ export async function* loop(options: LoopOptions): AsyncGenerator<AgentEvent, vo
                     type: 'tool_done',
                     agent: agentName,
                     callId: call.id,
+                    display,
                     result,
                     tool,
                 };

@@ -1,6 +1,6 @@
 import type { AgentEvent } from '../../Agent';
 import type { ModelToolCall } from '../../model/Model';
-import type { ToolEvent } from '../../tools/tool/Tool';
+import type { ToolDisplay, ToolEvent } from '../../tools/tool/Tool';
 
 export type ActionType =
     | 'context'
@@ -11,6 +11,7 @@ export type ActionType =
 export interface ActionJSON {
     callId?: string;
     call?: ModelToolCall;
+    display?: ToolDisplay;
     done: boolean;
     event?: ToolEvent;
     label?: string;
@@ -21,6 +22,7 @@ export interface ActionJSON {
 export class Action {
     callId?: string;
     call?: ModelToolCall;
+    display?: ToolDisplay;
     done = false;
     event?: ToolEvent;
     label = '';
@@ -32,6 +34,7 @@ export class Action {
         this.callId = json.callId;
         this.text = json.text ?? '';
         this.call = json.call;
+        this.display = json.display;
         this.done = json.done;
         this.event = json.event;
         this.label = json.label ?? '';
@@ -46,6 +49,7 @@ export class Action {
             if (event.type === 'tool_start') {
                 return new Action({
                     callId: event.callId,
+                    display: event.display,
                     done: false,
                     label: event.tool,
                     type: 'tool',
@@ -54,6 +58,7 @@ export class Action {
             if (event.type === 'tool_done') {
                 return new Action({
                     callId: event.callId,
+                    display: event.display,
                     done: true,
                     label: event.tool,
                     text: event.result.result,
@@ -127,6 +132,7 @@ export class Action {
         return {
             callId: this.callId,
             call: this.call,
+            display: this.display,
             done: this.done,
             event: this.event,
             label: this.label.length > 0 ? this.label : undefined,

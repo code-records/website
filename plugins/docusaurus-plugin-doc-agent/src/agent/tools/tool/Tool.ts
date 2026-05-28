@@ -1,6 +1,7 @@
 // ─── 类型 ───────────────────────────────────────────
 
 import { Message } from '../../chat/Message';
+import type { ModelToolCall } from '../../model/Model';
 import type { ToolRunner } from './ToolRunner';
 
 export type JsonPrimitive = string | number | boolean | null;
@@ -11,6 +12,19 @@ export type ToolInput = JsonObject;
 export type ToolOutput = string;
 export type ToolPromptSchema = JsonObject;
 export type ToolAskOutput = JsonValue;
+
+export type ToolDisplayPhase = 'start' | 'done' | 'error';
+export type ToolDisplayVariant = 'default' | 'success' | 'warning' | 'danger';
+
+/** 工具调用在 UI 中展示的轻量状态。真实结果仍由 ToolResult.result 提供给 model。 */
+export interface ToolDisplay {
+    title: string;
+    subtitle?: string;
+    statusText?: string;
+    detail?: string;
+    variant?: ToolDisplayVariant;
+    [key: string]: JsonValue | undefined;
+}
 
 /** 工具副作用事件，供 UI、日志、调度工具或父 agent 消费。 */
 export interface ToolEvent {
@@ -34,6 +48,14 @@ export interface ToolResult {
     events?: ToolEvent[];
 }
 
+export interface ToolDisplayContext {
+    call?: ModelToolCall;
+    error?: Error;
+    input: ToolInput;
+    phase: ToolDisplayPhase;
+    result?: ToolResult;
+}
+
 /** 工具执行上下文，由 loop 在调用时传入。 */
 export interface ToolRunContext {
     /** 当前 loop 上下文的只读快照；需要修改时返回 contextPatch。 */
@@ -42,6 +64,8 @@ export interface ToolRunContext {
     createUserContextMessage(content: string): Message;
     /** 当前 loop 中全部工具的只读视图，调度工具可观察其他工具状态。 */
     tools: ReadonlyMap<string, Tool>;
+    /** 当前工具调用的 UI 展示状态。工具可以修改它，下一次上层通知时 UI 会重读。 */
+    display?: ToolDisplay;
     /** 工具执行控制器，调度工具可用它串行/并行运行工具。 */
     runner?: ToolRunner;
     signal?: AbortSignal;
@@ -99,6 +123,20 @@ export abstract class Tool {
 
     /** 子询问回调，由 loop 在执行前注入 */
     protected ask: AskModel | null = null;
+
+    createDisplay(input: ToolInput, context: ToolDisplayContext = { input, phase: 'start' }): ToolDisplay {
+        return {
+            title: this.name,
+            statusText: defaultDisplayStatusText(context.phase),
+            variant: defaultDisplayVariant(context.phase),
+        };
+    }
+
+    updateDisplay(display: ToolDisplay, phase: ToolDisplayPhase, context: ToolDisplayContext): ToolDisplay {
+        display.statusText = defaultDisplayStatusText(phase);
+        display.variant = defaultDisplayVariant(phase);
+        return display;
+    }
 
     /**
      * 注入回问能力。
@@ -201,4 +239,16 @@ function createEmptyToolRunContext(): ToolRunContext {
         createUserContextMessage: Message.user,
         tools: new Map(),
     };
+}
+
+function defaultDisplayStatusText(phase: ToolDisplayPhase): string {
+    if (phase === 'done') return '完成';
+    if (phase === 'error') return '失败';
+    return '执行中';
+}
+
+function defaultDisplayVariant(phase: ToolDisplayPhase): ToolDisplayVariant {
+    if (phase === 'done') return 'success';
+    if (phase === 'error') return 'danger';
+    return 'default';
 }

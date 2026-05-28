@@ -77,6 +77,7 @@ export class Round {
         last.text = action.text;
         last.callId = action.callId;
         last.call = action.call;
+        last.display = action.display;
         last.event = action.event;
         last.label = action.label;
         return true;

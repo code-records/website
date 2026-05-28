@@ -4,7 +4,7 @@ import type { ActionJSON, ActionType } from './round/Action';
 import type { PlanJSON, PlanStatus } from './round/Plan';
 import type { RoundJSON } from './round/Round';
 import type { ModelToolCall } from '../model/Model';
-import type { JsonObject, JsonValue, ToolEvent } from '../tools/tool/Tool';
+import type { JsonObject, JsonValue, ToolDisplay, ToolEvent } from '../tools/tool/Tool';
 
 export interface SessionMeta {
     [key: string]: string | number | boolean | null;
@@ -220,18 +220,26 @@ function parseAction(value: unknown): ActionJSON | null {
     if (type === null) return null;
 
     const call = parseToolCall(value.call);
+    const display = parseToolDisplay(value.display);
     const event = parseToolEvent(value.event);
     const label = typeof value.label === 'string' ? value.label : undefined;
     const text = typeof value.text === 'string' ? value.text : undefined;
 
     return {
         ...(call !== null ? { call } : {}),
+        ...(display !== null ? { display } : {}),
         done: value.done === true,
         ...(event !== null ? { event } : {}),
         ...(label !== undefined ? { label } : {}),
         ...(text !== undefined ? { text } : {}),
         type,
     };
+}
+
+function parseToolDisplay(value: unknown): ToolDisplay | null {
+    const display = parseJsonObject(value);
+    if (display === null || typeof display.title !== 'string') return null;
+    return display as ToolDisplay;
 }
 
 function parseToolCall(value: unknown): ModelToolCall | null {

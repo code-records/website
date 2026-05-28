@@ -3,7 +3,7 @@ import { OpenAIModel } from './model/OpenAIModel';
 import { ClaudeModel } from './model/ClaudeModel';
 import { GeminiModel } from './model/GeminiModel';
 import { Message } from './chat/Message';
-import type { ContextPatch, Tool, ToolEvent, ToolResult } from './tools/tool/Tool';
+import type { ContextPatch, Tool, ToolDisplay, ToolEvent, ToolResult } from './tools/tool/Tool';
 import { CompressTool } from './tools/CompressTool';
 import { MakePlanTool, UpdatePlanTool } from './tools/PlanTool';
 import { ScheduleTool } from './tools/ScheduleTool';
@@ -31,8 +31,8 @@ export interface AgentContext {
 export type AgentEvent =
     | { type: 'agent_start'; agent: string }
     | { type: 'model_event'; agent: string; event: ModelEvent }
-    | { type: 'tool_start'; agent: string; tool: string; callId: string }
-    | { type: 'tool_done'; agent: string; tool: string; callId: string; result: ToolResult }
+    | { type: 'tool_start'; agent: string; tool: string; callId: string; display?: ToolDisplay }
+    | { type: 'tool_done'; agent: string; tool: string; callId: string; display?: ToolDisplay; result: ToolResult }
     | { type: 'tool_event'; agent: string; tool: string; event: ToolEvent }
     | { type: 'context_patch'; agent: string; tool: string; patch: ContextPatch }
     | { type: 'sub_agent_start'; agent: string; subAgent: string }

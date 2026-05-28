@@ -1,10 +1,11 @@
 /*
  * Code assistant 消息 UI 设计约定：
  * - 把运行时对象图按 [round, ...round.actions] 平铺成正文流。
- * - 每个可见片段只读取 item.text，不在这里从 tool 元数据里拼展示文案。
+ * - round/thinking/error 读取 item.text；tool 只展示 item.display。
+ * - tool 展示文案由工具基类契约提供，UI 不从 tool input/result 推断文案。
  * - 各 type 组件保持轻量；thinking/tool 只在同一套正文样式上加一个小标记。
  * - thinking 文本暂时最多显示 3 行，超出部分先隐藏，等后续设计展开交互。
- * - tool 详情暂时没有定稿，所以 tool 片段先保持纯文本，不做卡片或面板。
+ * - tool result 仍保存在 Action.text 给 model 使用，默认不在 UI 展示。
  */
 import React, { useState } from 'react';
 import MarkdownRenderer from '../../doc-agent/ui/MarkdownRenderer.jsx';
@@ -38,6 +39,7 @@ function normalizeActions(actions) {
         if (existing) {
             existing.callId = existing.callId || action.callId;
             existing.call = action.call || existing.call;
+            existing.display = action.display || existing.display;
             existing.done = existing.done || action.done;
             existing.event = action.event || existing.event;
             existing.label = action.label || existing.label;
@@ -64,7 +66,11 @@ function buildSegments(message) {
         return [round, ...actions]
             .map((item, itemIndex) => {
                 const isRound = itemIndex === 0;
-                const text = typeof item?.text === 'string' ? item.text.trim() : '';
+                const type = item?.type;
+                const text = type === 'tool'
+                    ? ''
+                    : typeof item?.text === 'string' ? item.text.trim() : '';
+                const hasToolDisplay = type === 'tool' && item?.display;
 
                 return {
                     key: isRound
@@ -73,22 +79,12 @@ function buildSegments(message) {
                     kind: isRound ? 'round' : 'action',
                     item,
                     text,
-                    type: item?.type,
+                    type,
+                    visible: text.length > 0 || hasToolDisplay,
                 };
             })
-            .filter(item => item.text.length > 0);
+            .filter(item => item.visible);
     });
-}
-
-function getToolInputSummary(item) {
-    const input = item?.call?.input;
-    if (!input || typeof input !== 'object') return null;
-    if (input.path) return input.path;
-    if (input.command) return input.command;
-    if (input.query) return input.query;
-    if (input.url) return input.url;
-    const first = Object.values(input).find(v => typeof v === 'string');
-    return first ? (first.length > 80 ? first.slice(0, 80) + '…' : first) : null;
 }
 
 function ThinkingSegment({ segment }) {
@@ -128,13 +124,15 @@ function ThinkingSegment({ segment }) {
 }
 
 function ToolSegment({ segment }) {
-    const label = segment.item?.label || segment.item?.call?.name || 'tool';
-    const inputSummary = getToolInputSummary(segment.item);
+    const display = segment.item?.display || {};
+    const label = display.title || segment.item?.label || segment.item?.call?.name || 'tool';
+    const subtitle = display.subtitle || display.detail || '';
+    const statusText = display.statusText || (segment.item?.done ? '完成' : '执行中');
     const isDone = segment.item?.done;
 
     return (
         <div className="relative pl-3 border-l-2 border-[var(--ifm-color-primary)] bg-[var(--ifm-color-emphasis-100)] rounded-r-lg py-2 pr-3">
-            <div className="flex items-center gap-2 mb-1.5">
+            <div className="flex items-center gap-2 min-w-0">
                 {isDone ? (
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="text-green-500 shrink-0">
                         <polyline points="20 6 9 17 4 12" />
@@ -142,20 +140,20 @@ function ToolSegment({ segment }) {
                 ) : (
                     <div className="w-3 h-3 rounded-full border-2 border-[var(--ifm-color-primary)] border-t-transparent animate-spin shrink-0" />
                 )}
-                <span className="inline-flex px-1.5 py-0.5 rounded bg-[var(--ifm-color-emphasis-200)] text-[10px] font-mono font-medium text-[var(--ifm-color-emphasis-700)]">
+                <span className="inline-flex max-w-[45%] min-w-0 px-1.5 py-0.5 rounded bg-[var(--ifm-color-emphasis-200)] text-[10px] font-mono font-medium text-[var(--ifm-color-emphasis-700)] truncate">
                     {label}
                 </span>
-                {inputSummary && (
-                    <span className="text-[11px] text-[var(--ifm-color-emphasis-500)] font-mono truncate min-w-0">
-                        {inputSummary}
+                {subtitle && (
+                    <span className="text-[11px] text-[var(--ifm-color-emphasis-500)] font-mono truncate min-w-0 flex-1">
+                        {subtitle}
+                    </span>
+                )}
+                {statusText && (
+                    <span className="text-[11px] text-[var(--ifm-color-emphasis-500)] shrink-0">
+                        {statusText}
                     </span>
                 )}
             </div>
-            {segment.text && (
-                <div className="ml-5">
-                    <MarkdownRenderer content={segment.text} className="text-xs break-words [overflow-wrap:anywhere] [&>*:first-child]:mt-0 [&>*:last-child]:mb-0" />
-                </div>
-            )}
         </div>
     );
 }
