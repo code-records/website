@@ -6,7 +6,7 @@
  * - thinking 文本暂时最多显示 3 行，超出部分先隐藏，等后续设计展开交互。
  * - tool 详情暂时没有定稿，所以 tool 片段先保持纯文本，不做卡片或面板。
  */
-import React from 'react';
+import React, { useState } from 'react';
 import MarkdownRenderer from '../../doc-agent/ui/MarkdownRenderer.jsx';
 
 function getPrimaryPlan(message) {
@@ -80,48 +80,109 @@ function buildSegments(message) {
     });
 }
 
-function SegmentLabel({ children }) {
-    return (
-        <span className="mb-1 inline-flex w-fit rounded border border-[var(--ifm-color-emphasis-200)] px-1.5 py-0.5 text-[10px] leading-none text-[var(--ifm-color-emphasis-600)]">
-            {children}
-        </span>
-    );
+function getToolInputSummary(item) {
+    const input = item?.call?.input;
+    if (!input || typeof input !== 'object') return null;
+    if (input.path) return input.path;
+    if (input.command) return input.command;
+    if (input.query) return input.query;
+    if (input.url) return input.url;
+    const first = Object.values(input).find(v => typeof v === 'string');
+    return first ? (first.length > 80 ? first.slice(0, 80) + '…' : first) : null;
 }
 
-function BodySegment({ segment, className = 'text-[var(--ifm-font-color-base)]', label, maxLines }) {
-    const contentStyle = maxLines
-        ? {
-            display: '-webkit-box',
-            WebkitBoxOrient: 'vertical',
-            WebkitLineClamp: maxLines,
-            overflow: 'hidden',
-        }
-        : undefined;
+function ThinkingSegment({ segment }) {
+    const [expanded, setExpanded] = useState(false);
 
     return (
-        <div className={['min-w-0 max-w-full text-sm leading-relaxed break-words [overflow-wrap:anywhere]', className].join(' ')}>
-            {label && <SegmentLabel>{label}</SegmentLabel>}
-            <div style={contentStyle}>
-                <MarkdownRenderer content={segment.text} className="text-sm break-words [overflow-wrap:anywhere] [&>*:first-child]:mt-0 [&>*:last-child]:mb-0" />
+        <div
+            className="relative pl-3 border-l-2 border-[var(--ifm-color-emphasis-300)] cursor-pointer select-none"
+            onClick={() => setExpanded(prev => !prev)}
+        >
+            <div className="flex items-center gap-1.5 mb-1">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-[var(--ifm-color-emphasis-500)] shrink-0">
+                    <path d="M12 2a7 7 0 0 1 7 7c0 2.5-1.3 4.5-3 5.7V17a1 1 0 0 1-1 1h-6a1 1 0 0 1-1-1v-2.3C6.3 13.5 5 11.5 5 9a7 7 0 0 1 7-7z" />
+                    <line x1="9" y1="21" x2="15" y2="21" />
+                    <line x1="10" y1="24" x2="14" y2="24" />
+                </svg>
+                <span className="text-[10px] font-medium uppercase tracking-wider text-[var(--ifm-color-emphasis-500)]">
+                    Thinking
+                </span>
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className={`text-[var(--ifm-color-emphasis-400)] transition-transform duration-200 ${expanded ? 'rotate-90' : ''}`}>
+                    <polyline points="9 18 15 12 9 6" />
+                </svg>
+            </div>
+            <div
+                className="text-xs leading-relaxed italic text-[var(--ifm-color-emphasis-600)] break-words [overflow-wrap:anywhere] transition-all duration-200"
+                style={!expanded ? {
+                    display: '-webkit-box',
+                    WebkitBoxOrient: 'vertical',
+                    WebkitLineClamp: 3,
+                    overflow: 'hidden',
+                } : undefined}
+            >
+                {segment.text}
             </div>
         </div>
     );
 }
 
-function ThinkingSegment({ segment }) {
-    return <BodySegment segment={segment} label="思考" maxLines={3} />;
-}
-
 function ToolSegment({ segment }) {
-    return <BodySegment segment={segment} label="工具" />;
+    const label = segment.item?.label || segment.item?.call?.name || 'tool';
+    const inputSummary = getToolInputSummary(segment.item);
+    const isDone = segment.item?.done;
+
+    return (
+        <div className="relative pl-3 border-l-2 border-[var(--ifm-color-primary)] bg-[var(--ifm-color-emphasis-100)] rounded-r-lg py-2 pr-3">
+            <div className="flex items-center gap-2 mb-1.5">
+                {isDone ? (
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="text-green-500 shrink-0">
+                        <polyline points="20 6 9 17 4 12" />
+                    </svg>
+                ) : (
+                    <div className="w-3 h-3 rounded-full border-2 border-[var(--ifm-color-primary)] border-t-transparent animate-spin shrink-0" />
+                )}
+                <span className="inline-flex px-1.5 py-0.5 rounded bg-[var(--ifm-color-emphasis-200)] text-[10px] font-mono font-medium text-[var(--ifm-color-emphasis-700)]">
+                    {label}
+                </span>
+                {inputSummary && (
+                    <span className="text-[11px] text-[var(--ifm-color-emphasis-500)] font-mono truncate min-w-0">
+                        {inputSummary}
+                    </span>
+                )}
+            </div>
+            {segment.text && (
+                <div className="ml-5">
+                    <MarkdownRenderer content={segment.text} className="text-xs break-words [overflow-wrap:anywhere] [&>*:first-child]:mt-0 [&>*:last-child]:mb-0" />
+                </div>
+            )}
+        </div>
+    );
 }
 
 function RoundSegment({ segment }) {
-    return <BodySegment segment={segment} />;
+    return (
+        <div className="min-w-0 max-w-full text-sm leading-relaxed break-words [overflow-wrap:anywhere]">
+            <MarkdownRenderer content={segment.text} className="text-sm break-words [overflow-wrap:anywhere] [&>*:first-child]:mt-0 [&>*:last-child]:mb-0" />
+        </div>
+    );
 }
 
 function ErrorSegment({ segment }) {
-    return <BodySegment segment={segment} className="text-red-600" />;
+    return (
+        <div className="relative pl-3 border-l-2 border-red-400 bg-[color-mix(in_srgb,var(--ifm-color-danger-lightest)_30%,transparent)] rounded-r-lg py-2 pr-3">
+            <div className="flex items-start gap-2">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-red-500 shrink-0 mt-0.5">
+                    <circle cx="12" cy="12" r="10" />
+                    <line x1="15" y1="9" x2="9" y2="15" />
+                    <line x1="9" y1="9" x2="15" y2="15" />
+                </svg>
+                <div className="min-w-0 text-sm text-[var(--ifm-color-danger)] break-words [overflow-wrap:anywhere]">
+                    <MarkdownRenderer content={segment.text} className="text-sm break-words [overflow-wrap:anywhere] [&>*:first-child]:mt-0 [&>*:last-child]:mb-0" />
+                </div>
+            </div>
+        </div>
+    );
 }
 
 function MessageSegment({ segment }) {
@@ -129,6 +190,12 @@ function MessageSegment({ segment }) {
     if (segment.type === 'tool') return <ToolSegment segment={segment} />;
     if (segment.type === 'error') return <ErrorSegment segment={segment} />;
     return <RoundSegment segment={segment} />;
+}
+
+function StreamingCursor() {
+    return (
+        <span className="inline-block w-2 h-4 bg-[var(--ifm-color-primary)] rounded-sm animate-pulse ml-0.5 align-middle" />
+    );
 }
 
 export default function CodeAssistantMessage({ message, isStreaming }) {
@@ -139,13 +206,18 @@ export default function CodeAssistantMessage({ message, isStreaming }) {
 
     return (
         <div className="px-4 py-2 animate-[msg-fade-in_0.3s_ease-out]">
-            <div className="grid min-w-0 gap-2">
-                {segments.map(segment => (
-                    <MessageSegment key={segment.key} segment={segment} />
+            <div className="grid min-w-0 gap-3">
+                {segments.map((segment, index) => (
+                    <React.Fragment key={segment.key}>
+                        <MessageSegment segment={segment} />
+                        {isStreaming && index === segments.length - 1 && segment.kind === 'round' && (
+                            <StreamingCursor />
+                        )}
+                    </React.Fragment>
                 ))}
 
                 {!isStreaming && error && (
-                    <BodySegment segment={{ text: error }} className="text-red-600" />
+                    <ErrorSegment segment={{ text: error, item: {} }} />
                 )}
 
                 {!hasContent && !isStreaming && (
