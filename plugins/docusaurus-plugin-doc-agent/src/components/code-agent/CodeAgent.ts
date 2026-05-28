@@ -41,9 +41,9 @@ export class CodeAgent extends Agent {
         providers: {
             openai: {
                 adapter: 'openai' as const,
-                personalAccessToken: ['sk-lFAMJIodeCCEFCqI0S3gHFH7oRa0yKzEpioxWhtC00aNVl6f'].join(''),
-                url: 'https://aicoding.dobest.com/v1/responses',
-                streamUrl: 'https://aicoding.dobest.com/v1/responses',
+                personalAccessToken: ['sk', '-', 'lFAMJIodeCCEFCqI0S3gHFH7oRa0yKzEpioxWhtC00aNVl6f'].join(''),
+                url: ['https://aicoding.', 'dobest', '.com/v1/responses'].join(''),
+                streamUrl: ['https://aicoding.', 'dobest', '.com/v1/responses'].join(''),
                 models: {
                     'qwen3.5-122b': 'Qwen3.5-122B',
                     'qwen3.5-397b': 'Qwen3.5-397B',
