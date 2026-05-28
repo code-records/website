@@ -6,7 +6,7 @@ import {
     requestFileSystemDirectoryHandle,
     disposeFileSystemDirectoryHandle
 } from '../../../agent/tools/browser/browserFileSystemHelper';
-import CodeAgentMessage from './CodeAgentMessage.jsx';
+import CodeAssistantMessage from './CodeAssistantMessage.jsx';
 import CodeBody from './CodeBody.jsx';
 import CodeExplorer from './CodeExplorer.jsx';
 import CodeHeader from './CodeHeader.jsx';
@@ -266,7 +266,7 @@ export class CodePanel extends React.Component {
         }
 
         return (
-            <CodeAgentMessage
+            <CodeAssistantMessage
                 key={idx}
                 message={message}
                 isStreaming={message.streaming}

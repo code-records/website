@@ -4,6 +4,9 @@ import { ClaudeModel } from './model/ClaudeModel';
 import { GeminiModel } from './model/GeminiModel';
 import { Message } from './chat/Message';
 import type { ContextPatch, Tool, ToolEvent, ToolResult } from './tools/tool/Tool';
+import { CompressTool } from './tools/CompressTool';
+import { MakePlanTool, UpdatePlanTool } from './tools/PlanTool';
+import { ScheduleTool } from './tools/ScheduleTool';
 import { toError } from './utils/errors';
 import { loop } from './core/loop';
 
@@ -53,6 +56,21 @@ export abstract class Agent {
     subAgents: Agent[] = [];
 
     constructor(protected context: AgentContext) { }
+
+    /**
+     * 默认基础设施工具。
+     *
+     * 所有 Agent 自动拥有调度、上下文压缩、计划管理能力。
+     * 子类可 override 来定制或排除特定默认工具。
+     */
+    protected defaultTools(): Tool[] {
+        return [
+            new ScheduleTool(),
+            new CompressTool(),
+            // new MakePlanTool(),
+            // new UpdatePlanTool(),
+        ];
+    }
 
     /**
      * 根据通用配置创建具体 provider 的 Model 实例。
@@ -116,7 +134,7 @@ export abstract class Agent {
                 agentName: this.name,
                 model: this.model,
                 maxRounds: this.context.maxRounds,
-                tools: this.tools,
+                tools: [...this.defaultTools(), ...this.tools],
                 subAgents: this.subAgents,
                 system: this.systemPrompt,
                 messages: input.messages,

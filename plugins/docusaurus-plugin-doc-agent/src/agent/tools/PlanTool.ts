@@ -101,9 +101,6 @@ export class UpdatePlanTool extends Tool {
     }
 }
 
-export function createPlanTools(): Tool[] {
-    return [new MakePlanTool(), new UpdatePlanTool()];
-}
 
 function isJsonObject(value: unknown): value is JsonObject {
     return value !== null && typeof value === 'object' && !Array.isArray(value);
