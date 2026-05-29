@@ -99,7 +99,7 @@ function buildRoundGroups(message) {
 }
 
 function formatRoundLabel(group) {
-    return `工作 ${group.actions.length} 步`;
+    return group.round?.label || `工作 ${group.actions.length} 步`;
 }
 
 function RoundText({ text }) {

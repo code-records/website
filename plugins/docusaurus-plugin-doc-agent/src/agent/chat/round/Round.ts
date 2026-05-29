@@ -5,6 +5,7 @@ export interface RoundJSON {
     actions: ActionJSON[];
     count: number;
     done: boolean;
+    label?: string;
     status?: ModelResponseKind;
     text?: string;
 }
@@ -13,6 +14,7 @@ export class Round {
     private readonly _actions: Action[] = [];
     count = 0;
     done = false;
+    label = '';
     status?: ModelResponseKind;
     text = '';
 
@@ -28,11 +30,20 @@ export class Round {
         return this._actions.filter(action => action.type === 'tool').length;
     }
 
+    formatLabel(): string {
+        if (this.toolCount > 0) return `工作 ${this.toolCount} 步`;
+        if (this.status === 'final') return '回复';
+        if (this.status === 'continue') return '继续';
+        if (this.status === 'tool_calls') return '工作 0 步';
+        return this.done ? '已完成' : '正在工作';
+    }
+
     static fromJSON(json: RoundJSON): Round {
         const round = new Round();
         round.count = json.count ?? 0;
         round.text = json.text ?? '';
         round.done = json.done;
+        round.label = json.label ?? '';
         round.status = json.status;
         for (const action of json.actions) {
             round.add(Action.fromJSON(action));
@@ -110,9 +121,11 @@ export class Round {
     }
 
     toJSON(): RoundJSON {
+        const label = this.label || this.formatLabel();
         return {
             count: this.count,
             done: this.done,
+            label,
             status: this.status,
             text: this.text.length > 0 ? this.text : undefined,
             actions: this._actions.map(action => action.toJSON()),

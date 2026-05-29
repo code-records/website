@@ -33,7 +33,7 @@ export class Plan {
 
     formatLabel(): string {
         const toolCount = this._rounds.reduce((count, round) => count + round.toolCount, 0);
-        if (toolCount > 0) return `工作 ${toolCount} 步`;
+        if (toolCount > 0) return `计划 ${toolCount}`;
         return this.status === 'completed' ? '分析完毕' : '正在工作';
     }
 

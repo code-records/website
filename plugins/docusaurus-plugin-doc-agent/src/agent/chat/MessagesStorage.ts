@@ -204,6 +204,7 @@ function parseRound(value: unknown): RoundJSON | null {
     if (!isRecord(value) || !Array.isArray(value.actions)) return null;
 
     const count = typeof value.count === 'number' ? value.count : undefined;
+    const label = typeof value.label === 'string' ? value.label : undefined;
     const status = parseRoundStatus(value.status);
     const text = typeof value.text === 'string' ? value.text : undefined;
 
@@ -213,6 +214,7 @@ function parseRound(value: unknown): RoundJSON | null {
             .filter(action => action !== null),
         count: count ?? 0,
         done: value.done === true,
+        ...(label !== undefined ? { label } : {}),
         status,
         ...(text !== undefined ? { text } : {}),
     };
