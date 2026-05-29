@@ -28,11 +28,11 @@ export class Action {
     status: ClientStatus = 'pending';
     label = '';
     text = '';
+    usage?: ToolUsage;
     id: string;
     call?: ModelToolCall;
     callId?: string;
     event?: ToolEvent;
-    usage?: ToolUsage;
 
     constructor(json: ActionJSON) {
         this.call = json.call;
@@ -82,7 +82,7 @@ export class Action {
             }
             if (event.type === 'context_patch') {
                 return new Action({
-                    label: '\u4e0a\u4e0b\u6587\u66f4\u65b0',
+                    label: '上下文更新',
                     status: 'completed',
                     text: event.patch.type,
                     type: 'context',
@@ -90,7 +90,7 @@ export class Action {
             }
             if (event.type === 'agent_error') {
                 return new Action({
-                    label: '\u9519\u8bef',
+                    label: '错误',
                     status: 'failed',
                     text: event.error.message,
                     type: 'error',
@@ -102,7 +102,7 @@ export class Action {
         const modelEvent = event.event;
         if (modelEvent.type === 'action' && modelEvent.action.type === 'thinking') {
             return new Action({
-                label: '\u601d\u8003',
+                label: '思考',
                 status: 'pending',
                 text: modelEvent.action.content,
                 type: 'thinking',
@@ -119,7 +119,7 @@ export class Action {
         }
         if (modelEvent.type === 'error') {
             return new Action({
-                label: '\u6a21\u578b\u9519\u8bef',
+                label: '模型错误',
                 status: 'failed',
                 text: modelEvent.error.message,
                 type: 'error',
@@ -143,11 +143,11 @@ export class Action {
             status: this.status,
             label: this.label.length > 0 ? this.label : undefined,
             text: this.text.length > 0 ? this.text : undefined,
+            usage: this.usage,
             id: this.id,
             call: this.call,
             callId: this.callId,
             event: this.event,
-            usage: this.usage,
         };
     }
 }

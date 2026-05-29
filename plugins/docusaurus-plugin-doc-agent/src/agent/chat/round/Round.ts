@@ -14,19 +14,12 @@ export interface RoundJSON {
 }
 
 export class Round {
-    /** Stable discriminator for UI rendering and persistence. */
     readonly kind = 'round';
-    /** Model response type for this round: tool calls, continuation, or final answer. */
     type?: ModelResponseType;
-    /** Client lifecycle state shared with Plan and Action. */
     status: ClientStatus = 'pending';
-    /** 1-based round index within the current agent run. */
     count = 0;
-    /** Optional explicit display label; empty means formatLabel() derives it. */
     label = '';
-    /** Text emitted directly by the model during this round. */
     text = '';
-    /** Display actions collected from model events and tool events. */
     private readonly _actions: Action[] = [];
 
     get actions(): readonly Action[] {
@@ -44,11 +37,11 @@ export class Round {
     formatLabel(): string {
         const usageLabel = this.formatUsageLabel();
         if (usageLabel.length > 0) return usageLabel;
-        if (this.status === 'failed') return '\u5904\u7406\u5931\u8d25';
-        if (this.status === 'pending') return '\u6b63\u5728\u601d\u8003';
-        if (this.type === 'final') return '\u751f\u6210\u4e86\u56de\u7b54';
-        if (this.type === 'continue') return '\u7ee7\u7eed\u751f\u6210';
-        return '\u5df2\u5b8c\u6210';
+        if (this.status === 'failed') return '处理失败';
+        if (this.status === 'pending') return '正在思考';
+        if (this.type === 'final') return '生成了回答';
+        if (this.type === 'continue') return '继续生成';
+        return '已完成';
     }
 
     static fromJSON(json: RoundJSON): Round {
@@ -176,10 +169,10 @@ export class Round {
 
         return Array.from(byVerb.entries())
             .map(([verb, verbGroups]) => {
-                const prefix = this.status === 'completed' ? `${verb}\u4e86` : `\u6b63\u5728${verb} `;
-                return `${prefix}${verbGroups.map(formatUsageGroup).join('\u3001')}`;
+                const prefix = this.status === 'completed' ? `${verb}了` : `正在${verb} `;
+                return `${prefix}${verbGroups.map(formatUsageGroup).join('、')}`;
             })
-            .join('\uff1b');
+            .join('；');
     }
 
     private collectUsageGroups(): UsageGroup[] {
