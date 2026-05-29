@@ -160,14 +160,7 @@ function TypedText({ text, toneClass, type }) {
 }
 
 function RoundText({ text }) {
-    return <TypedText text={text} toneClass={ROUND_TEXT_CLASS} type="round" />;
-    // if (!text) return null;
-
-    // return (
-    //     <div className="min-w-0 max-w-full text-xs leading-relaxed break-words [overflow-wrap:anywhere]">
-    //         <MarkdownRenderer content={text} className="text-xs break-words [overflow-wrap:anywhere] [&_*]:text-xs [&>*:first-child]:mt-0 [&>*:last-child]:mb-0" />
-    //     </div>
-    // );
+    return <TypedText text={text} toneClass={ROUND_TEXT_CLASS} type="round.text" />;
 }
 
 function InlineThinkingSegment({ segment }) {
@@ -229,7 +222,7 @@ function RoundGroup({ group, isStreaming }) {
                 onClick={handleClick}
                 disabled={!hasActions}
             >
-                <LabelLine label={label} toneClass={ROUND_TEXT_CLASS} type="round">
+                <LabelLine label={label} toneClass={ROUND_TEXT_CLASS} type="round.label">
                     {hasActions && (
                         <span className={['transition-transform', expanded ? 'rotate-90' : ''].join(' ')}>&gt;</span>
                     )}
