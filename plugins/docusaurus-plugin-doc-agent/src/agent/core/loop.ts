@@ -249,6 +249,7 @@ function loggerRoundStart(round: Round, loggedRoundStarts: WeakSet<Round>): void
 function loggerRoundAction(round: Round): void {
     const action = round.actions[round.actions.length - 1];
     if (action === undefined) return;
+    if (action.type === 'thinking') return;
     logger.action(action.toJSON());
 }
 

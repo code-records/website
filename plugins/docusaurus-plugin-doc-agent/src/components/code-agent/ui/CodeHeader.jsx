@@ -23,8 +23,7 @@ export default function CodeHeader({ onCopyDisplay, onCopyStructured, onClearHis
     return (
         <div className="flex items-center justify-between px-6 py-3.5 border-b border-[var(--ifm-color-emphasis-200)] bg-[var(--ifm-color-emphasis-100)] shrink-0">
             <div className="flex items-center gap-2">
-                <span className="text-xs font-bold text-[var(--ifm-font-color-base)] tracking-wide">👨‍💻 CodeAgent</span>
-                <span className="text-[9px] px-1 py-0.5 rounded bg-[var(--ifm-color-primary-lightest)] text-[var(--ifm-color-primary)] border border-[var(--ifm-color-primary-light)] font-bold tracking-wider">WORKSPACE MODE</span>
+                <span className="text-xs font-bold text-[var(--ifm-font-color-base)] tracking-wide">CodeAgent</span>
             </div>
 
             <div className="flex items-center gap-2">
