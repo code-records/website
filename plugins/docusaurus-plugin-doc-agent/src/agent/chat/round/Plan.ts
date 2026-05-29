@@ -14,12 +14,12 @@ export interface PlanJSON {
 }
 
 export class Plan {
-    private readonly _rounds: Round[] = [];
-    count = 0;
-    expanded = false;
     readonly kind = 'plan';
-    label = '';
     status: ClientStatus = 'pending';
+    count = 0;
+    label = '';
+    expanded = false;
+    private readonly _rounds: Round[] = [];
 
     get rounds(): readonly Round[] {
         return this._rounds;
@@ -121,10 +121,10 @@ export class Plan {
 
     toJSON(): PlanJSON {
         return {
-            count: this.count,
             kind: this.kind,
-            label: this.label,
             status: this.status,
+            count: this.count,
+            label: this.label,
             expanded: this.expanded,
             rounds: this._rounds.map(round => round.toJSON()),
         };

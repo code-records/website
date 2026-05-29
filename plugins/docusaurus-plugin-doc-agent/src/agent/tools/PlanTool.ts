@@ -1,4 +1,4 @@
-import { Tool, type JsonObject, type ToolActivity, type ToolInput, type ToolPromptSchema, type ToolResult, type ToolRunContext } from './tool/Tool';
+import { Tool, type JsonObject, type ToolUsage, type ToolInput, type ToolPromptSchema, type ToolResult, type ToolRunContext } from './tool/Tool';
 
 export interface PlanStep extends JsonObject {
     description: string;
@@ -33,7 +33,7 @@ export class MakePlanTool extends Tool {
         type: 'object',
     };
 
-    formatActivity(input: ToolInput): ToolActivity {
+    formatUsage(input: ToolInput): ToolUsage {
         const rawSteps = Array.isArray(input.steps) ? input.steps : [];
         return {
             count: rawSteps.length,
@@ -92,7 +92,7 @@ export class UpdatePlanTool extends Tool {
         type: 'object',
     };
 
-    formatActivity(input: ToolInput): ToolActivity {
+    formatUsage(input: ToolInput): ToolUsage {
         const step = typeof input.step === 'number' ? String(input.step) : '';
         return {
             key: step,

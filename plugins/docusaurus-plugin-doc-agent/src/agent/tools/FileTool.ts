@@ -1,7 +1,7 @@
 import {
     Tool,
     type JsonObject,
-    type ToolActivity,
+    type ToolUsage,
     type ToolInput,
     type ToolLabelContext,
     type ToolPromptSchema,
@@ -60,7 +60,7 @@ export abstract class FileTool extends Tool {
         return `${fileOperationTitle(parsed.operation)}: ${parsed.path || '.'}`;
     }
 
-    formatActivity(input: ToolInput, context: ToolLabelContext = { input }): ToolActivity {
+    formatUsage(input: ToolInput, context: ToolLabelContext = { input }): ToolUsage {
         const parsed = parseFileToolInput(input);
         if (parsed === null) {
             return {
@@ -70,7 +70,7 @@ export abstract class FileTool extends Tool {
                 verb: '执行',
             };
         }
-        return fileOperationActivity(parsed);
+        return fileOperationUsage(parsed);
     }
 
     protected async execute(input: ToolInput, context: ToolRunContext): Promise<ToolResult> {
@@ -101,7 +101,7 @@ export abstract class FileTool extends Tool {
     }
 }
 
-function fileOperationActivity(input: FileToolInput): ToolActivity {
+function fileOperationUsage(input: FileToolInput): ToolUsage {
     const key = input.path || '.';
     switch (input.operation) {
         case 'list':

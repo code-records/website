@@ -4,7 +4,7 @@ import type { ActionJSON, ActionType } from './round/Action';
 import type { ClientStatus, PlanJSON } from './round/Plan';
 import type { RoundJSON } from './round/Round';
 import type { ModelToolCall } from '../model/Model';
-import type { JsonObject, JsonValue, ToolActivity, ToolEvent } from '../tools/tool/Tool';
+import type { JsonObject, JsonValue, ToolUsage, ToolEvent } from '../tools/tool/Tool';
 
 export interface MessagesMeta {
     [key: string]: string | number | boolean | null;
@@ -241,27 +241,28 @@ function parseAction(value: unknown): ActionJSON | null {
     const type = parseActionType(value.type);
     if (type === null) return null;
 
-    const activity = parseToolActivity(value.activity);
+    const usage = parseToolUsage(value.usage);
     const call = parseToolCall(value.call);
     const event = parseToolEvent(value.event);
     const id = typeof value.id === 'string' ? value.id : undefined;
     const label = typeof value.label === 'string' ? value.label : undefined;
+    const status = parseClientStatus(value.status);
     const text = typeof value.text === 'string' ? value.text : undefined;
 
     return {
-        ...(activity !== null ? { activity } : {}),
+        ...(usage !== null ? { usage } : {}),
         ...(call !== null ? { call } : {}),
-        done: value.done === true,
         ...(event !== null ? { event } : {}),
         ...(id !== undefined ? { id } : {}),
         ...(value.kind === 'action' ? { kind: value.kind } : {}),
         ...(label !== undefined ? { label } : {}),
+        status,
         ...(text !== undefined ? { text } : {}),
         type,
     };
 }
 
-function parseToolActivity(value: unknown): ToolActivity | null {
+function parseToolUsage(value: unknown): ToolUsage | null {
     if (!isRecord(value)) return null;
     if (typeof value.verb !== 'string' || typeof value.name !== 'string' || typeof value.unit !== 'string') {
         return null;

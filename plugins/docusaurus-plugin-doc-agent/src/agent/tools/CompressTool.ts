@@ -3,7 +3,7 @@ import { estimateContextTokens } from '../utils/tokenEstimator';
 import {
     Tool,
     type JsonObject,
-    type ToolActivity,
+    type ToolUsage,
     type ToolAskPrompt,
     type ToolInput,
     type ToolPromptSchema,
@@ -70,7 +70,7 @@ export class CompressTool extends Tool {
         this.threshold = threshold;
     }
 
-    formatActivity(_input: ToolInput): ToolActivity {
+    formatUsage(_input: ToolInput): ToolUsage {
         return {
             count: 1,
             name: '上下文',

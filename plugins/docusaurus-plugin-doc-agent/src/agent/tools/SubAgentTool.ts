@@ -1,6 +1,6 @@
 import type { Agent, AgentEvent } from '../Agent';
 import { Message } from '../chat/Message';
-import { Tool, type JsonObject, type ToolActivity, type ToolInput, type ToolPromptSchema, type ToolResult, type ToolRunContext } from './tool/Tool';
+import { Tool, type JsonObject, type ToolUsage, type ToolInput, type ToolPromptSchema, type ToolResult, type ToolRunContext } from './tool/Tool';
 
 export interface SubAgentToolOptions {
     maxResultChars?: number;
@@ -53,7 +53,7 @@ export class SubAgentTool extends Tool {
         };
     }
 
-    formatActivity(input: ToolInput): ToolActivity {
+    formatUsage(input: ToolInput): ToolUsage {
         const agent = typeof input.agent === 'string' ? input.agent : '';
         return {
             key: agent,

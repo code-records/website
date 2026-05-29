@@ -1,4 +1,4 @@
-import { Tool, type JsonObject, type ToolActivity, type ToolInput, type ToolPromptSchema, type ToolResult, type ToolRunContext } from './tool/Tool';
+import { Tool, type JsonObject, type ToolUsage, type ToolInput, type ToolPromptSchema, type ToolResult, type ToolRunContext } from './tool/Tool';
 
 export interface ModeToolDefinition extends JsonObject {
     description: string;
@@ -43,7 +43,7 @@ export class ModeTool extends Tool {
         };
     }
 
-    formatActivity(input: ToolInput): ToolActivity {
+    formatUsage(input: ToolInput): ToolUsage {
         const mode = typeof input.mode === 'string' ? input.mode : '';
         return {
             key: mode,

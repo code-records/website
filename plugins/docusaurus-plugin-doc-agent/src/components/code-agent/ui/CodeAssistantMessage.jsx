@@ -27,6 +27,7 @@ function buildTimelineItems(message) {
                 label: action.label || action.call?.name || '',
                 text: typeof action.text === 'string' ? action.text.trim() : '',
                 type: action.type,
+                usage: action.usage,
             }))
             .filter(action => action.type === 'tool' ? action.label.length > 0 : action.text.length > 0);
 
@@ -35,7 +36,7 @@ function buildTimelineItems(message) {
             const previous = items[items.length - 1];
             if (actions.length > 0 && previous?.kind === 'round') {
                 previous.actions = previous.actions.concat(actions);
-                previous.label = formatRoundLabel(round);
+                previous.label = formatActionsUsageLabel(previous.actions, round.status) || formatRoundLabel(round);
             }
             continue;
         }
@@ -53,6 +54,68 @@ function buildTimelineItems(message) {
 
 function formatRoundLabel(round) {
     return round.formatLabel();
+}
+
+function formatActionsUsageLabel(actions, status) {
+    const groups = collectUsageGroups(actions);
+    if (groups.length === 0) return '';
+
+    const byVerb = new Map();
+    for (const group of groups) {
+        const verbGroups = byVerb.get(group.verb) || [];
+        verbGroups.push(group);
+        byVerb.set(group.verb, verbGroups);
+    }
+
+    return Array.from(byVerb.entries())
+        .map(([verb, verbGroups]) => {
+            const prefix = status === 'completed' ? `${verb}了` : `正在${verb} `;
+            return `${prefix}${verbGroups.map(formatUsageGroup).join('、')}`;
+        })
+        .join('；');
+}
+
+function collectUsageGroups(actions) {
+    const groups = new Map();
+    for (const action of actions) {
+        const usage = action.usage;
+        if (action.type !== 'tool' || usage === undefined || !isCountableUsage(usage)) continue;
+
+        const groupKey = `${usage.verb}\u0000${usage.name}\u0000${usage.unit}`;
+        const group = groups.get(groupKey) || {
+            count: 0,
+            keyedCount: 0,
+            keys: new Set(),
+            name: usage.name,
+            unit: usage.unit,
+            verb: usage.verb,
+        };
+
+        if (typeof usage.key === 'string' && usage.key.length > 0) {
+            group.keys.add(usage.key);
+            group.keyedCount = group.keys.size;
+        } else {
+            group.count += normalizeUsageCount(usage.count);
+        }
+
+        groups.set(groupKey, group);
+    }
+    return Array.from(groups.values());
+}
+
+function formatUsageGroup(group) {
+    const total = group.count + group.keyedCount;
+    return total > 0 ? `${total} ${group.unit}${group.name}` : group.name;
+}
+
+function isCountableUsage(usage) {
+    return usage.verb.length > 0 && usage.name.length > 0 && usage.unit.length > 0;
+}
+
+function normalizeUsageCount(count) {
+    return typeof count === 'number' && Number.isFinite(count)
+        ? Math.max(0, Math.floor(count))
+        : 1;
 }
 
 function getPlanText(items) {

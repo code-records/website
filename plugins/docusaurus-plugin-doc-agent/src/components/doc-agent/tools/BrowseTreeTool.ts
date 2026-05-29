@@ -1,5 +1,5 @@
 import { readonlyClient } from './api';
-import { Tool, type ToolActivity, type ToolInput, type ToolPromptSchema, type ToolResult, type ToolRunContext } from '../../../agent';
+import { Tool, type ToolUsage, type ToolInput, type ToolPromptSchema, type ToolResult, type ToolRunContext } from '../../../agent';
 
 function errorMessage(error: unknown): string {
     return error instanceof Error ? error.message : String(error);
@@ -23,7 +23,7 @@ class BrowseTreeTool extends Tool {
         required: ['path'],
     };
 
-    formatActivity(input: ToolInput): ToolActivity {
+    formatUsage(input: ToolInput): ToolUsage {
         const path = typeof input.path === 'string' ? input.path : '';
         return {
             key: path || '.',

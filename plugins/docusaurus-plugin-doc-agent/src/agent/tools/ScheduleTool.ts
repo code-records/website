@@ -11,7 +11,7 @@ import {
     type ContextPatch,
     type JsonObject,
     type JsonValue,
-    type ToolActivity,
+    type ToolUsage,
     type ToolEvent,
     type ToolInput,
     type ToolPromptSchema,
@@ -99,7 +99,7 @@ export class ScheduleTool extends Tool {
         this.maxResultChars = maxResultChars;
     }
 
-    formatActivity(input: ToolInput): ToolActivity {
+    formatUsage(input: ToolInput): ToolUsage {
         const rawItems = Array.isArray(input.items) ? input.items : [];
         return {
             count: Math.min(rawItems.length, this.maxItems),

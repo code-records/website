@@ -1,6 +1,7 @@
 import type { AgentEvent } from '../../Agent';
 import type { ModelToolCall } from '../../model/Model';
-import type { ToolActivity, ToolEvent } from '../../tools/tool/Tool';
+import type { ToolEvent, ToolUsage } from '../../tools/tool/Tool';
+import type { ClientStatus } from './Plan';
 
 export type ActionType =
     | 'context'
@@ -9,40 +10,40 @@ export type ActionType =
     | 'tool';
 
 export interface ActionJSON {
-    activity?: ToolActivity;
-    callId?: string;
     call?: ModelToolCall;
-    done: boolean;
+    callId?: string;
     event?: ToolEvent;
     id?: string;
     kind?: 'action';
     label?: string;
+    status: ClientStatus;
     text?: string;
     type: ActionType;
+    usage?: ToolUsage;
 }
 
 export class Action {
-    activity?: ToolActivity;
-    callId?: string;
-    call?: ModelToolCall;
-    done = false;
-    event?: ToolEvent;
-    id: string;
     readonly kind = 'action';
+    type: ActionType;
+    status: ClientStatus = 'pending';
     label = '';
     text = '';
-    type: ActionType;
+    id: string;
+    call?: ModelToolCall;
+    callId?: string;
+    event?: ToolEvent;
+    usage?: ToolUsage;
 
     constructor(json: ActionJSON) {
-        this.activity = json.activity;
-        this.type = json.type;
-        this.callId = json.callId;
-        this.id = json.id ?? createActionId(json);
-        this.text = json.text ?? '';
         this.call = json.call;
-        this.done = json.done;
+        this.callId = json.callId;
         this.event = json.event;
+        this.id = json.id ?? createActionId(json);
         this.label = json.label ?? '';
+        this.status = json.status;
+        this.text = json.text ?? '';
+        this.type = json.type;
+        this.usage = json.usage;
     }
 
     static fromJSON(json: ActionJSON): Action {
@@ -53,44 +54,44 @@ export class Action {
         if (event.type !== 'model_event') {
             if (event.type === 'tool_start') {
                 return new Action({
-                    activity: event.activity,
                     callId: event.callId,
-                    done: false,
                     label: event.label,
+                    status: 'pending',
                     type: 'tool',
+                    usage: event.usage,
                 });
             }
             if (event.type === 'tool_done') {
                 return new Action({
-                    activity: event.activity ?? event.result.activity,
                     callId: event.callId,
-                    done: true,
                     label: event.label,
+                    status: 'completed',
                     text: event.result.result,
                     type: 'tool',
+                    usage: event.usage ?? event.result.usage,
                 });
             }
             if (event.type === 'tool_event') {
                 return new Action({
                     callId: event.callId,
-                    done: true,
                     event: event.event,
                     label: event.label,
+                    status: 'completed',
                     type: 'tool',
                 });
             }
             if (event.type === 'context_patch') {
                 return new Action({
-                    done: true,
-                    label: '上下文更新',
+                    label: '\u4e0a\u4e0b\u6587\u66f4\u65b0',
+                    status: 'completed',
                     text: event.patch.type,
                     type: 'context',
                 });
             }
             if (event.type === 'agent_error') {
                 return new Action({
-                    done: true,
-                    label: '错误',
+                    label: '\u9519\u8bef',
+                    status: 'failed',
                     text: event.error.message,
                     type: 'error',
                 });
@@ -101,8 +102,8 @@ export class Action {
         const modelEvent = event.event;
         if (modelEvent.type === 'action' && modelEvent.action.type === 'thinking') {
             return new Action({
-                done: false,
-                label: '思考',
+                label: '\u601d\u8003',
+                status: 'pending',
                 text: modelEvent.action.content,
                 type: 'thinking',
             });
@@ -111,15 +112,15 @@ export class Action {
             return new Action({
                 call: modelEvent.action.call,
                 callId: modelEvent.action.call.id,
-                done: false,
                 label: modelEvent.action.call.name,
+                status: 'pending',
                 type: 'tool',
             });
         }
         if (modelEvent.type === 'error') {
             return new Action({
-                done: true,
-                label: '模型错误',
+                label: '\u6a21\u578b\u9519\u8bef',
+                status: 'failed',
                 text: modelEvent.error.message,
                 type: 'error',
             });
@@ -132,21 +133,21 @@ export class Action {
     }
 
     finish(): void {
-        this.done = true;
+        this.status = 'completed';
     }
 
     toJSON(): ActionJSON {
         return {
-            activity: this.activity,
-            callId: this.callId,
-            call: this.call,
-            done: this.done,
-            event: this.event,
-            id: this.id,
             kind: this.kind,
+            type: this.type,
+            status: this.status,
             label: this.label.length > 0 ? this.label : undefined,
             text: this.text.length > 0 ? this.text : undefined,
-            type: this.type,
+            id: this.id,
+            call: this.call,
+            callId: this.callId,
+            event: this.event,
+            usage: this.usage,
         };
     }
 }

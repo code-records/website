@@ -20,7 +20,7 @@ export interface ToolEvent {
 }
 
 /** 工具向 Round 暴露的可聚合活动摘要，用于生成“浏览了 1 个文件夹、1 个文件”这类状态文案。 */
-export interface ToolActivity {
+export interface ToolUsage {
     /** 动作动词，例如“浏览”“搜索”“修改”“运行”。 */
     verb: string;
     /** 被操作对象的显示名称，例如“文件”“文件夹”“网站”“命令”。 */
@@ -48,7 +48,7 @@ export interface ToolResult {
     /** 可选的副作用事件，供 UI、日志或调度工具消费。 */
     events?: ToolEvent[];
     /** 工具完成后补充或修正的活动摘要；未提供时使用工具调用开始时的摘要。 */
-    activity?: ToolActivity;
+    usage?: ToolUsage;
 }
 
 export interface ToolLabelContext {
@@ -126,7 +126,7 @@ export abstract class Tool {
         return this.name;
     }
 
-    abstract formatActivity(input: ToolInput, context: ToolLabelContext): ToolActivity;
+    abstract formatUsage(input: ToolInput, context: ToolLabelContext): ToolUsage;
 
     /**
      * 注入回问能力。

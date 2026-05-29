@@ -4,7 +4,7 @@ import { ClaudeModel } from './model/ClaudeModel';
 import { GeminiModel } from './model/GeminiModel';
 import { Message } from './chat/Message';
 import { Plan } from './chat/round/Plan';
-import type { ContextPatch, Tool, ToolActivity, ToolEvent, ToolResult } from './tools/tool/Tool';
+import type { ContextPatch, Tool, ToolUsage, ToolEvent, ToolResult } from './tools/tool/Tool';
 import { CompressTool } from './tools/CompressTool';
 import { MakePlanTool, UpdatePlanTool } from './tools/PlanTool';
 import { ScheduleTool } from './tools/ScheduleTool';
@@ -33,8 +33,8 @@ export interface AgentContext {
 export type AgentEvent =
     | { type: 'agent_start'; agent: string }
     | { type: 'model_event'; agent: string; event: ModelEvent }
-    | { type: 'tool_start'; agent: string; tool: string; callId: string; label: string; activity?: ToolActivity }
-    | { type: 'tool_done'; agent: string; tool: string; callId: string; label: string; result: ToolResult; activity?: ToolActivity }
+    | { type: 'tool_start'; agent: string; tool: string; callId: string; label: string; usage?: ToolUsage }
+    | { type: 'tool_done'; agent: string; tool: string; callId: string; label: string; result: ToolResult; usage?: ToolUsage }
     | { type: 'tool_event'; agent: string; tool: string; callId: string; label: string; event: ToolEvent }
     | { type: 'context_patch'; agent: string; tool: string; patch: ContextPatch }
     | { type: 'sub_agent_start'; agent: string; subAgent: string }

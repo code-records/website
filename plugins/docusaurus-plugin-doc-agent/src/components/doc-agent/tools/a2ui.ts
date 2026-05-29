@@ -1,5 +1,5 @@
 import { parseA2UIPayload, validateA2UIBasicCatalogMessages } from '../../../../ai/a2ui/A2UITransport.js';
-import { Tool, type JsonObject, type ToolActivity, type ToolInput, type ToolPromptSchema, type ToolResult, type ToolRunContext } from '../../../agent';
+import { Tool, type JsonObject, type ToolUsage, type ToolInput, type ToolPromptSchema, type ToolResult, type ToolRunContext } from '../../../agent';
 
 interface A2UIMessage {
     [key: string]: unknown;
@@ -21,7 +21,7 @@ class A2UITool extends Tool {
     description = '提交 Google A2UI v0.9 server-to-client payload 给客户端渲染。输入必须是官方 A2UI message、message 数组或 {messages:[...]} wrapper。';
     prompt: ToolPromptSchema = LIGHTWEIGHT_A2UI_TOOL_SCHEMA;
 
-    formatActivity(input: ToolInput): ToolActivity {
+    formatUsage(input: ToolInput): ToolUsage {
         const messages = parseA2UIPayload(input.a2ui);
         return {
             count: messages?.length ?? 1,

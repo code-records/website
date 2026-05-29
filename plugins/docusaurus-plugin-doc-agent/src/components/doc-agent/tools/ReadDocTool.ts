@@ -1,6 +1,6 @@
 import { readonlyClient } from './api';
 import { logger } from '../../../agent/utils/logger';
-import { Tool, type ToolActivity, type ToolInput, type ToolPromptSchema, type ToolResult, type ToolRunContext } from '../../../agent';
+import { Tool, type ToolUsage, type ToolInput, type ToolPromptSchema, type ToolResult, type ToolRunContext } from '../../../agent';
 
 const READ_DOC_MAX_CHARS = 8000;
 
@@ -52,7 +52,7 @@ class ReadDocTool extends Tool {
         required: ['url'],
     };
 
-    formatActivity(input: ToolInput): ToolActivity {
+    formatUsage(input: ToolInput): ToolUsage {
         const url = typeof input.url === 'string' ? input.url : '';
         return {
             key: url,

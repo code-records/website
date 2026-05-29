@@ -2,7 +2,7 @@ import {
     Tool,
     type JsonObject,
     type JsonValue,
-    type ToolActivity,
+    type ToolUsage,
     type ToolAskPrompt,
     type ToolInput,
     type ToolPromptSchema,
@@ -60,7 +60,7 @@ export class WebSearchTool extends Tool {
         this.maxResults = maxResults;
     }
 
-    formatActivity(_input: ToolInput): ToolActivity {
+    formatUsage(_input: ToolInput): ToolUsage {
         return {
             name: '网站',
             unit: '个',

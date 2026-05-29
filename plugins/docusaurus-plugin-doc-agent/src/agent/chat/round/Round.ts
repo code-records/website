@@ -1,7 +1,7 @@
 import { Action, type ActionJSON } from './Action';
 import type { ClientStatus } from './Plan';
 import type { ModelResponseType } from '../../model/Model';
-import type { ToolActivity } from '../../tools/tool/Tool';
+import type { ToolUsage } from '../../tools/tool/Tool';
 
 export interface RoundJSON {
     actions: ActionJSON[];
@@ -14,20 +14,20 @@ export interface RoundJSON {
 }
 
 export class Round {
-    /** 本轮收集到的展示动作，包含模型思考、工具调用、工具结果等。 */
-    private readonly _actions: Action[] = [];
-    /** 本轮在当前 plan / agent run 中的序号，从 1 开始。 */
-    count = 0;
-    /** 用于 UI 和序列化区分消息块类型。 */
+    /** Stable discriminator for UI rendering and persistence. */
     readonly kind = 'round';
-    /** 外部指定的展示标题；为空时由 formatLabel() 根据状态和活动生成。 */
-    label = '';
-    /** 给客户端展示的生命周期状态，和 Plan.status 使用同一套状态值。 */
-    status: ClientStatus = 'pending';
-    /** 本轮模型直接输出的文本内容。 */
-    text = '';
-    /** 模型本轮输出的结果类型，例如需要工具、继续生成或最终回答。 */
+    /** Model response type for this round: tool calls, continuation, or final answer. */
     type?: ModelResponseType;
+    /** Client lifecycle state shared with Plan and Action. */
+    status: ClientStatus = 'pending';
+    /** 1-based round index within the current agent run. */
+    count = 0;
+    /** Optional explicit display label; empty means formatLabel() derives it. */
+    label = '';
+    /** Text emitted directly by the model during this round. */
+    text = '';
+    /** Display actions collected from model events and tool events. */
+    private readonly _actions: Action[] = [];
 
     get actions(): readonly Action[] {
         return this._actions;
@@ -42,13 +42,13 @@ export class Round {
     }
 
     formatLabel(): string {
-        const activityLabel = this.formatActivityLabel();
-        if (activityLabel.length > 0) return activityLabel;
-        if (this.status === 'failed') return '处理失败';
-        if (this.status === 'pending') return '正在思考';
-        if (this.type === 'final') return '生成了回答';
-        if (this.type === 'continue') return '继续生成';
-        return '已完成';
+        const usageLabel = this.formatUsageLabel();
+        if (usageLabel.length > 0) return usageLabel;
+        if (this.status === 'failed') return '\u5904\u7406\u5931\u8d25';
+        if (this.status === 'pending') return '\u6b63\u5728\u601d\u8003';
+        if (this.type === 'final') return '\u751f\u6210\u4e86\u56de\u7b54';
+        if (this.type === 'continue') return '\u7ee7\u7eed\u751f\u6210';
+        return '\u5df2\u5b8c\u6210';
     }
 
     static fromJSON(json: RoundJSON): Round {
@@ -74,7 +74,7 @@ export class Round {
 
     appendToLast(type: Action['type'], text: string): boolean {
         const last = this._actions[this._actions.length - 1];
-        if (last === undefined || last.type !== type || last.done) {
+        if (last === undefined || last.type !== type || last.status !== 'pending') {
             return false;
         }
         last.append(text);
@@ -83,17 +83,17 @@ export class Round {
 
     updateLast(action: Action): boolean {
         const last = this._actions[this._actions.length - 1];
-        if (last === undefined || last.type !== action.type || last.done) {
+        if (last === undefined || last.type !== action.type || last.status !== 'pending') {
             return false;
         }
         if (action.type === 'tool') {
             return false;
         }
-        last.text = action.text;
-        last.callId = action.callId;
         last.call = action.call;
+        last.callId = action.callId;
         last.event = action.event;
         last.label = action.label || last.label;
+        last.text = action.text;
         return true;
     }
 
@@ -107,13 +107,13 @@ export class Round {
             return false;
         }
 
-        existing.callId = action.callId;
-        existing.activity = action.activity ?? existing.activity;
         existing.call = action.call ?? existing.call;
-        existing.done = existing.done || action.done;
+        existing.callId = action.callId;
         existing.event = action.event ?? existing.event;
         existing.label = action.label || existing.label;
+        existing.status = mergeClientStatus(existing.status, action.status);
         existing.text = action.text || existing.text;
+        existing.usage = action.usage ?? existing.usage;
         return true;
     }
 
@@ -126,12 +126,12 @@ export class Round {
         return true;
     }
 
-    updateToolActivity(callId: string, activity: ToolActivity): boolean {
+    updateToolUsage(callId: string, usage: ToolUsage): boolean {
         const existing = this._actions.find(item => item.type === 'tool' && item.callId === callId);
         if (existing === undefined) {
             return false;
         }
-        existing.activity = activity;
+        existing.usage = usage;
         return true;
     }
 
@@ -154,20 +154,20 @@ export class Round {
         const label = this.label || this.formatLabel();
         return {
             kind: this.kind,
+            type: this.type,
+            status: this.status,
             count: this.count,
             label,
-            status: this.status,
             text: this.text.length > 0 ? this.text : undefined,
-            type: this.type,
             actions: this._actions.map(action => action.toJSON()),
         };
     }
 
-    private formatActivityLabel(): string {
-        const groups = this.collectActivityGroups();
+    private formatUsageLabel(): string {
+        const groups = this.collectUsageGroups();
         if (groups.length === 0) return '';
 
-        const byVerb = new Map<string, ActivityGroup[]>();
+        const byVerb = new Map<string, UsageGroup[]>();
         for (const group of groups) {
             const verbGroups = byVerb.get(group.verb) ?? [];
             verbGroups.push(group);
@@ -176,34 +176,34 @@ export class Round {
 
         return Array.from(byVerb.entries())
             .map(([verb, verbGroups]) => {
-                const prefix = this.status === 'completed' ? `${verb}了 ` : `正在${verb} `;
-                return `${prefix}${verbGroups.map(formatActivityGroup).join('、')}`;
+                const prefix = this.status === 'completed' ? `${verb}\u4e86` : `\u6b63\u5728${verb} `;
+                return `${prefix}${verbGroups.map(formatUsageGroup).join('\u3001')}`;
             })
-            .join('，');
+            .join('\uff1b');
     }
 
-    private collectActivityGroups(): ActivityGroup[] {
-        const groups = new Map<string, ActivityGroup>();
+    private collectUsageGroups(): UsageGroup[] {
+        const groups = new Map<string, UsageGroup>();
         for (const action of this._actions) {
-            if (action.type !== 'tool' || action.activity === undefined) continue;
-            const activity = action.activity;
-            if (!isCountableActivity(activity)) continue;
+            if (action.type !== 'tool' || action.usage === undefined) continue;
+            const usage = action.usage;
+            if (!isCountableUsage(usage)) continue;
 
-            const groupKey = `${activity.verb}\u0000${activity.name}\u0000${activity.unit}`;
+            const groupKey = `${usage.verb}\u0000${usage.name}\u0000${usage.unit}`;
             const group = groups.get(groupKey) ?? {
                 count: 0,
                 keyedCount: 0,
                 keys: new Set<string>(),
-                name: activity.name,
-                unit: activity.unit,
-                verb: activity.verb,
+                name: usage.name,
+                unit: usage.unit,
+                verb: usage.verb,
             };
 
-            if (activity.key !== undefined && activity.key.length > 0) {
-                group.keys.add(activity.key);
+            if (usage.key !== undefined && usage.key.length > 0) {
+                group.keys.add(usage.key);
                 group.keyedCount = group.keys.size;
             } else {
-                group.count += normalizeActivityCount(activity.count);
+                group.count += normalizeUsageCount(usage.count);
             }
 
             groups.set(groupKey, group);
@@ -212,7 +212,7 @@ export class Round {
     }
 }
 
-interface ActivityGroup {
+interface UsageGroup {
     count: number;
     keyedCount: number;
     keys: Set<string>;
@@ -221,16 +221,22 @@ interface ActivityGroup {
     verb: string;
 }
 
-function formatActivityGroup(group: ActivityGroup): string {
+function formatUsageGroup(group: UsageGroup): string {
     const total = group.count + group.keyedCount;
     return total > 0 ? `${total} ${group.unit}${group.name}` : group.name;
 }
 
-function isCountableActivity(activity: ToolActivity): boolean {
-    return activity.verb.length > 0 && activity.name.length > 0 && activity.unit.length > 0;
+function isCountableUsage(usage: ToolUsage): boolean {
+    return usage.verb.length > 0 && usage.name.length > 0 && usage.unit.length > 0;
 }
 
-function normalizeActivityCount(count: number | undefined): number {
+function normalizeUsageCount(count: number | undefined): number {
     if (typeof count !== 'number' || !Number.isFinite(count)) return 1;
     return Math.max(0, Math.floor(count));
+}
+
+function mergeClientStatus(current: ClientStatus, next: ClientStatus): ClientStatus {
+    if (current === 'failed' || next === 'failed') return 'failed';
+    if (current === 'completed' || next === 'completed') return 'completed';
+    return 'pending';
 }

@@ -1,5 +1,5 @@
 import { logger } from '../../../agent/utils/logger';
-import { Tool, type JsonObject, type ToolActivity, type ToolInput, type ToolPromptSchema, type ToolResult, type ToolRunContext } from '../../../agent';
+import { Tool, type JsonObject, type ToolUsage, type ToolInput, type ToolPromptSchema, type ToolResult, type ToolRunContext } from '../../../agent';
 
 function errorMessage(error: unknown): string {
     return error instanceof Error ? error.message : String(error);
@@ -75,7 +75,7 @@ class SearchDocsTool extends Tool {
         required: ['query'],
     };
 
-    formatActivity(_input: ToolInput): ToolActivity {
+    formatUsage(_input: ToolInput): ToolUsage {
         return {
             name: '文档',
             unit: '篇',

@@ -30,7 +30,7 @@ export class BrowserWebSearchTool extends WebSearchTool {
             const resultCount = this.countResults(data);
 
             return {
-                activity: {
+                usage: {
                     count: resultCount,
                     name: '网站',
                     unit: '个',

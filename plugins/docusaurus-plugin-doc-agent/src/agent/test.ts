@@ -39,7 +39,7 @@ class MockModel extends Model {
             const lastMessage = request.messages[request.messages.length - 1];
             const actionItems = lastMessage.plans[0]?.items.flatMap(round => round.items) ?? [];
             console.log('\n🔍 [调试信息] actionItems 数组:', JSON.stringify(actionItems, null, 2));
-            const fileActionResult = actionItems.find(item => item.type === 'tool' && item.done);
+            const fileActionResult = actionItems.find(item => item.type === 'tool' && item.status === 'completed');
             const fileContent = fileActionResult?.text ?? '未读取到内容';
 
             const reply = `[测试成功] File工具已成功读取 package.json。内容预览（前120字符）:\n\n${fileContent.slice(0, 120)}...`;
