@@ -83,13 +83,15 @@ export class Plan {
         if (action === null) return null;
 
         const round = event.type === 'model_event' ? this.ensureModelRound() : this.ensureRound();
+        if (action.type === 'tool') {
+            if (round.updateTool(action)) return round;
+            round.add(action);
+            return round;
+        }
         if (event.type === 'model_event' && event.event.type === 'action' && event.event.kind === 'update') {
             if (round.updateLast(action)) return round;
         }
         if (action.type === 'thinking' && round.appendToLast(action.type, action.text)) {
-            return round;
-        }
-        if (action.type === 'tool' && round.updateTool(action)) {
             return round;
         }
         round.add(action);

@@ -62,7 +62,7 @@ export class Round {
         if (last === undefined || last.type !== action.type || last.done) {
             return false;
         }
-        if (last.type === 'tool' && action.call === undefined && action.text.length > 0) {
+        if (action.type === 'tool') {
             return false;
         }
         last.text = action.text;

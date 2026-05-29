@@ -224,6 +224,7 @@ function parseAction(value: unknown): ActionJSON | null {
 
     const call = parseToolCall(value.call);
     const event = parseToolEvent(value.event);
+    const id = typeof value.id === 'string' ? value.id : undefined;
     const label = typeof value.label === 'string' ? value.label : undefined;
     const text = typeof value.text === 'string' ? value.text : undefined;
 
@@ -231,6 +232,7 @@ function parseAction(value: unknown): ActionJSON | null {
         ...(call !== null ? { call } : {}),
         done: value.done === true,
         ...(event !== null ? { event } : {}),
+        ...(id !== undefined ? { id } : {}),
         ...(label !== undefined ? { label } : {}),
         ...(text !== undefined ? { text } : {}),
         type,

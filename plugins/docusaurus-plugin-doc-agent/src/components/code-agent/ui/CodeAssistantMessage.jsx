@@ -77,7 +77,7 @@ function buildSegments(message) {
                 return {
                     key: isRound
                         ? `r-${roundIndex}`
-                        : `a-${roundIndex}-${item.callId || item.call?.id || item.type || index}`,
+                        : item.id,
                     kind,
                     item,
                     text,

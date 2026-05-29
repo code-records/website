@@ -13,6 +13,7 @@ export interface ActionJSON {
     call?: ModelToolCall;
     done: boolean;
     event?: ToolEvent;
+    id?: string;
     label?: string;
     text?: string;
     type: ActionType;
@@ -23,6 +24,7 @@ export class Action {
     call?: ModelToolCall;
     done = false;
     event?: ToolEvent;
+    id: string;
     label = '';
     text = '';
     type: ActionType;
@@ -30,6 +32,7 @@ export class Action {
     constructor(json: ActionJSON) {
         this.type = json.type;
         this.callId = json.callId;
+        this.id = json.id ?? createActionId(json);
         this.text = json.text ?? '';
         this.call = json.call;
         this.done = json.done;
@@ -131,9 +134,20 @@ export class Action {
             call: this.call,
             done: this.done,
             event: this.event,
+            id: this.id,
             label: this.label.length > 0 ? this.label : undefined,
             text: this.text.length > 0 ? this.text : undefined,
             type: this.type,
         };
     }
+}
+
+let nextActionId = 1;
+
+function createActionId(json: ActionJSON): string {
+    const callId = json.callId ?? json.call?.id;
+    if (callId !== undefined && callId.length > 0) {
+        return `tool:${callId}`;
+    }
+    return `${json.type}:${nextActionId++}`;
 }
