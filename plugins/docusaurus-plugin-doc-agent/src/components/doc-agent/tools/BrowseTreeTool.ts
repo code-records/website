@@ -1,5 +1,5 @@
 import { readonlyClient } from './api';
-import { Tool, type ToolInput, type ToolPromptSchema, type ToolResult, type ToolRunContext } from '../../../agent';
+import { Tool, type ToolActivity, type ToolInput, type ToolPromptSchema, type ToolResult, type ToolRunContext } from '../../../agent';
 
 function errorMessage(error: unknown): string {
     return error instanceof Error ? error.message : String(error);
@@ -22,6 +22,16 @@ class BrowseTreeTool extends Tool {
         },
         required: ['path'],
     };
+
+    formatActivity(input: ToolInput): ToolActivity {
+        const path = typeof input.path === 'string' ? input.path : '';
+        return {
+            key: path || '.',
+            name: '文件夹',
+            unit: '个',
+            verb: '浏览',
+        };
+    }
 
     protected async execute(input: ToolInput, _context: ToolRunContext): Promise<ToolResult> {
         const path = typeof input.path === 'string' ? input.path : '';

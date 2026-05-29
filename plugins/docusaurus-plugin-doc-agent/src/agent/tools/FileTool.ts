@@ -60,9 +60,16 @@ export abstract class FileTool extends Tool {
         return `${fileOperationTitle(parsed.operation)}: ${parsed.path || '.'}`;
     }
 
-    formatActivity(input: ToolInput, context: ToolLabelContext = { input }): ToolActivity | null {
+    formatActivity(input: ToolInput, context: ToolLabelContext = { input }): ToolActivity {
         const parsed = parseFileToolInput(input);
-        if (parsed === null) return null;
+        if (parsed === null) {
+            return {
+                count: 1,
+                name: '文件操作',
+                unit: '次',
+                verb: '执行',
+            };
+        }
         return fileOperationActivity(parsed);
     }
 
@@ -94,7 +101,7 @@ export abstract class FileTool extends Tool {
     }
 }
 
-function fileOperationActivity(input: FileToolInput): ToolActivity | null {
+function fileOperationActivity(input: FileToolInput): ToolActivity {
     const key = input.path || '.';
     switch (input.operation) {
         case 'list':

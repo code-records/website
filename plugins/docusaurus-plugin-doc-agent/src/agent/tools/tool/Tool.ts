@@ -126,9 +126,7 @@ export abstract class Tool {
         return this.name;
     }
 
-    formatActivity(input: ToolInput, context: ToolLabelContext = { input }): ToolActivity | null {
-        return null;
-    }
+    abstract formatActivity(input: ToolInput, context: ToolLabelContext): ToolActivity;
 
     /**
      * 注入回问能力。

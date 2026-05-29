@@ -36,8 +36,6 @@ export class Round {
     formatLabel(): string {
         const activityLabel = this.formatActivityLabel();
         if (activityLabel.length > 0) return activityLabel;
-        if (this.toolCount > 0) return `工作 ${this.toolCount} 步`;
-        if (this.status === 'tool_calls') return '工作 0 步';
         if (this.status === 'continue') return '继续';
         if (this.status === 'final') return '结果';
         return this.done ? '已完成' : '正在工作';
@@ -118,12 +116,12 @@ export class Round {
         return true;
     }
 
-    updateToolActivity(callId: string, activity: ToolActivity | null): boolean {
+    updateToolActivity(callId: string, activity: ToolActivity): boolean {
         const existing = this._actions.find(item => item.type === 'tool' && item.callId === callId);
         if (existing === undefined) {
             return false;
         }
-        existing.activity = activity ?? undefined;
+        existing.activity = activity;
         return true;
     }
 
@@ -193,7 +191,7 @@ export class Round {
 
             groups.set(groupKey, group);
         }
-        return Array.from(groups.values()).filter(group => group.count + group.keyedCount > 0);
+        return Array.from(groups.values());
     }
 }
 
@@ -207,7 +205,8 @@ interface ActivityGroup {
 }
 
 function formatActivityGroup(group: ActivityGroup): string {
-    return `${group.count + group.keyedCount} ${group.unit}${group.name}`;
+    const total = group.count + group.keyedCount;
+    return total > 0 ? `${total} ${group.unit}${group.name}` : group.name;
 }
 
 function isCountableActivity(activity: ToolActivity): boolean {

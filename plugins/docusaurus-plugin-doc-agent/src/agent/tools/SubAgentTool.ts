@@ -1,6 +1,6 @@
 import type { Agent, AgentEvent } from '../Agent';
 import { Message } from '../chat/Message';
-import { Tool, type JsonObject, type ToolInput, type ToolPromptSchema, type ToolResult, type ToolRunContext } from './tool/Tool';
+import { Tool, type JsonObject, type ToolActivity, type ToolInput, type ToolPromptSchema, type ToolResult, type ToolRunContext } from './tool/Tool';
 
 export interface SubAgentToolOptions {
     maxResultChars?: number;
@@ -50,6 +50,16 @@ export class SubAgentTool extends Tool {
             },
             required: ['agent', 'task'],
             type: 'object',
+        };
+    }
+
+    formatActivity(input: ToolInput): ToolActivity {
+        const agent = typeof input.agent === 'string' ? input.agent : '';
+        return {
+            key: agent,
+            name: '子 Agent',
+            unit: '个',
+            verb: '调用',
         };
     }
 

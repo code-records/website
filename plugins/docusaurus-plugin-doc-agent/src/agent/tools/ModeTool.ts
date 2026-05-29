@@ -1,4 +1,4 @@
-import { Tool, type JsonObject, type ToolInput, type ToolPromptSchema, type ToolResult, type ToolRunContext } from './tool/Tool';
+import { Tool, type JsonObject, type ToolActivity, type ToolInput, type ToolPromptSchema, type ToolResult, type ToolRunContext } from './tool/Tool';
 
 export interface ModeToolDefinition extends JsonObject {
     description: string;
@@ -40,6 +40,16 @@ export class ModeTool extends Tool {
             },
             required: ['mode'],
             type: 'object',
+        };
+    }
+
+    formatActivity(input: ToolInput): ToolActivity {
+        const mode = typeof input.mode === 'string' ? input.mode : '';
+        return {
+            key: mode,
+            name: '模式',
+            unit: '个',
+            verb: '切换',
         };
     }
 

@@ -11,6 +11,7 @@ import {
     type ContextPatch,
     type JsonObject,
     type JsonValue,
+    type ToolActivity,
     type ToolEvent,
     type ToolInput,
     type ToolPromptSchema,
@@ -96,6 +97,16 @@ export class ScheduleTool extends Tool {
         super();
         this.maxItems = maxItems;
         this.maxResultChars = maxResultChars;
+    }
+
+    formatActivity(input: ToolInput): ToolActivity {
+        const rawItems = Array.isArray(input.items) ? input.items : [];
+        return {
+            count: Math.min(rawItems.length, this.maxItems),
+            name: '工具',
+            unit: '个',
+            verb: '调度',
+        };
     }
 
     protected async execute(input: ToolInput, context: ToolRunContext): Promise<ToolResult> {

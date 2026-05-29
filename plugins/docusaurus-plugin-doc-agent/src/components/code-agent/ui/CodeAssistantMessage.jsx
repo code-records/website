@@ -1,7 +1,7 @@
 /*
- * Code assistant 消息 UI 说明：
- * - 从 plan/round 运行态数据构建纯展示时间线。
- * - 工具结果文本保留在 Action.text 上，默认不直接展示。
+ * Code assistant message UI.
+ * - Builds a timeline from plan/round runtime state.
+ * - Tool result text stays on Action.text and is hidden by default.
  */
 import React, { useState } from 'react';
 import MarkdownRenderer from '../../doc-agent/ui/MarkdownRenderer.jsx';
@@ -17,9 +17,7 @@ function buildTimelineItems(message) {
         label: plan.formatLabel(),
     }];
 
-    // 时间线只平铺到 plan/round 层级。只有 actions、没有正文的 round
-    // 会折叠进上一个 round，避免工具/状态更新产生很多空时间线节点。
-    // action 继续嵌套在 round 下，等 UI 明确需要 action 级时间线时再平铺。
+    // Keep the timeline at plan/round level; actions stay nested under rounds.
     for (const round of plan.rounds) {
         const actions = round.actions
             .filter(action => action.type !== 'thinking')
@@ -37,7 +35,7 @@ function buildTimelineItems(message) {
             const previous = items[items.length - 1];
             if (actions.length > 0 && previous?.kind === 'round') {
                 previous.actions = previous.actions.concat(actions);
-                previous.label = formatRoundLabel(round, previous.actions);
+                previous.label = formatRoundLabel(round);
             }
             continue;
         }
@@ -45,7 +43,7 @@ function buildTimelineItems(message) {
         items.push({
             actions,
             kind: 'round',
-            label: formatRoundLabel(round, actions),
+            label: formatRoundLabel(round),
             text,
         });
     }
@@ -53,12 +51,8 @@ function buildTimelineItems(message) {
     return items;
 }
 
-function formatRoundLabel(round, actions) {
-    const label = round.formatLabel();
-    if (/^工作\s+\d+\s+步$/.test(label) || label.length === 0) {
-        return `工作 ${actions.length} 步`;
-    }
-    return label;
+function formatRoundLabel(round) {
+    return round.formatLabel();
 }
 
 function getPlanText(items) {

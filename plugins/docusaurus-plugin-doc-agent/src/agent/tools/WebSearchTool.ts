@@ -1,10 +1,18 @@
-import { Tool, type JsonObject, type JsonValue, type ToolAskPrompt, type ToolInput, type ToolPromptSchema, type ToolResult, type ToolRunContext } from './tool/Tool';
+import {
+    Tool,
+    type JsonObject,
+    type JsonValue,
+    type ToolActivity,
+    type ToolAskPrompt,
+    type ToolInput,
+    type ToolPromptSchema,
+    type ToolResult,
+    type ToolRunContext,
+} from './tool/Tool';
 
 export interface WebSearchToolOptions {
-    endpoint?: string;
     formatResults?: (data: JsonValue, query: string) => string;
     maxResults?: number;
-    mode?: 'model' | 'proxy';
 }
 
 interface WebSearchAskInput extends JsonObject {
@@ -30,10 +38,8 @@ export class WebSearchTool extends Tool {
         type: 'object',
     };
 
-    private readonly endpoint: string;
-    private readonly formatResults?: (data: JsonValue, query: string) => string;
-    private readonly maxResults: number;
-    private readonly mode: 'model' | 'proxy';
+    protected readonly formatResults?: (data: JsonValue, query: string) => string;
+    protected readonly maxResults: number;
 
     private readonly searchPrompt: ToolAskPrompt<WebSearchAskInput, WebSearchAskOutput> = {
         name: 'web_search.model',
@@ -46,16 +52,20 @@ export class WebSearchTool extends Tool {
     };
 
     constructor({
-        endpoint = '/agent/v1/search',
         formatResults,
         maxResults = 5,
-        mode = 'proxy',
     }: WebSearchToolOptions = {}) {
         super();
-        this.endpoint = endpoint;
         this.formatResults = formatResults;
         this.maxResults = maxResults;
-        this.mode = mode;
+    }
+
+    formatActivity(_input: ToolInput): ToolActivity {
+        return {
+            name: '网站',
+            unit: '个',
+            verb: '搜索',
+        };
     }
 
     protected async execute(input: ToolInput, context: ToolRunContext): Promise<ToolResult> {
@@ -64,66 +74,38 @@ export class WebSearchTool extends Tool {
             return { result: 'Search failed: query is required.' };
         }
 
-        if (this.mode === 'model') {
-            const answer = await this.askModel({
-                input: {
-                    maxResults: this.maxResults,
-                    query,
-                },
-                prompt: this.searchPrompt,
-            });
-            return {
-                events: [{
-                    data: {
-                        mode: 'model',
-                        query,
-                    },
-                    type: 'web_search',
-                }],
-                result: answer.result,
-            };
-        }
-
-        return this.executeProxy(query, context.signal);
+        return this.executeSearch(query, context);
     }
 
-    private async executeProxy(query: string, signal?: AbortSignal): Promise<ToolResult> {
-        const url = `${this.endpoint}?q=${encodeURIComponent(query)}&limit=${this.maxResults}`;
+    protected async executeSearch(query: string, _context: ToolRunContext): Promise<ToolResult> {
+        const answer = await this.askModel({
+            input: {
+                maxResults: this.maxResults,
+                query,
+            },
+            prompt: this.searchPrompt,
+        });
 
-        try {
-            const response = await fetch(url, { signal });
-            if (!response.ok) {
-                const text = await response.text();
-                return { result: `[Search Error] ${response.status}: ${text.slice(0, 200)}` };
-            }
-
-            const data = await response.json() as JsonValue;
-            const resultCount = countResults(data);
-            const result = this.formatResults !== undefined
-                ? this.formatResults(data, query)
-                : defaultFormatResults(data, query);
-
-            return {
-                activity: {
-                    count: resultCount,
-                    name: '网站',
-                    unit: '个',
-                    verb: '搜索',
+        return {
+            events: [{
+                data: {
+                    mode: 'model',
+                    query,
                 },
-                events: [{
-                    data: {
-                        mode: 'proxy',
-                        query,
-                        resultCount,
-                    },
-                    type: 'web_search',
-                }],
-                result,
-            };
-        } catch (error) {
-            const message = error instanceof Error ? error.message : String(error);
-            return { result: `[Search Error] ${message}` };
-        }
+                type: 'web_search',
+            }],
+            result: answer.result,
+        };
+    }
+
+    protected formatSearchResults(data: JsonValue, query: string): string {
+        return this.formatResults !== undefined
+            ? this.formatResults(data, query)
+            : defaultFormatResults(data, query);
+    }
+
+    protected countResults(data: JsonValue): number {
+        return getResults(data).length;
     }
 }
 
@@ -146,10 +128,6 @@ function defaultFormatResults(data: JsonValue, query: string): string {
     }).join('\n\n');
 
     return `Search results for "${query}":\n\n${formatted}`;
-}
-
-function countResults(data: JsonValue): number {
-    return getResults(data).length;
 }
 
 function getResults(data: JsonValue): JsonValue[] {

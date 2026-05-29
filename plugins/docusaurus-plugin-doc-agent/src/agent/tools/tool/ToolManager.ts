@@ -62,7 +62,7 @@ export class ToolManager {
         });
     }
 
-    formatActivity(call: ModelToolCall): ToolActivity | null {
+    formatActivity(call: ModelToolCall): ToolActivity {
         const tool = this.registry.require(call.name);
         return tool.formatActivity(call.input, {
             call,

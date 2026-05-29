@@ -23,6 +23,7 @@ export * from './tools/tool/ToolManager';
 export * from './tools/tool/ToolRegistry';
 export * from './tools/tool/ToolRunner';
 export * from './tools/WebSearchTool';
+export * from './tools/browser/BrowserWebSearchTool';
 export * from './tools/toolTrace';
 export * from './utils/errors';
 export * from './utils/trace';

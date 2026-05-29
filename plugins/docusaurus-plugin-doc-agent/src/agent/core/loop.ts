@@ -141,7 +141,7 @@ export async function* loop(options: LoopOptions): AsyncGenerator<AgentEvent, vo
                 // 15. 先确认工具存在；实际 ask 注入和执行交给 ToolManager。
                 toolManager.require(call.name);
                 const label = toolManager.formatLabel(call);
-                const activity = toolManager.formatActivity(call) ?? undefined;
+                const activity = toolManager.formatActivity(call);
 
                 const toolStartEvent: AgentEvent = {
                     type: 'tool_start',

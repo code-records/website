@@ -3,6 +3,7 @@ import { estimateContextTokens } from '../utils/tokenEstimator';
 import {
     Tool,
     type JsonObject,
+    type ToolActivity,
     type ToolAskPrompt,
     type ToolInput,
     type ToolPromptSchema,
@@ -67,6 +68,15 @@ export class CompressTool extends Tool {
         super();
         this.keepTail = keepTail;
         this.threshold = threshold;
+    }
+
+    formatActivity(_input: ToolInput): ToolActivity {
+        return {
+            count: 1,
+            name: '上下文',
+            unit: '次',
+            verb: '压缩',
+        };
     }
 
     protected async execute(_input: ToolInput, context: ToolRunContext): Promise<ToolResult> {

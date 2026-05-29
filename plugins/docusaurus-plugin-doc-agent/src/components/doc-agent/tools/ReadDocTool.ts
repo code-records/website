@@ -1,6 +1,6 @@
 import { readonlyClient } from './api';
 import { logger } from '../../../agent/utils/logger';
-import { Tool, type ToolInput, type ToolPromptSchema, type ToolResult, type ToolRunContext } from '../../../agent';
+import { Tool, type ToolActivity, type ToolInput, type ToolPromptSchema, type ToolResult, type ToolRunContext } from '../../../agent';
 
 const READ_DOC_MAX_CHARS = 8000;
 
@@ -51,6 +51,16 @@ class ReadDocTool extends Tool {
         },
         required: ['url'],
     };
+
+    formatActivity(input: ToolInput): ToolActivity {
+        const url = typeof input.url === 'string' ? input.url : '';
+        return {
+            key: url,
+            name: '文档',
+            unit: '篇',
+            verb: '读取',
+        };
+    }
 
     protected async execute(input: ToolInput, _context: ToolRunContext): Promise<ToolResult> {
         const url = typeof input.url === 'string' ? input.url : '';

@@ -1,4 +1,4 @@
-import { Tool, type JsonObject, type ToolInput, type ToolPromptSchema, type ToolResult, type ToolRunContext } from './tool/Tool';
+import { Tool, type JsonObject, type ToolActivity, type ToolInput, type ToolPromptSchema, type ToolResult, type ToolRunContext } from './tool/Tool';
 
 export interface PlanStep extends JsonObject {
     description: string;
@@ -32,6 +32,16 @@ export class MakePlanTool extends Tool {
         required: ['steps'],
         type: 'object',
     };
+
+    formatActivity(input: ToolInput): ToolActivity {
+        const rawSteps = Array.isArray(input.steps) ? input.steps : [];
+        return {
+            count: rawSteps.length,
+            name: '步骤',
+            unit: '个',
+            verb: '规划',
+        };
+    }
 
     protected async execute(input: ToolInput, _context: ToolRunContext): Promise<ToolResult> {
         const rawSteps = Array.isArray(input.steps) ? input.steps : [];
@@ -81,6 +91,16 @@ export class UpdatePlanTool extends Tool {
         required: ['step', 'status'],
         type: 'object',
     };
+
+    formatActivity(input: ToolInput): ToolActivity {
+        const step = typeof input.step === 'number' ? String(input.step) : '';
+        return {
+            key: step,
+            name: '步骤',
+            unit: '个',
+            verb: '更新',
+        };
+    }
 
     protected async execute(input: ToolInput, _context: ToolRunContext): Promise<ToolResult> {
         if (typeof input.step !== 'number') {

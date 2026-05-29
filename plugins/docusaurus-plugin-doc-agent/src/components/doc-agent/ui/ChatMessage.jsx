@@ -33,12 +33,11 @@ function PlanItem({ plan, idx, onToggle, isLast, isCompleted, isError }) {
     const expanded = onToggle ? plan.expanded : localExpanded;
     const noItems = actions.length === 0;
     const failed = isError || plan?.status === 'failed';
-    const stepLabel = actions.length > 0 ? `工作 ${actions.length} 步` : '';
     const label = failed
         ? '分析异常'
         : isCompleted && isLast && noItems
             ? '分析完毕，已生成回答'
-            : stepLabel || (plan?.status === 'active' ? '正在工作' : '分析完毕');
+            : (plan?.status === 'active' ? '正在工作' : '分析完毕');
 
     const handleClick = () => {
         if (onToggle) {
