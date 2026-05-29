@@ -138,7 +138,7 @@ export class CodeAgent extends Agent {
     async suggestWorkspaceQuestions({ signal }: { signal?: AbortSignal } = {}): Promise<string | null> {
         const dev = true;
         if (dev) {
-            const response = { content: '依赖关系梳理\n检测代码问题\n给出改进建议' };
+            const response = { content: '依赖关系梳理\n检测代码问题\n给出改进建议\n直接创作一篇完整的故事' };
             return dedupeSuggestionLines(response.content || '');
         }
 
@@ -176,7 +176,7 @@ function dedupeSuggestionLines(content: string): string | null {
             seen.add(line);
             return true;
         })
-        .slice(0, 3);
+    // .slice(0, 3);
 
     return lines.length > 0 ? lines.join('\n') : null;
 }

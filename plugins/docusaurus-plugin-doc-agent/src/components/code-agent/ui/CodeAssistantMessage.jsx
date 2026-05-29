@@ -93,26 +93,91 @@ function buildActionSegments(actions) {
         .filter(item => item.visible);
 }
 
-function buildRoundGroups(message) {
-    return getRounds(message).map((round, roundIndex) => {
-        const actions = buildActionSegments(round?.actions);
-        const text = typeof round?.text === 'string' ? round.text.trim() : '';
-        const shouldMergeSingleAction = text.length === 0 && actions.length === 1;
+function getRoundLabel(round) {
+    const label = typeof round?.label === 'string' ? round.label.trim() : '';
+    if (!label || isGeneratedRoundLabel(round, label)) return '';
+    return label;
+}
 
-        return {
-            actions: shouldMergeSingleAction ? [] : actions,
+function isGeneratedRoundLabel(round, label) {
+    if (/^工作\s+\d+\s+步$/.test(label)) return true;
+
+    const formatted = typeof round?.formatLabel === 'function' ? round.formatLabel() : '';
+    return formatted.length > 0 && label === formatted;
+}
+
+function buildRoundGroups(message) {
+    const rounds = getRounds(message);
+    const groups = [];
+    let pendingActions = [];
+    let pendingActionStart = -1;
+
+    const flushPendingActions = (beforeRoundIndex = rounds.length) => {
+        if (pendingActions.length === 0) return;
+
+        groups.push({
+            actions: [],
+            key: `a-${pendingActionStart}-${beforeRoundIndex}`,
+            label: '',
+            mergedActions: pendingActions,
+            round: null,
+            text: '',
+            visible: true,
+        });
+        pendingActions = [];
+        pendingActionStart = -1;
+    };
+
+    rounds.forEach((round, roundIndex) => {
+        const actions = buildActionSegments(round?.actions);
+        const label = getRoundLabel(round);
+        const text = typeof round?.text === 'string' ? round.text.trim() : '';
+        const visible = text.length > 0 || actions.length > 0 || round?.status || round?.done === false;
+
+        if (!visible) return;
+
+        if (label.length === 0) {
+            if (actions.length > 0) {
+                if (pendingActionStart < 0) pendingActionStart = roundIndex;
+                pendingActions = pendingActions.concat(actions.map((segment, actionIndex) => ({
+                    ...segment,
+                    key: `${roundIndex}:${segment.key || actionIndex}`,
+                })));
+            }
+
+            if (text.length > 0) {
+                flushPendingActions(roundIndex);
+                groups.push({
+                    actions: [],
+                    key: `r-${roundIndex}`,
+                    label,
+                    mergedActions: [],
+                    round,
+                    text,
+                    visible: true,
+                });
+            }
+            return;
+        }
+
+        flushPendingActions(roundIndex);
+        groups.push({
+            actions,
             key: `r-${roundIndex}`,
-            mergedAction: shouldMergeSingleAction ? actions[0] : null,
+            label,
+            mergedActions: [],
             round,
             text,
-            visible: text.length > 0 || actions.length > 0 || round?.status || round?.done === false,
-        };
-    })
-        .filter(group => group.visible);
+            visible: true,
+        });
+    });
+
+    flushPendingActions();
+    return groups;
 }
 
 function formatRoundLabel(group) {
-    return group.round?.formatLabel?.() || group.round?.label || '';
+    return group.label || '';
 }
 
 function TypedText({ text, toneClass, type }) {
@@ -175,6 +240,11 @@ function InlineActionSegment({ segment }) {
 function RoundGroup({ group, isStreaming }) {
     const [expanded, setExpanded] = useState(false);
     const hasActions = group.actions.length > 0;
+    const label = formatRoundLabel(group);
+    const hasLabel = label.length > 0;
+    const mergedActions = group.mergedActions?.length > 0
+        ? group.mergedActions
+        : group.mergedAction ? [group.mergedAction] : [];
 
     const handleClick = () => {
         if (hasActions) {
@@ -182,28 +252,34 @@ function RoundGroup({ group, isStreaming }) {
         }
     };
 
-    if (group.mergedAction) {
+    if (mergedActions.length > 0) {
         return (
             <TimelineItem running={isStreaming}>
-                <InlineActionSegment segment={group.mergedAction} />
+                <div className="grid min-w-0 gap-2">
+                    {mergedActions.map(segment => (
+                        <InlineActionSegment key={segment.key} segment={segment} />
+                    ))}
+                </div>
             </TimelineItem>
         );
     }
 
     return (
         <TimelineItem running={isStreaming}>
-            <button
-                type="button"
-                className="mb-1 w-full cursor-pointer border-none bg-transparent p-0 text-left disabled:cursor-default"
-                onClick={handleClick}
-                disabled={!hasActions}
-            >
-                <LabelLine label={formatRoundLabel(group)} toneClass={ROUND_TEXT_CLASS} type="round">
-                    {hasActions && (
-                        <span className={['transition-transform', expanded ? 'rotate-90' : ''].join(' ')}>&gt;</span>
-                    )}
-                </LabelLine>
-            </button>
+            {(hasLabel || hasActions) && (
+                <button
+                    type="button"
+                    className="mb-1 w-full cursor-pointer border-none bg-transparent p-0 text-left disabled:cursor-default"
+                    onClick={handleClick}
+                    disabled={!hasActions}
+                >
+                    <LabelLine label={label} toneClass={ROUND_TEXT_CLASS} type="round">
+                        {hasActions && (
+                            <span className={['transition-transform', expanded ? 'rotate-90' : ''].join(' ')}>&gt;</span>
+                        )}
+                    </LabelLine>
+                </button>
+            )}
             {expanded && hasActions && (
                 <div className="mb-2 grid min-w-0 gap-2">
                     {group.actions.map(segment => (

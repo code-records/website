@@ -30,7 +30,7 @@
  * 对外暴露：
  * - scrollToBottom(force?) — 父组件通过 ref 调用
  */
-import React, { forwardRef, useCallback, useImperativeHandle, useRef } from 'react';
+import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
 
 const BUFFER = 80;
 
@@ -39,6 +39,8 @@ const SmartScrollArea = forwardRef(function SmartScrollArea({ className, childre
     const isUserInteractingRef = useRef(false);
     const shouldStickToBottomRef = useRef(true);
     const wheelTimerRef = useRef(null);
+
+    const [showDock, setShowDock] = useState(false);
 
     const scrollToBottom = useCallback((force = false) => {
         const el = containerRef.current;
@@ -57,41 +59,79 @@ const SmartScrollArea = forwardRef(function SmartScrollArea({ className, childre
         const el = containerRef.current;
         if (!el) return;
         const { scrollTop, scrollHeight, clientHeight } = el;
-        shouldStickToBottomRef.current = scrollHeight - scrollTop - clientHeight < BUFFER;
+        const atBottom = scrollHeight - scrollTop - clientHeight < BUFFER;
+        shouldStickToBottomRef.current = atBottom;
+        setShowDock(!atBottom);
     }, []);
 
     const handleMouseDown = useCallback(() => {
         isUserInteractingRef.current = true;
     }, []);
 
-    const handleMouseUp = useCallback(() => {
-        isUserInteractingRef.current = false;
+    const updateStickState = useCallback(() => {
+        const el = containerRef.current;
+        if (!el) return;
+        const { scrollTop, scrollHeight, clientHeight } = el;
+        const atBottom = scrollHeight - scrollTop - clientHeight < BUFFER;
+        shouldStickToBottomRef.current = atBottom;
+        setShowDock(!atBottom);
     }, []);
 
+    const handleMouseUp = useCallback(() => {
+        isUserInteractingRef.current = false;
+        updateStickState();
+    }, [updateStickState]);
+
     // wheel 也是物理交互：激活交互锁，debounce 150ms 后解除，
-    // 防止在缓冲区内的微小滚动被 handleScroll 重置贴底状态后又被拽回底部
+    // 防止在缓冲区内的微小滚动被 handleScroll 重置贴底状态后又被拽回底部。
+    // 解除时重新检测位置，确保用户滚回底部后能恢复自动跟随。
     const handleWheel = useCallback((e) => {
         if (e.deltaY < 0) {
             shouldStickToBottomRef.current = false;
+            setShowDock(true);
         }
         isUserInteractingRef.current = true;
         clearTimeout(wheelTimerRef.current);
         wheelTimerRef.current = setTimeout(() => {
             isUserInteractingRef.current = false;
+            updateStickState();
         }, 150);
+    }, [updateStickState]);
+
+    const handleDockClick = useCallback(() => {
+        shouldStickToBottomRef.current = true;
+        setShowDock(false);
+        const el = containerRef.current;
+        if (el) el.scrollTop = el.scrollHeight;
     }, []);
 
+    useEffect(() => () => clearTimeout(wheelTimerRef.current), []);
+
     return (
-        <div
-            ref={containerRef}
-            className={className}
-            onScroll={handleScroll}
-            onMouseDown={handleMouseDown}
-            onMouseUp={handleMouseUp}
-            onMouseLeave={handleMouseUp}
-            onWheel={handleWheel}
-        >
-            {children}
+        <div className="relative h-full">
+            <div
+                ref={containerRef}
+                className={className}
+                onScroll={handleScroll}
+                onMouseDown={handleMouseDown}
+                onMouseUp={handleMouseUp}
+                onMouseLeave={handleMouseUp}
+                onWheel={handleWheel}
+            >
+                {children}
+            </div>
+            {showDock && (
+                <button
+                    type="button"
+                    onClick={handleDockClick}
+                    className="absolute bottom-4 right-4 flex h-8 w-8 items-center justify-center rounded-full bg-[var(--ifm-color-primary)] text-white shadow-lg transition-opacity hover:opacity-80 cursor-pointer border-none"
+                    title="回到底部"
+                >
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M8 3v10M4 9l4 4 4-4" />
+                    </svg>
+                </button>
+            )}
         </div>
     );
 });
