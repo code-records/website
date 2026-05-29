@@ -178,8 +178,9 @@ function parseHistory(value: unknown): HistoryJSON | null {
 
 function parseMessage(value: unknown): MessageJSON | null {
     if (!isRecord(value)) return null;
+    if (value.role !== 'assistant' && value.role !== 'user') return null;
 
-    const role = value.role === 'assistant' ? 'assistant' : 'user';
+    const role = value.role;
     const plan = parsePlan(value.plan);
 
     return {

@@ -106,6 +106,11 @@ export class ScheduleTool extends Tool {
         }
 
         const parsed = this.parseInput(input, context);
+        if (parsed === null) {
+            return {
+                result: `Scheduling failed: mode must be "serial" or "parallel". Got "${String(input.mode)}".`,
+            };
+        }
         if (parsed.items.length === 0) {
             return {
                 result: 'Scheduling skipped: no valid tool calls were provided.',
@@ -136,8 +141,11 @@ export class ScheduleTool extends Tool {
         };
     }
 
-    private parseInput(input: ToolInput, context: ToolRunContext): ScheduleInput {
-        const mode = input.mode === 'parallel' ? 'parallel' : 'serial';
+    private parseInput(input: ToolInput, context: ToolRunContext): ScheduleInput | null {
+        if (input.mode !== 'parallel' && input.mode !== 'serial') {
+            return null;
+        }
+        const mode = input.mode;
         const timeoutAction = input.timeoutAction === 'continue' ? 'continue' : 'kill';
         const reason = typeof input.reason === 'string' ? input.reason : '';
         const rawItems = Array.isArray(input.items) ? input.items : [];

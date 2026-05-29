@@ -83,9 +83,15 @@ export class UpdatePlanTool extends Tool {
     };
 
     protected async execute(input: ToolInput, _context: ToolRunContext): Promise<ToolResult> {
+        if (typeof input.step !== 'number') {
+            return { result: 'update_plan failed: step (number) is required.' };
+        }
+        if (!isValidPlanStatus(input.status)) {
+            return { result: `update_plan failed: status must be one of done, skipped, in_progress. Got "${String(input.status)}".` };
+        }
         const note = typeof input.note === 'string' ? input.note : '';
-        const status = typeof input.status === 'string' ? input.status : 'in_progress';
-        const step = typeof input.step === 'number' ? input.step : 0;
+        const step = input.step;
+        const status = input.status;
 
         return {
             events: [{
@@ -104,4 +110,8 @@ export class UpdatePlanTool extends Tool {
 
 function isJsonObject(value: unknown): value is JsonObject {
     return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function isValidPlanStatus(value: unknown): value is 'done' | 'skipped' | 'in_progress' {
+    return value === 'done' || value === 'skipped' || value === 'in_progress';
 }

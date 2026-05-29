@@ -55,11 +55,15 @@ export abstract class FileTool extends Tool {
 
     formatLabel(input: ToolInput, context: ToolLabelContext = { input }): string {
         const parsed = parseFileToolInput(input);
+        if (parsed === null) return 'File operation';
         return `${fileOperationTitle(parsed.operation)}: ${parsed.path || '.'}`;
     }
 
     protected async execute(input: ToolInput, context: ToolRunContext): Promise<ToolResult> {
         const parsed = parseFileToolInput(input);
+        if (parsed === null) {
+            throw new Error(`Invalid file tool input: operation "${String(input.operation)}" is not recognized`);
+        }
         await this.checkAbort(context.signal);
         await this.checkPause();
 
@@ -100,13 +104,13 @@ function fileOperationTitle(operation: FileToolOperation): string {
     }
 }
 
-function parseFileToolInput(input: ToolInput): FileToolInput {
-    const operation = isFileToolOperation(input.operation) ? input.operation : 'read';
+function parseFileToolInput(input: ToolInput): FileToolInput | null {
+    if (!isFileToolOperation(input.operation)) return null;
     const path = typeof input.path === 'string' ? input.path : '';
     const content = typeof input.content === 'string' ? input.content : undefined;
     return {
         ...(content !== undefined ? { content } : {}),
-        operation,
+        operation: input.operation,
         path,
     };
 }
