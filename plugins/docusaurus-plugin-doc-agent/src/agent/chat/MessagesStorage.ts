@@ -192,7 +192,12 @@ function parseMessage(value: unknown): MessageJSON | null {
 function parsePlan(value: unknown): PlanJSON | null {
     if (!isRecord(value) || !Array.isArray(value.rounds)) return null;
 
+    const count = typeof value.count === 'number' ? value.count : undefined;
+    const label = typeof value.label === 'string' ? value.label : undefined;
+
     return {
+        count: count ?? 0,
+        ...(label !== undefined ? { label } : {}),
         rounds: value.rounds
             .map(parseRound)
             .filter(round => round !== null),

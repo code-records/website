@@ -41,7 +41,7 @@ export class CodeAgent extends Agent {
         providers: {
             openai: {
                 adapter: 'openai' as const,
-                personalAccessToken: ['sk', '-', 'lFAMJIodeCCEFCqI0S3gHFH7oRa0yKzEpioxWhtC00aNVl6f'].join(''),
+                personalAccessToken: ['sk', '-', 'oNbUJnjZlDJ3BEKrk8BqbBYOb7qK4kKIxJdrRJSAqtUHjO3j'].join(''),
                 url: ['https://aicoding.', 'dobest', '.com/v1/responses'].join(''),
                 streamUrl: ['https://aicoding.', 'dobest', '.com/v1/responses'].join(''),
                 models: {
@@ -135,20 +135,29 @@ export class CodeAgent extends Agent {
     /**
      * 根据授权获得的本地文件特征，动态由 AI 生成高准度的推荐问题
      */
-    async suggestWorkspaceQuestions({ files, signal }: { files: string[]; signal?: AbortSignal; }): Promise<string | null> {
-        if (!files || files.length === 0) return null;
+    async suggestWorkspaceQuestions({ signal }: { signal?: AbortSignal } = {}): Promise<string | null> {
+        const dev = true;
+        if (dev) {
+            const response = { content: '依赖关系梳理\n检测代码问题\n给出改进建议' };
+            return dedupeSuggestionLines(response.content || '');
+        }
 
-        const runtimeModel = this.model;
-        const fileListStr = files.join('\n');
+        const fileTool = this.tools.find(t => t instanceof BrowserFileTool);
+        if (!fileTool) return null;
 
         try {
+            const listResult = await fileTool.run({ operation: 'list', path: '.' });
+            const fileListStr = listResult.result || '';
+            if (!fileListStr) return null;
+
+            const runtimeModel = this.model;
             const response = await runtimeModel.complete({
                 messages: [Message.user(`这是我当前项目的根目录文件列表：\n${fileListStr}`)],
                 signal,
                 system: this.config.suggestPrompt,
                 toolChoice: 'none',
             });
-            return dedupeSuggestionLines(response.content);
+            return dedupeSuggestionLines(response.content || '');
         } catch (e) {
             console.error('[CodeAgent] AI 动态推荐问题生成发生异常:', e);
             return null;

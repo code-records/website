@@ -10,8 +10,23 @@
 import React, { useState } from 'react';
 import MarkdownRenderer from '../../doc-agent/ui/MarkdownRenderer.jsx';
 
+const PLAN_TEXT_CLASS = 'text-red-500';
+const ROUND_TEXT_CLASS = 'text-green-600';
+const ACTION_TEXT_CLASS = 'text-blue-500';
+const LABEL_LINE_CLASS = 'inline-flex min-w-0 items-center gap-1.5 text-xs leading-relaxed';
+
+const LABEL_TAG_CLASS = [
+    'inline-flex h-4 shrink-0 items-center rounded border px-1',
+    'text-[10px] font-semibold uppercase leading-none',
+].join(' ');
+
 function getPrimaryPlan(message) {
     return Array.isArray(message?.plans) ? message.plans[0] : null;
+}
+
+function getPlanLabel(message) {
+    const plan = getPrimaryPlan(message);
+    return plan?.formatLabel();
 }
 
 function getRounds(message) {
@@ -99,7 +114,7 @@ function buildRoundGroups(message) {
 }
 
 function formatRoundLabel(group) {
-    return group.round?.label || `工作 ${group.actions.length} 步`;
+    return group.round.formatLabel();
 }
 
 function RoundText({ text }) {
@@ -120,14 +135,15 @@ function InlineThinkingSegment({ segment }) {
         <div className="min-w-0">
             <button
                 type="button"
-                className="flex cursor-pointer items-center gap-1 border-none bg-transparent p-0 text-left text-xs text-[var(--ifm-color-emphasis-600)]"
+                className="cursor-pointer border-none bg-transparent p-0 text-left"
                 onClick={() => setExpanded(prev => !prev)}
             >
-                <span>{label}</span>
-                <span className={['transition-transform', expanded ? 'rotate-90' : ''].join(' ')}>&gt;</span>
+                <LabelLine label={label} toneClass={ACTION_TEXT_CLASS} type="action">
+                    <span className={['transition-transform', expanded ? 'rotate-90' : ''].join(' ')}>&gt;</span>
+                </LabelLine>
             </button>
             {expanded && (
-                <div className="mt-1 text-xs leading-relaxed text-[var(--ifm-color-emphasis-600)] break-words [overflow-wrap:anywhere]">
+                <div className={['mt-1 text-xs leading-relaxed break-words [overflow-wrap:anywhere]', ACTION_TEXT_CLASS].join(' ')}>
                     {segment.text}
                 </div>
             )}
@@ -141,9 +157,7 @@ function InlineActionSegment({ segment }) {
         const label = segment.item?.label || segment.item?.call?.name || '工具';
 
         return (
-            <div className="min-w-0 text-sm leading-relaxed text-[var(--ifm-font-color-base)]">
-                <span className="font-semibold">{label}</span>
-            </div>
+            <LabelLine label={label} toneClass={ACTION_TEXT_CLASS} type="action" />
         );
     }
     if (segment.type === 'error') {
@@ -168,17 +182,18 @@ function RoundGroup({ group, isStreaming }) {
     };
 
     return (
-        <TimelineItem>
+        <TimelineItem running={isStreaming}>
             <button
                 type="button"
-                className="mb-1 flex w-full cursor-pointer items-center gap-1 border-none bg-transparent p-0 text-left text-xs text-[var(--ifm-color-emphasis-600)] disabled:cursor-default"
+                className="mb-1 w-full cursor-pointer border-none bg-transparent p-0 text-left disabled:cursor-default"
                 onClick={handleClick}
                 disabled={!hasActions}
             >
-                <span>{formatRoundLabel(group)}</span>
-                {hasActions && (
-                    <span className={['transition-transform', expanded ? 'rotate-90' : ''].join(' ')}>&gt;</span>
-                )}
+                <LabelLine label={formatRoundLabel(group)} toneClass={ROUND_TEXT_CLASS} type="round">
+                    {hasActions && (
+                        <span className={['transition-transform', expanded ? 'rotate-90' : ''].join(' ')}>&gt;</span>
+                    )}
+                </LabelLine>
             </button>
             {expanded && hasActions && (
                 <div className="mb-2 grid min-w-0 gap-2">
@@ -188,13 +203,38 @@ function RoundGroup({ group, isStreaming }) {
                 </div>
             )}
             <RoundText text={group.text} />
-            {isStreaming && <StreamingCursor />}
         </TimelineItem>
     );
 }
 
-function TimelineItem({ children, tone = 'default' }) {
-    const dotClass = tone === 'tool'
+function PlanLabel({ label }) {
+    if (!label) return null;
+
+    return (
+        <TimelineItem>
+            <LabelLine label={label} toneClass={PLAN_TEXT_CLASS} type="plan" />
+        </TimelineItem>
+    );
+}
+
+function LabelLine({ children, label, toneClass, type }) {
+    return (
+        <span className={[LABEL_LINE_CLASS, toneClass].join(' ')}>
+            <span className={[LABEL_TAG_CLASS, toneClass, 'border-current'].join(' ')}>
+                {type}
+            </span>
+            <span className="min-w-0 font-semibold break-words [overflow-wrap:anywhere]">
+                {label}
+            </span>
+            {children}
+        </span>
+    );
+}
+
+function TimelineItem({ children, running = false, tone = 'default' }) {
+    const dotClass = running
+        ? 'bg-[var(--ifm-color-primary)] animate-pulse'
+        : tone === 'tool'
         ? 'bg-emerald-400'
         : tone === 'error'
             ? 'bg-red-500'
@@ -218,21 +258,18 @@ function ErrorSegment({ segment }) {
     );
 }
 
-function StreamingCursor() {
-    return (
-        <span className="ml-5 inline-block h-4 w-2 rounded-sm bg-[var(--ifm-color-primary)] align-middle animate-pulse" />
-    );
-}
-
 export default function CodeAssistantMessage({ message, isStreaming }) {
     const groups = buildRoundGroups(message);
+    const planLabel = getPlanLabel(message);
     const content = getPlanText(message);
     const error = message.error || (message.isError && !content ? '生成失败，请稍后重试。' : '');
-    const hasContent = groups.length > 0 || !!error;
+    const hasContent = planLabel.length > 0 || groups.length > 0 || !!error;
 
     return (
         <div className="px-4 py-2 animate-[msg-fade-in_0.3s_ease-out]">
             <div className="relative ml-2 grid min-w-0 gap-4 border-l border-[var(--ifm-color-emphasis-300)] pb-1">
+                <PlanLabel label={planLabel} />
+
                 {groups.map((group, index) => (
                     <RoundGroup
                         key={group.key}

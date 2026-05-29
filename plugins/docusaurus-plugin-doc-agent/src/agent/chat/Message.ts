@@ -25,6 +25,11 @@ export class Message {
     private constructor(role: MessageRole, plans: Plan[] = []) {
         this.role = role;
         this.plans = plans;
+        this.plans.forEach((plan, index) => {
+            if (plan.count === 0) {
+                plan.count = index + 1;
+            }
+        });
         this.streaming = role === 'assistant';
     }
 

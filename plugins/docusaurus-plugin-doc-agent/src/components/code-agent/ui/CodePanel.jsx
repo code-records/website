@@ -29,6 +29,8 @@ export class CodePanel extends React.Component {
             model: currentModel,
             directoryHandle: null,
             workspaceFiles: [],
+            suggestions: [],
+            attachments: [],
         };
         this.messagesAreaRef = React.createRef();
         this.inputRef = React.createRef();
@@ -125,70 +127,18 @@ export class CodePanel extends React.Component {
     };
 
     pushSuggestions = async () => {
-        /* 暂时注释掉动态从 AI 模型生成推荐问题的逻辑，以提升加载速度与稳定性
-        const { directoryHandle, workspaceFiles } = this.state;
-        if (directoryHandle && workspaceFiles.length > 0) {
-            try {
-                const files = workspaceFiles.slice(0, 20).map(f => `${f.name} [${f.kind}]`);
-                const dynamicQuestions = await this.agent.suggestWorkspaceQuestions({
-                    files
-                });
-
-                if (dynamicQuestions && dynamicQuestions.trim().length > 0) {
-                    const suggestionsMsg = {
-                        role: 'assistant',
-                        local: true,
-                        custom: 'suggest',
-                        plan: {
-                            rounds: [{
-                                count: 1,
-                                actions: [],
-                                done: true,
-                                status: 'final',
-                                text: dynamicQuestions,
-                            }],
-                            status: 'completed',
-                        },
-                    };
-                    const lastMsg = this.chat.messages[this.chat.messages.length - 1];
-                    if (lastMsg && lastMsg.custom === 'suggest') {
-                        this.chat.removeLastMessage();
-                    }
-                    this.chat.addMessage(suggestionsMsg);
-                    return;
-                }
-            } catch (err) {
-                console.warn('[CodeAgent] 动态推荐问题生成异常:', err);
+        try {
+            const text = await this.agent.suggestWorkspaceQuestions();
+            if (!text) {
+                this.setState({ suggestions: [] });
+                return;
             }
+            const items = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+            this.setState({ suggestions: items });
+        } catch (e) {
+            console.warn('[CodeAgent] 推荐问题获取失败:', e);
+            this.setState({ suggestions: [] });
         }
-        */
-
-        const lastMsg = this.chat.messages[this.chat.messages.length - 1];
-        if (lastMsg && lastMsg.custom === 'suggest') {
-            this.chat.removeLastMessage();
-        }
-
-        const defaultSuggestions = [
-            '依赖关系梳理',
-            '检测代码问题',
-            '给出改进建议',
-        ].join('\n');
-
-        this.chat.addMessage({
-            role: 'assistant',
-            local: true,
-            custom: 'suggest',
-            plan: {
-                rounds: [{
-                    count: 1,
-                    actions: [],
-                    done: true,
-                    status: 'final',
-                    text: defaultSuggestions,
-                }],
-                status: 'completed',
-            },
-        });
     };
 
     scrollToBottom = () => {
@@ -223,7 +173,7 @@ export class CodePanel extends React.Component {
         if (!question || this.chat.isSending) return;
 
         if (this.inputRef.current) this.inputRef.current.style.height = 'auto';
-        this.setState({ inputValue: '' });
+        this.setState({ inputValue: '', suggestions: [] });
 
         await this.chat.send(question);
     };
@@ -234,6 +184,7 @@ export class CodePanel extends React.Component {
 
     handleSuggestionClick = async (question) => {
         if (!question || this.chat.isSending) return;
+        this.setState({ suggestions: [] });
         await this.chat.send(question);
     };
 
@@ -251,21 +202,33 @@ export class CodePanel extends React.Component {
         this.pushSuggestions();
     };
 
+    handleAddAttachment = () => {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.multiple = true;
+        input.onchange = (e) => {
+            const files = Array.from(e.target.files || []);
+            if (files.length > 0) {
+                this.setState(prev => ({
+                    attachments: [...prev.attachments, ...files],
+                }));
+            }
+        };
+        input.click();
+    };
+
+    handleRemoveAttachment = (idx) => {
+        this.setState(prev => ({
+            attachments: prev.attachments.filter((_, i) => i !== idx),
+        }));
+    };
+
     hasConversationMessages = () => {
         return this.chat.messages.some(message => message.custom !== 'suggest');
     };
 
     renderMessage = (message, idx) => {
-        if (message.custom === 'suggest') {
-            return (
-                <SuggestMessage
-                    key={idx}
-                    message={message}
-                    onSelectSuggestion={this.handleSuggestionClick}
-                    floating={false}
-                />
-            );
-        }
+        if (message.custom === 'suggest') return null;
 
         if (message.role === 'user') {
             return <CodeUserMessage key={idx} message={message} />;
@@ -285,7 +248,7 @@ export class CodePanel extends React.Component {
     };
 
     render() {
-        const { inputValue, model, directoryHandle, workspaceFiles } = this.state;
+        const { inputValue, model, directoryHandle, workspaceFiles, suggestions, attachments } = this.state;
         const isLoading = this.chat.isSending;
         const hasRealMessages = this.hasConversationMessages();
 
@@ -318,11 +281,22 @@ export class CodePanel extends React.Component {
                         model={model}
                         modelOptions={this.agent.modelOptions}
                         isLoading={isLoading}
+                        interactionSlot={
+                            suggestions.length > 0 && (
+                                <SuggestMessage
+                                    suggestions={suggestions}
+                                    onSelectSuggestion={this.handleSuggestionClick}
+                                />
+                            )
+                        }
+                        attachments={attachments}
                         onInputChange={this.handleInputChange}
                         onKeyDown={this.handleKeyDown}
                         onSend={this.handleSend}
                         onStop={this.handleStop}
                         onModelChange={this.handleModelChange}
+                        onAddAttachment={this.handleAddAttachment}
+                        onRemoveAttachment={this.handleRemoveAttachment}
                     />
                 </div>
             </div>

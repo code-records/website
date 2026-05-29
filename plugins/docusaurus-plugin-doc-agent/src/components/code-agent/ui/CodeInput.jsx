@@ -6,15 +6,54 @@ export default function CodeInput({
     model,
     modelOptions,
     isLoading,
+    interactionSlot,
+    attachments,
     onInputChange,
     onKeyDown,
     onSend,
     onStop,
     onModelChange,
+    onAddAttachment,
+    onRemoveAttachment,
 }) {
     return (
         <div className="px-6 py-4 border-t border-[var(--ifm-color-emphasis-200)] shrink-0">
+            {/* 交互区 */}
+            {interactionSlot}
+
+            {/* 附件区 */}
+            {attachments && attachments.length > 0 && (
+                <div className="mb-3 flex flex-wrap gap-2">
+                    {attachments.map((file, idx) => (
+                        <div
+                            key={`${file.name}-${idx}`}
+                            className="flex items-center gap-1.5 rounded-md border border-[var(--ifm-color-emphasis-200)] bg-[var(--ifm-color-emphasis-100)] px-2.5 py-1.5 text-[11px] text-[var(--ifm-font-color-base)]"
+                        >
+                            <span className="max-w-[120px] truncate">{file.name}</span>
+                            <button
+                                type="button"
+                                onClick={() => onRemoveAttachment?.(idx)}
+                                className="ml-0.5 flex h-4 w-4 items-center justify-center rounded-full border-none bg-transparent text-[var(--ifm-color-emphasis-400)] cursor-pointer hover:bg-[var(--ifm-color-emphasis-200)] hover:text-[var(--ifm-color-emphasis-700)]"
+                            >
+                                &times;
+                            </button>
+                        </div>
+                    ))}
+                </div>
+            )}
+
+            {/* 输入区 */}
             <div className="flex items-end gap-3 bg-white dark:bg-[#1e1e1e] border border-[var(--ifm-color-emphasis-300)] rounded-xl pl-4 pr-1.5 py-1.5 transition-colors focus-within:border-[var(--ifm-color-primary)] focus-within:shadow-[0_0_12px_rgba(var(--ifm-color-primary-rgb),0.1)]">
+                <button
+                    type="button"
+                    onClick={onAddAttachment}
+                    className="w-8 h-8 rounded-lg border-none flex items-center justify-center cursor-pointer bg-transparent text-[var(--ifm-color-emphasis-500)] hover:bg-[var(--ifm-color-emphasis-100)] hover:text-[var(--ifm-color-primary)] transition-all shrink-0"
+                    title="添加附件"
+                >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48" />
+                    </svg>
+                </button>
                 <textarea
                     ref={inputRef}
                     className="flex-1 border-none bg-white dark:bg-[#1e1e1e] text-[var(--ifm-font-color-base)] text-xs leading-normal py-2.5 resize-none outline-none font-mono placeholder-[var(--ifm-color-emphasis-500)] overflow-y-auto [&::-webkit-scrollbar]:w-[5px] [&::-webkit-scrollbar-thumb]:bg-[var(--ifm-color-emphasis-300)] [&::-webkit-scrollbar-thumb]:rounded"

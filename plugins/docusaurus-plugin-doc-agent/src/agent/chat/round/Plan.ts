@@ -5,14 +5,18 @@ import { Round, type RoundJSON } from './Round';
 export type PlanStatus = 'active' | 'completed' | 'failed';
 
 export interface PlanJSON {
+    count: number;
     expanded?: boolean;
+    label?: string;
     rounds: RoundJSON[];
     status: PlanStatus;
 }
 
 export class Plan {
     private readonly _rounds: Round[] = [];
+    count = 0;
     expanded = false;
+    label = '';
     status: PlanStatus = 'active';
 
     get rounds(): readonly Round[] {
@@ -32,9 +36,7 @@ export class Plan {
     }
 
     formatLabel(): string {
-        const toolCount = this._rounds.reduce((count, round) => count + round.toolCount, 0);
-        if (toolCount > 0) return `计划 ${toolCount}`;
-        return this.status === 'completed' ? '分析完毕' : '正在工作';
+        return `计划 ${this.count}`;
     }
 
     get currentRound(): Round | undefined {
@@ -43,7 +45,9 @@ export class Plan {
 
     static fromJSON(json: PlanJSON): Plan {
         const plan = new Plan();
+        plan.count = json.count ?? 0;
         plan.expanded = json.expanded === true;
+        plan.label = json.label ?? '';
         plan.status = json.status;
         for (const round of json.rounds) {
             plan._rounds.push(Round.fromJSON(round));
@@ -115,8 +119,10 @@ export class Plan {
 
     toJSON(): PlanJSON {
         return {
-            expanded: this.expanded,
+            count: this.count,
+            label: this.label,
             status: this.status,
+            expanded: this.expanded,
             rounds: this._rounds.map(round => round.toJSON()),
         };
     }
