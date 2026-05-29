@@ -74,6 +74,7 @@ function getPlanText(message) {
 
 function buildActionSegments(actions) {
     return normalizeActions(actions)
+        .filter(item => item?.type !== 'thinking')
         .map(item => {
             const type = item?.type;
             const text = type === 'tool'
@@ -93,91 +94,56 @@ function buildActionSegments(actions) {
         .filter(item => item.visible);
 }
 
-function getRoundLabel(round) {
-    const label = typeof round?.label === 'string' ? round.label.trim() : '';
-    if (!label || isGeneratedRoundLabel(round, label)) return '';
-    return label;
-}
-
-function isGeneratedRoundLabel(round, label) {
-    if (/^工作\s+\d+\s+步$/.test(label)) return true;
-
-    const formatted = typeof round?.formatLabel === 'function' ? round.formatLabel() : '';
-    return formatted.length > 0 && label === formatted;
-}
-
 function buildRoundGroups(message) {
     const rounds = getRounds(message);
     const groups = [];
-    let pendingActions = [];
-    let pendingActionStart = -1;
-
-    const flushPendingActions = (beforeRoundIndex = rounds.length) => {
-        if (pendingActions.length === 0) return;
-
-        groups.push({
-            actions: [],
-            key: `a-${pendingActionStart}-${beforeRoundIndex}`,
-            label: '',
-            mergedActions: pendingActions,
-            round: null,
-            text: '',
-            visible: true,
-        });
-        pendingActions = [];
-        pendingActionStart = -1;
-    };
 
     rounds.forEach((round, roundIndex) => {
         const actions = buildActionSegments(round?.actions);
-        const label = getRoundLabel(round);
         const text = typeof round?.text === 'string' ? round.text.trim() : '';
         const visible = text.length > 0 || actions.length > 0 || round?.status || round?.done === false;
 
         if (!visible) return;
 
-        if (label.length === 0) {
-            if (actions.length > 0) {
-                if (pendingActionStart < 0) pendingActionStart = roundIndex;
-                pendingActions = pendingActions.concat(actions.map((segment, actionIndex) => ({
-                    ...segment,
-                    key: `${roundIndex}:${segment.key || actionIndex}`,
-                })));
-            }
-
-            if (text.length > 0) {
-                flushPendingActions(roundIndex);
-                groups.push({
-                    actions: [],
-                    key: `r-${roundIndex}`,
-                    label,
-                    mergedActions: [],
-                    round,
-                    text,
-                    visible: true,
-                });
-            }
+        if (text.length === 0 && actions.length === 1 && groups.length > 0) {
+            const previous = groups[groups.length - 1];
+            previous.actions = previous.actions.concat(actions.map((segment, actionIndex) => ({
+                ...segment,
+                key: `${roundIndex}:${segment.key || actionIndex}`,
+            })));
+            previous.mergedSingleActionCount += 1;
             return;
         }
 
-        flushPendingActions(roundIndex);
         groups.push({
             actions,
+            baseActionCount: actions.length,
             key: `r-${roundIndex}`,
-            label,
-            mergedActions: [],
+            mergedSingleActionCount: 0,
             round,
             text,
             visible: true,
         });
     });
 
-    flushPendingActions();
     return groups;
 }
 
 function formatRoundLabel(group) {
-    return group.label || '';
+    const label = group.round?.formatLabel?.() || group.round?.label || '';
+    const mergedCount = group.mergedSingleActionCount || 0;
+    if (mergedCount === 0) return label;
+
+    const baseCount = getWorkStepCount(label) ?? group.baseActionCount ?? 0;
+    if (getWorkStepCount(label) !== null || label.length === 0) {
+        return `工作 ${baseCount + mergedCount} 步`;
+    }
+    return label;
+}
+
+function getWorkStepCount(label) {
+    const match = /^工作\s+(\d+)\s+步$/.exec(label);
+    return match ? Number(match[1]) : null;
 }
 
 function TypedText({ text, toneClass, type }) {
@@ -241,10 +207,6 @@ function RoundGroup({ group, isStreaming }) {
     const [expanded, setExpanded] = useState(false);
     const hasActions = group.actions.length > 0;
     const label = formatRoundLabel(group);
-    const hasLabel = label.length > 0;
-    const mergedActions = group.mergedActions?.length > 0
-        ? group.mergedActions
-        : group.mergedAction ? [group.mergedAction] : [];
 
     const handleClick = () => {
         if (hasActions) {
@@ -252,34 +214,20 @@ function RoundGroup({ group, isStreaming }) {
         }
     };
 
-    if (mergedActions.length > 0) {
-        return (
-            <TimelineItem running={isStreaming}>
-                <div className="grid min-w-0 gap-2">
-                    {mergedActions.map(segment => (
-                        <InlineActionSegment key={segment.key} segment={segment} />
-                    ))}
-                </div>
-            </TimelineItem>
-        );
-    }
-
     return (
         <TimelineItem running={isStreaming}>
-            {(hasLabel || hasActions) && (
-                <button
-                    type="button"
-                    className="mb-1 w-full cursor-pointer border-none bg-transparent p-0 text-left disabled:cursor-default"
-                    onClick={handleClick}
-                    disabled={!hasActions}
-                >
-                    <LabelLine label={label} toneClass={ROUND_TEXT_CLASS} type="round">
-                        {hasActions && (
-                            <span className={['transition-transform', expanded ? 'rotate-90' : ''].join(' ')}>&gt;</span>
-                        )}
-                    </LabelLine>
-                </button>
-            )}
+            <button
+                type="button"
+                className="mb-1 w-full cursor-pointer border-none bg-transparent p-0 text-left disabled:cursor-default"
+                onClick={handleClick}
+                disabled={!hasActions}
+            >
+                <LabelLine label={label} toneClass={ROUND_TEXT_CLASS} type="round">
+                    {hasActions && (
+                        <span className={['transition-transform', expanded ? 'rotate-90' : ''].join(' ')}>&gt;</span>
+                    )}
+                </LabelLine>
+            </button>
             {expanded && hasActions && (
                 <div className="mb-2 grid min-w-0 gap-2">
                     {group.actions.map(segment => (
