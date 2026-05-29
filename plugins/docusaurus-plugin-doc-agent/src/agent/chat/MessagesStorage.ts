@@ -191,12 +191,14 @@ function parseMessage(value: unknown): MessageJSON | null {
 
 function parsePlan(value: unknown): PlanJSON | null {
     if (!isRecord(value) || !Array.isArray(value.rounds)) return null;
+    if (!hasOptionalKind(value, 'plan')) return null;
 
     const count = typeof value.count === 'number' ? value.count : undefined;
     const label = typeof value.label === 'string' ? value.label : undefined;
 
     return {
         count: count ?? 0,
+        ...(value.kind === 'plan' ? { kind: value.kind } : {}),
         ...(label !== undefined ? { label } : {}),
         rounds: value.rounds
             .map(parseRound)
@@ -207,6 +209,7 @@ function parsePlan(value: unknown): PlanJSON | null {
 
 function parseRound(value: unknown): RoundJSON | null {
     if (!isRecord(value) || !Array.isArray(value.actions)) return null;
+    if (!hasOptionalKind(value, 'round')) return null;
 
     const count = typeof value.count === 'number' ? value.count : undefined;
     const label = typeof value.label === 'string' ? value.label : undefined;
@@ -219,6 +222,7 @@ function parseRound(value: unknown): RoundJSON | null {
             .filter(action => action !== null),
         count: count ?? 0,
         done: value.done === true,
+        ...(value.kind === 'round' ? { kind: value.kind } : {}),
         ...(label !== undefined ? { label } : {}),
         status,
         ...(text !== undefined ? { text } : {}),
@@ -227,6 +231,8 @@ function parseRound(value: unknown): RoundJSON | null {
 
 function parseAction(value: unknown): ActionJSON | null {
     if (!isRecord(value)) return null;
+    if (!hasOptionalKind(value, 'action')) return null;
+
     const type = parseActionType(value.type);
     if (type === null) return null;
 
@@ -241,6 +247,7 @@ function parseAction(value: unknown): ActionJSON | null {
         done: value.done === true,
         ...(event !== null ? { event } : {}),
         ...(id !== undefined ? { id } : {}),
+        ...(value.kind === 'action' ? { kind: value.kind } : {}),
         ...(label !== undefined ? { label } : {}),
         ...(text !== undefined ? { text } : {}),
         type,
@@ -312,6 +319,10 @@ function parseMeta(value: unknown): MessagesMeta {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
     return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function hasOptionalKind(value: Record<string, unknown>, kind: string): boolean {
+    return value.kind === undefined || value.kind === kind;
 }
 
 function parseJsonObject(value: unknown): JsonObject | null {

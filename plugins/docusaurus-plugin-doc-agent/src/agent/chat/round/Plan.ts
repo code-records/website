@@ -7,6 +7,7 @@ export type PlanStatus = 'active' | 'completed' | 'failed';
 export interface PlanJSON {
     count: number;
     expanded?: boolean;
+    kind?: 'plan';
     label?: string;
     rounds: RoundJSON[];
     status: PlanStatus;
@@ -16,6 +17,7 @@ export class Plan {
     private readonly _rounds: Round[] = [];
     count = 0;
     expanded = false;
+    readonly kind = 'plan';
     label = '';
     status: PlanStatus = 'active';
 
@@ -120,6 +122,7 @@ export class Plan {
     toJSON(): PlanJSON {
         return {
             count: this.count,
+            kind: this.kind,
             label: this.label,
             status: this.status,
             expanded: this.expanded,

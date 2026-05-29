@@ -14,6 +14,7 @@ export interface ActionJSON {
     done: boolean;
     event?: ToolEvent;
     id?: string;
+    kind?: 'action';
     label?: string;
     text?: string;
     type: ActionType;
@@ -25,6 +26,7 @@ export class Action {
     done = false;
     event?: ToolEvent;
     id: string;
+    readonly kind = 'action';
     label = '';
     text = '';
     type: ActionType;
@@ -130,14 +132,15 @@ export class Action {
 
     toJSON(): ActionJSON {
         return {
-            type: this.type,
             callId: this.callId,
             call: this.call,
             done: this.done,
             event: this.event,
             id: this.id,
+            kind: this.kind,
             label: this.label.length > 0 ? this.label : undefined,
             text: this.text.length > 0 ? this.text : undefined,
+            type: this.type,
         };
     }
 }

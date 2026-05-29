@@ -164,10 +164,13 @@ export class DocAgent extends Agent {
             local: true,
             custom: 'suggest',
             plan: {
+                count: 1,
+                kind: 'plan',
                 rounds: [{
-                    count: 1,
                     actions: [],
+                    count: 1,
                     done: true,
+                    kind: 'round',
                     status: 'final',
                     text: responseContent,
                 }],

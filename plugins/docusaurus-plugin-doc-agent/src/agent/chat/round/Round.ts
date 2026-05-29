@@ -5,6 +5,7 @@ export interface RoundJSON {
     actions: ActionJSON[];
     count: number;
     done: boolean;
+    kind?: 'round';
     label?: string;
     status?: ModelResponseKind;
     text?: string;
@@ -14,6 +15,7 @@ export class Round {
     private readonly _actions: Action[] = [];
     count = 0;
     done = false;
+    readonly kind = 'round';
     label = '';
     status?: ModelResponseKind;
     text = '';
@@ -123,6 +125,7 @@ export class Round {
     toJSON(): RoundJSON {
         const label = this.label || this.formatLabel();
         return {
+            kind: this.kind,
             count: this.count,
             done: this.done,
             label,
