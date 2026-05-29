@@ -2,7 +2,7 @@ import type { AgentEvent } from '../../Agent';
 import { Action } from './Action';
 import { Round, type RoundJSON } from './Round';
 
-export type PlanStatus = 'active' | 'completed' | 'failed';
+export type ClientStatus = 'pending' | 'completed' | 'failed';
 
 export interface PlanJSON {
     count: number;
@@ -10,7 +10,7 @@ export interface PlanJSON {
     kind?: 'plan';
     label?: string;
     rounds: RoundJSON[];
-    status: PlanStatus;
+    status: ClientStatus;
 }
 
 export class Plan {
@@ -19,7 +19,7 @@ export class Plan {
     expanded = false;
     readonly kind = 'plan';
     label = '';
-    status: PlanStatus = 'active';
+    status: ClientStatus = 'pending';
 
     get rounds(): readonly Round[] {
         return this._rounds;
@@ -31,7 +31,7 @@ export class Plan {
 
     get text(): string {
         return this._rounds
-            .filter(round => round.status === 'final' || round.status === 'continue')
+            .filter(round => round.type === 'final' || round.type === 'continue')
             .map(round => round.text)
             .filter(text => text.length > 0)
             .join('');
@@ -63,13 +63,13 @@ export class Plan {
             const action = Action.fromAgentEvent(event) as Action;
             round.add(action);
             this.status = 'failed';
-            this.finishOpenRound();
+            this.failOpenRound();
             return round;
         }
 
         if (event.type === 'agent_done') {
             this.status = 'completed';
-            this.finishOpenRound();
+            this.completeOpenRound();
             return this.currentRound ?? null;
         }
 
@@ -81,7 +81,7 @@ export class Plan {
 
         if (event.type === 'model_event' && event.event.type === 'done') {
             const round = this.ensureModelRound();
-            round.status = event.event.response.responseStatus;
+            round.type = event.event.response.responseStatus;
             return round;
         }
 
@@ -107,12 +107,12 @@ export class Plan {
     appendUserText(text: string): void {
         const round = this.ensureRound();
         round.appendText(text);
-        round.status = 'final';
+        round.type = 'final';
     }
 
     finish(): void {
         this.status = 'completed';
-        this.finishOpenRound();
+        this.completeOpenRound();
     }
 
     toggle(): void {
@@ -132,7 +132,7 @@ export class Plan {
 
     private ensureRound(): Round {
         const last = this._rounds[this._rounds.length - 1];
-        if (last !== undefined && !last.done) {
+        if (last !== undefined && last.status === 'pending') {
             return last;
         }
         const round = new Round();
@@ -142,16 +142,23 @@ export class Plan {
 
     private ensureModelRound(): Round {
         const last = this._rounds[this._rounds.length - 1];
-        if (last !== undefined && !last.done && last.status !== undefined) {
-            last.finish();
+        if (last !== undefined && last.status === 'pending' && last.type !== undefined) {
+            last.complete();
         }
         return this.ensureRound();
     }
 
-    private finishOpenRound(): void {
+    private completeOpenRound(): void {
         const last = this._rounds[this._rounds.length - 1];
         if (last !== undefined) {
-            last.finish();
+            last.complete();
+        }
+    }
+
+    private failOpenRound(): void {
+        const last = this._rounds[this._rounds.length - 1];
+        if (last !== undefined) {
+            last.fail();
         }
     }
 

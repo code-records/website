@@ -39,13 +39,13 @@ export interface ModelRequest {
     toolChoice?: 'auto' | 'none' | { name: string };
 }
 
-export type ModelResponseKind = 'tool_calls' | 'continue' | 'final';
+export type ModelResponseType = 'tool_calls' | 'continue' | 'final';
 
 /** 聚合后的模型响应，主要给非流式调用和测试使用。 */
 export interface ModelResponse {
     content: string;
     actions: ModelAction[];
-    responseStatus: ModelResponseKind;
+    responseStatus: ModelResponseType;
 }
 
 export type ModelActionEventKind = 'add' | 'update';
@@ -98,7 +98,7 @@ export abstract class Model {
      *
      * 调用方只需在流结束后把原始数据传入，不做任何预处理。
      */
-    protected abstract resolveResponseStatus(providerResponse: JsonObject): ModelResponseKind;
+    protected abstract resolveResponseStatus(providerResponse: JsonObject): ModelResponseType;
 
     /**
      * 发起 provider 非流式请求。

@@ -1,25 +1,33 @@
-﻿import { Action, type ActionJSON } from './Action';
-import type { ModelResponseKind } from '../../model/Model';
+import { Action, type ActionJSON } from './Action';
+import type { ClientStatus } from './Plan';
+import type { ModelResponseType } from '../../model/Model';
 import type { ToolActivity } from '../../tools/tool/Tool';
 
 export interface RoundJSON {
     actions: ActionJSON[];
     count: number;
-    done: boolean;
     kind?: 'round';
     label?: string;
-    status?: ModelResponseKind;
+    status: ClientStatus;
     text?: string;
+    type?: ModelResponseType;
 }
 
 export class Round {
+    /** 本轮收集到的展示动作，包含模型思考、工具调用、工具结果等。 */
     private readonly _actions: Action[] = [];
+    /** 本轮在当前 plan / agent run 中的序号，从 1 开始。 */
     count = 0;
-    done = false;
+    /** 用于 UI 和序列化区分消息块类型。 */
     readonly kind = 'round';
+    /** 外部指定的展示标题；为空时由 formatLabel() 根据状态和活动生成。 */
     label = '';
-    status?: ModelResponseKind;
+    /** 给客户端展示的生命周期状态，和 Plan.status 使用同一套状态值。 */
+    status: ClientStatus = 'pending';
+    /** 本轮模型直接输出的文本内容。 */
     text = '';
+    /** 模型本轮输出的结果类型，例如需要工具、继续生成或最终回答。 */
+    type?: ModelResponseType;
 
     get actions(): readonly Action[] {
         return this._actions;
@@ -36,18 +44,20 @@ export class Round {
     formatLabel(): string {
         const activityLabel = this.formatActivityLabel();
         if (activityLabel.length > 0) return activityLabel;
-        if (this.status === 'continue') return '继续';
-        if (this.status === 'final') return '结果';
-        return this.done ? '已完成' : '正在工作';
+        if (this.status === 'failed') return '处理失败';
+        if (this.status === 'pending') return '正在思考';
+        if (this.type === 'final') return '生成了回答';
+        if (this.type === 'continue') return '继续生成';
+        return '已完成';
     }
 
     static fromJSON(json: RoundJSON): Round {
         const round = new Round();
         round.count = json.count ?? 0;
         round.text = json.text ?? '';
-        round.done = json.done;
         round.label = json.label ?? '';
         round.status = json.status;
+        round.type = json.type;
         for (const action of json.actions) {
             round.add(Action.fromJSON(action));
         }
@@ -125,9 +135,16 @@ export class Round {
         return true;
     }
 
-    finish(status = this.status): void {
-        this.status = status;
-        this.done = true;
+    complete(type = this.type): void {
+        this.type = type;
+        this.status = 'completed';
+        for (const action of this._actions) {
+            action.finish();
+        }
+    }
+
+    fail(): void {
+        this.status = 'failed';
         for (const action of this._actions) {
             action.finish();
         }
@@ -138,10 +155,10 @@ export class Round {
         return {
             kind: this.kind,
             count: this.count,
-            done: this.done,
             label,
             status: this.status,
             text: this.text.length > 0 ? this.text : undefined,
+            type: this.type,
             actions: this._actions.map(action => action.toJSON()),
         };
     }
@@ -159,7 +176,7 @@ export class Round {
 
         return Array.from(byVerb.entries())
             .map(([verb, verbGroups]) => {
-                const prefix = this.done ? `${verb}了 ` : `正在${verb} `;
+                const prefix = this.status === 'completed' ? `${verb}了 ` : `正在${verb} `;
                 return `${prefix}${verbGroups.map(formatActivityGroup).join('、')}`;
             })
             .join('，');

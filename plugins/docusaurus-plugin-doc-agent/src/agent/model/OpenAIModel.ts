@@ -4,7 +4,7 @@ import {
     type ModelConfig,
     type ModelEvent,
     type ModelRequest,
-    type ModelResponseKind,
+    type ModelResponseType,
     type ProviderMessage,
     type ProviderRequestBody,
     type ProviderResponseBody,
@@ -141,7 +141,7 @@ export class OpenAIModel extends Model {
         };
     }
 
-    protected resolveResponseStatus(response: JsonObject): ModelResponseKind {
+    protected resolveResponseStatus(response: JsonObject): ModelResponseType {
         if (optionalArray(response.output).some(o => isJsonObject(o) && o.type === 'function_call')) return 'tool_calls';
         if (optionalString(response.status) === 'incomplete') return 'continue';
         return 'final';
@@ -184,7 +184,7 @@ export class OpenAIModel extends Model {
     private roundsToProviderMessages(message: Message): JsonObject[] {
         const result: JsonObject[] = [];
         for (const round of message.plans[0]?.items ?? []) {
-            if ((round.status === 'final' || round.status === 'continue') && round.text.length > 0) {
+            if ((round.type === 'final' || round.type === 'continue') && round.text.length > 0) {
                 result.push({ content: round.text, role: 'assistant' });
             }
             for (const action of round.items) {

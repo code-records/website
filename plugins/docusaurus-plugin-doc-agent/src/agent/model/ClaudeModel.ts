@@ -4,7 +4,7 @@ import {
     type ModelConfig,
     type ModelEvent,
     type ModelRequest,
-    type ModelResponseKind,
+    type ModelResponseType,
     type ProviderMessage,
     type ProviderRequestBody,
     type ProviderResponseBody,
@@ -235,7 +235,7 @@ export class ClaudeModel extends Model {
         };
     }
 
-    protected resolveResponseStatus(response: JsonObject): ModelResponseKind {
+    protected resolveResponseStatus(response: JsonObject): ModelResponseType {
         const stopReason = optionalString(response.stop_reason);
         // Claude 原生 API: 'tool_use' | 'max_tokens' | 'end_turn'
         // Claude chat completions: 'tool_calls' | 'length' | 'stop'
@@ -467,7 +467,7 @@ export class ClaudeModel extends Model {
     private roundActions(message: Message): RoundProviderAction[] {
         const actions: RoundProviderAction[] = [];
         for (const round of message.plans[0]?.items ?? []) {
-            if ((round.status === 'final' || round.status === 'continue') && round.text.length > 0) {
+            if ((round.type === 'final' || round.type === 'continue') && round.text.length > 0) {
                 actions.push({ text: round.text, type: 'content' });
             }
             for (const action of round.items) {

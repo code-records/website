@@ -103,30 +103,30 @@ export async function* loop(options: LoopOptions): AsyncGenerator<AgentEvent, vo
             }
         }
 
-        if (round === undefined || round.status === undefined) {
-            throw new Error('Model.stream() ended without updating the current round status');
+        if (round === undefined || round.type === undefined) {
+            throw new Error('Model.stream() ended without updating the current round type');
         }
 
         // 10. 从本轮 round 中提取工具调用；loop 只执行 tool action。
         const toolCalls = getRoundToolCalls(round);
 
         // 11. final 表示模型已经给出最终回复，本次 agent loop 结束。
-        if (round.status === 'final') {
-            round.finish();
+        if (round.type === 'final') {
+            round.complete();
             loggerRoundDone(round);
             return;
         }
 
         // 12. continue 表示模型输出被截断，或只产出了过渡说明；追加明确续跑指令让模型继续。
-        if (round.status === 'continue') {
-            round.finish();
+        if (round.type === 'continue') {
+            round.complete();
             loggerRoundDone(round);
             runMessages = [...runMessages, Message.user('继续完成上一轮未完成的任务。若需要工具，请直接调用工具；否则直接续写最终回答，不要只说明你将继续。')];
             continue;
         }
 
         // 13. tool 表示模型要求执行工具；先把 assistant 的 raw 写入上下文。
-        if (round.status === 'tool_calls') {
+        if (round.type === 'tool_calls') {
             if (toolCalls.length === 0) {
                 throw new Error('Model returned tool_calls response without tool calls');
             }
@@ -222,13 +222,13 @@ export async function* loop(options: LoopOptions): AsyncGenerator<AgentEvent, vo
             }
 
             // 22. 工具结果已写回上下文，进入下一轮 model 调用。
-            round.finish();
+            round.complete();
             loggerRoundDone(round);
             continue;
         }
 
         // 23. 防御未知状态，避免静默退出或死循环。
-        throw new Error(`Unsupported model response status: ${round.status}`);
+        throw new Error(`Unsupported model response type: ${round.type}`);
     }
 
     // 24. 超过最大轮数通常说明模型一直在请求工具或续写。
@@ -271,5 +271,3 @@ function updateToolActionLabels(round: Round, toolManager: ToolManager): void {
         }
     }
 }
-
-

@@ -5,7 +5,7 @@ import {
     type ModelEvent,
     type ModelRequest,
     type ModelResponse,
-    type ModelResponseKind,
+    type ModelResponseType,
     type ProviderMessage,
     type ProviderRequestBody,
     type ProviderResponseBody,
@@ -77,7 +77,7 @@ export class GeminiModel extends Model {
         };
     }
 
-    protected resolveResponseStatus(response: JsonObject): ModelResponseKind {
+    protected resolveResponseStatus(response: JsonObject): ModelResponseType {
         const finishReason = optionalString(response.finishReason);
         const parts = Array.isArray(response.parts) ? response.parts as JsonValue[] : [];
         if (parts.some(p => isJsonObject(p) && p.functionCall !== undefined)) return 'tool_calls';
@@ -117,7 +117,7 @@ export class GeminiModel extends Model {
         const parts: JsonValue[] = [];
         const toolResultMessages: JsonObject[] = [];
         for (const round of message.plans[0]?.items ?? []) {
-            if ((round.status === 'final' || round.status === 'continue') && round.text.length > 0) {
+            if ((round.type === 'final' || round.type === 'continue') && round.text.length > 0) {
                 parts.push({ text: round.text });
             }
         }

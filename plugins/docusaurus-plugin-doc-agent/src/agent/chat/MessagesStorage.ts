@@ -1,7 +1,7 @@
 import { History, type HistoryJSON } from './History';
 import type { MessageJSON } from './Message';
 import type { ActionJSON, ActionType } from './round/Action';
-import type { PlanJSON, PlanStatus } from './round/Plan';
+import type { ClientStatus, PlanJSON } from './round/Plan';
 import type { RoundJSON } from './round/Round';
 import type { ModelToolCall } from '../model/Model';
 import type { JsonObject, JsonValue, ToolActivity, ToolEvent } from '../tools/tool/Tool';
@@ -207,7 +207,7 @@ function parsePlan(value: unknown): PlanJSON | null {
         rounds: value.rounds
             .map(parseRound)
             .filter(round => round !== null),
-        status: parsePlanStatus(value.status),
+        status: parseClientStatus(value.status),
     };
 }
 
@@ -217,19 +217,20 @@ function parseRound(value: unknown): RoundJSON | null {
 
     const count = typeof value.count === 'number' ? value.count : undefined;
     const label = typeof value.label === 'string' ? value.label : undefined;
-    const status = parseRoundStatus(value.status);
+    const status = parseClientStatus(value.status);
     const text = typeof value.text === 'string' ? value.text : undefined;
+    const type = parseRoundType(value.type);
 
     return {
         actions: value.actions
             .map(parseAction)
             .filter(action => action !== null),
         count: count ?? 0,
-        done: value.done === true,
         ...(value.kind === 'round' ? { kind: value.kind } : {}),
         ...(label !== undefined ? { label } : {}),
         status,
         ...(text !== undefined ? { text } : {}),
+        type,
     };
 }
 
@@ -302,14 +303,14 @@ function parseToolEvent(value: unknown): ToolEvent | null {
     };
 }
 
-function parsePlanStatus(value: unknown): PlanStatus {
-    if (value === 'completed' || value === 'failed') {
+function parseClientStatus(value: unknown): ClientStatus {
+    if (value === 'pending' || value === 'completed' || value === 'failed') {
         return value;
     }
-    return 'active';
+    return 'pending';
 }
 
-function parseRoundStatus(value: unknown): RoundJSON['status'] {
+function parseRoundType(value: unknown): RoundJSON['type'] {
     if (value === 'tool_calls' || value === 'continue' || value === 'final') {
         return value;
     }

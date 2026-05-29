@@ -136,7 +136,7 @@ export abstract class Agent {
             runAssistant = this.ensureCurrentAssistant(input.messages);
             const plan = runAssistant.plans[0];
             if (plan === undefined) {
-                throw new Error('Agent.run() requires the active assistant Message to have a Plan');
+                throw new Error('Agent.run() requires the pending assistant Message to have a Plan');
             }
             logger.plan(plan.toJSON());
             let finalResponse: ModelResponse | undefined;
@@ -202,10 +202,10 @@ export abstract class Agent {
      */
     private ensureCurrentAssistant(messages: readonly Message[]): Message {
         const last = messages[messages.length - 1];
-        if (last?.role === 'assistant' && last.plans[0]?.status === 'active') {
+        if (last?.role === 'assistant' && last.plans[0]?.status === 'pending') {
             return last;
         }
-        throw new Error('Agent.run() requires messages to end with an active assistant Message');
+        throw new Error('Agent.run() requires messages to end with a pending assistant Message');
     }
 }
 

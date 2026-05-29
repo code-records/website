@@ -1,6 +1,6 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import { Model, type ModelEvent, type ModelRequest, type ModelResponseKind } from './model/Model';
+import { Model, type ModelEvent, type ModelRequest, type ModelResponseType } from './model/Model';
 import { Agent } from './Agent';
 import { Message } from './chat/Message';
 import { ToolRunContext } from './tools/tool/Tool';
@@ -55,7 +55,7 @@ class MockModel extends Model {
         }
     }
 
-    protected resolveResponseStatus(): ModelResponseKind { return 'final'; }
+    protected resolveResponseStatus(): ModelResponseType { return 'final'; }
     protected async request(): Promise<any> { return {}; }
     protected async *requestStream(): AsyncGenerator<any> { }
     protected expandMessageToProviderMessages(): any[] { return []; }

@@ -169,10 +169,10 @@ export class DocAgent extends Agent {
                 rounds: [{
                     actions: [],
                     count: 1,
-                    done: true,
                     kind: 'round',
-                    status: 'final',
+                    status: 'completed',
                     text: responseContent,
+                    type: 'final',
                 }],
                 status: 'completed',
             }],
