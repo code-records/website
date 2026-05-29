@@ -7,6 +7,7 @@ import React, { useState } from 'react';
 import MarkdownRenderer from '../../doc-agent/ui/MarkdownRenderer.jsx';
 
 const LABEL_LINE_CLASS = 'inline-flex min-w-0 items-center gap-1.5 text-xs leading-relaxed';
+const LABEL_TEXT_CLASS = [LABEL_LINE_CLASS, 'font-normal break-words [overflow-wrap:anywhere]'].join(' ');
 const DEBUG_TIMELINE_TAGS = true;
 
 function buildTimelineItems(message) {
@@ -70,7 +71,7 @@ function getPlanText(items) {
 }
 
 function getTimelineItemKey(item, index) {
-    return `${item.kind}:${index}:${item.label || ''}`;
+    return `${item.kind}:${index}`;
 }
 
 function TypedText({ text, type }) {
@@ -84,7 +85,7 @@ function TypedText({ text, type }) {
 function InlineActionSegment({ action }) {
     if (action.type === 'tool') {
         return (
-            <span className={[LABEL_LINE_CLASS, 'font-normal break-words [overflow-wrap:anywhere]'].join(' ')}>
+            <span className={LABEL_TEXT_CLASS}>
                 {withDebugTag(action.type, action.label)}
             </span>
         );
@@ -99,35 +100,26 @@ function InlineActionSegment({ action }) {
     return <TypedText text={action.text} type={action.type} />;
 }
 
-function PlanLabel({ item }) {
-    return (
-        <TimelineItem>
-            <span className={[LABEL_LINE_CLASS, 'font-normal break-words [overflow-wrap:anywhere]'].join(' ')}>
-                {withDebugTag('plan', item.label)}
-            </span>
-        </TimelineItem>
-    );
-}
-
 function RoundGroup({ item, running }) {
     const [expanded, setExpanded] = useState(false);
     const hasActions = item.actions.length > 0;
 
     return (
         <TimelineItem running={running}>
-            <button
-                type="button"
-                className="mb-1 w-full cursor-pointer border-none bg-transparent p-0 text-left disabled:cursor-default"
-                onClick={() => hasActions && setExpanded(value => !value)}
-                disabled={!hasActions}
-            >
-                <span className={[LABEL_LINE_CLASS, 'font-normal break-words [overflow-wrap:anywhere]'].join(' ')}>
+            {hasActions ? (
+                <button
+                    type="button"
+                    className={[LABEL_TEXT_CLASS, 'mb-1 w-full cursor-pointer border-none bg-transparent p-0 text-left [font-family:inherit]'].join(' ')}
+                    onClick={() => setExpanded(value => !value)}
+                >
                     {withDebugTag('round.label', item.label)}
-                    {hasActions && (
-                        <span className={['transition-transform', expanded ? 'rotate-90' : ''].join(' ')}>&gt;</span>
-                    )}
+                    <span className={['transition-transform', expanded ? 'rotate-90' : ''].join(' ')}>&gt;</span>
+                </button>
+            ) : (
+                <span className={LABEL_TEXT_CLASS}>
+                    {withDebugTag('round.label', item.label)}
                 </span>
-            </button>
+            )}
             {expanded && hasActions && (
                 <div className="mb-2 grid min-w-0 gap-2">
                     {item.actions.map((action, index) => (
@@ -170,7 +162,13 @@ export default function CodeAssistantMessage({ message, isStreaming }) {
             <div className="relative ml-2 grid min-w-0 gap-4 border-l border-[var(--ifm-color-emphasis-300)] pb-1">
                 {items.map((item, index) => (
                     item.kind === 'plan'
-                        ? <PlanLabel key={getTimelineItemKey(item, index)} item={item} />
+                        ? (
+                            <TimelineItem key={getTimelineItemKey(item, index)}>
+                                <span className={LABEL_TEXT_CLASS}>
+                                    {withDebugTag('plan', item.label)}
+                                </span>
+                            </TimelineItem>
+                        )
                         : (
                             <RoundGroup
                                 key={getTimelineItemKey(item, index)}
