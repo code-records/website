@@ -116,8 +116,8 @@ export class Plan {
     toJSON(): PlanJSON {
         return {
             expanded: this.expanded,
-            rounds: this._rounds.map(round => round.toJSON()),
             status: this.status,
+            rounds: this._rounds.map(round => round.toJSON()),
         };
     }
 

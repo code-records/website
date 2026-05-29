@@ -130,6 +130,7 @@ export class Action {
 
     toJSON(): ActionJSON {
         return {
+            type: this.type,
             callId: this.callId,
             call: this.call,
             done: this.done,
@@ -137,7 +138,6 @@ export class Action {
             id: this.id,
             label: this.label.length > 0 ? this.label : undefined,
             text: this.text.length > 0 ? this.text : undefined,
-            type: this.type,
         };
     }
 }

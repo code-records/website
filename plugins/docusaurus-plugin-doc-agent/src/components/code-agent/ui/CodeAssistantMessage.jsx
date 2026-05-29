@@ -55,38 +55,142 @@ function normalizeActions(actions) {
 }
 
 function getPlanText(message) {
-    return buildSegments(message).map(item => item.text).join('\n\n');
+    return buildRoundGroups(message)
+        .map(group => group.text)
+        .filter(text => text.length > 0)
+        .join('\n\n');
 }
 
-function buildSegments(message) {
-    return getRounds(message).flatMap((round, roundIndex) => {
-        const actions = normalizeActions(round?.actions);
+function buildActionSegments(actions) {
+    return normalizeActions(actions)
+        .map(item => {
+            const type = item?.type;
+            const text = type === 'tool'
+                ? ''
+                : typeof item?.text === 'string' ? item.text.trim() : '';
+            const hasToolLabel = type === 'tool' && typeof item?.label === 'string' && item.label.length > 0;
 
-        return [
-            ...actions.map((item, actionIndex) => ({ item, kind: 'action', index: actionIndex })),
-            { item: round, kind: 'round', index: actions.length },
-        ]
-            .map(({ item, kind, index }) => {
-                const isRound = kind === 'round';
-                const type = item?.type;
-                const text = type === 'tool' || item?.status === 'tool_calls'
-                    ? ''
-                    : typeof item?.text === 'string' ? item.text.trim() : '';
-                const hasToolLabel = type === 'tool' && typeof item?.label === 'string' && item.label.length > 0;
+            return {
+                key: item?.id,
+                kind: 'action',
+                item,
+                text,
+                type,
+                visible: text.length > 0 || hasToolLabel,
+            };
+        })
+        .filter(item => item.visible);
+}
 
-                return {
-                    key: isRound
-                        ? `r-${roundIndex}`
-                        : item.id,
-                    kind,
-                    item,
-                    text,
-                    type,
-                    visible: text.length > 0 || hasToolLabel,
-                };
-            })
-            .filter(item => item.visible);
-    });
+function buildRoundGroups(message) {
+    return getRounds(message).map((round, roundIndex) => {
+        const actions = buildActionSegments(round?.actions);
+        const text = typeof round?.text === 'string' ? round.text.trim() : '';
+
+        return {
+            actions,
+            key: `r-${roundIndex}`,
+            round,
+            text,
+            visible: text.length > 0 || actions.length > 0 || round?.status || round?.done === false,
+        };
+    })
+        .filter(group => group.visible);
+}
+
+function formatRoundLabel(group) {
+    return `工作 ${group.actions.length} 步`;
+}
+
+function RoundText({ text }) {
+    if (!text) return null;
+
+    return (
+        <div className="min-w-0 max-w-full text-sm leading-relaxed break-words [overflow-wrap:anywhere]">
+            <MarkdownRenderer content={text} className="text-sm break-words [overflow-wrap:anywhere] [&>*:first-child]:mt-0 [&>*:last-child]:mb-0" />
+        </div>
+    );
+}
+
+function InlineThinkingSegment({ segment }) {
+    const [expanded, setExpanded] = useState(false);
+    const label = segment.item?.label || '思考';
+
+    return (
+        <div className="min-w-0">
+            <button
+                type="button"
+                className="flex cursor-pointer items-center gap-1 border-none bg-transparent p-0 text-left text-xs text-[var(--ifm-color-emphasis-600)]"
+                onClick={() => setExpanded(prev => !prev)}
+            >
+                <span>{label}</span>
+                <span className={['transition-transform', expanded ? 'rotate-90' : ''].join(' ')}>&gt;</span>
+            </button>
+            {expanded && (
+                <div className="mt-1 text-xs leading-relaxed text-[var(--ifm-color-emphasis-600)] break-words [overflow-wrap:anywhere]">
+                    {segment.text}
+                </div>
+            )}
+        </div>
+    );
+}
+
+function InlineActionSegment({ segment }) {
+    if (segment.type === 'thinking') return <InlineThinkingSegment segment={segment} />;
+    if (segment.type === 'tool') {
+        const label = segment.item?.label || segment.item?.call?.name || '工具';
+
+        return (
+            <div className="min-w-0 text-sm leading-relaxed text-[var(--ifm-font-color-base)]">
+                <span className="font-semibold">{label}</span>
+            </div>
+        );
+    }
+    if (segment.type === 'error') {
+        return (
+            <div className="min-w-0 text-sm text-[var(--ifm-color-danger)] break-words [overflow-wrap:anywhere]">
+                <MarkdownRenderer content={segment.text} className="text-sm break-words [overflow-wrap:anywhere] [&>*:first-child]:mt-0 [&>*:last-child]:mb-0" />
+            </div>
+        );
+    }
+
+    return <RoundText text={segment.text} />;
+}
+
+function RoundGroup({ group, isStreaming }) {
+    const [expanded, setExpanded] = useState(false);
+    const hasActions = group.actions.length > 0;
+
+    const handleClick = () => {
+        if (hasActions) {
+            setExpanded(prev => !prev);
+        }
+    };
+
+    return (
+        <TimelineItem>
+            <button
+                type="button"
+                className="mb-1 flex w-full cursor-pointer items-center gap-1 border-none bg-transparent p-0 text-left text-xs text-[var(--ifm-color-emphasis-600)] disabled:cursor-default"
+                onClick={handleClick}
+                disabled={!hasActions}
+            >
+                <span>{formatRoundLabel(group)}</span>
+                {hasActions && (
+                    <span className={['transition-transform', expanded ? 'rotate-90' : ''].join(' ')}>&gt;</span>
+                )}
+            </button>
+            {expanded && hasActions && (
+                <div className="mb-2 grid min-w-0 gap-2">
+                    {group.actions.map(segment => (
+                        <InlineActionSegment key={segment.key} segment={segment} />
+                    ))}
+                </div>
+            )}
+            <RoundText text={group.text} />
+            {isStreaming && <StreamingCursor />}
+        </TimelineItem>
+    );
 }
 
 function TimelineItem({ children, tone = 'default' }) {
@@ -104,61 +208,6 @@ function TimelineItem({ children, tone = 'default' }) {
     );
 }
 
-function ThinkingSegment({ segment }) {
-    const [expanded, setExpanded] = useState(false);
-    const label = segment.item?.label || '思考';
-
-    return (
-        <TimelineItem>
-            <button
-                type="button"
-                className="mb-1 flex cursor-pointer items-center gap-1 border-none bg-transparent p-0 text-left text-xs text-[var(--ifm-color-emphasis-600)]"
-                onClick={() => setExpanded(prev => !prev)}
-            >
-                <span>{label}</span>
-                <span className={['transition-transform', expanded ? 'rotate-90' : ''].join(' ')}>&gt;</span>
-            </button>
-            {expanded && (
-                <div
-                    className="text-xs leading-relaxed text-[var(--ifm-color-emphasis-600)] break-words [overflow-wrap:anywhere]"
-                    style={{
-                        display: '-webkit-box',
-                        WebkitBoxOrient: 'vertical',
-                        WebkitLineClamp: 3,
-                        overflow: 'hidden',
-                    }}
-                >
-                    {segment.text}
-                </div>
-            )}
-        </TimelineItem>
-    );
-}
-
-function ToolSegment({ segment }) {
-    const label = segment.item?.label || segment.item?.call?.name || '工具';
-
-    return (
-        <TimelineItem tone="tool">
-            <div className="min-w-0 text-sm leading-relaxed text-[var(--ifm-font-color-base)]">
-                <span className="font-semibold">
-                    {label}
-                </span>
-            </div>
-        </TimelineItem>
-    );
-}
-
-function RoundSegment({ segment }) {
-    return (
-        <TimelineItem>
-            <div className="min-w-0 max-w-full text-sm leading-relaxed break-words [overflow-wrap:anywhere]">
-                <MarkdownRenderer content={segment.text} className="text-sm break-words [overflow-wrap:anywhere] [&>*:first-child]:mt-0 [&>*:last-child]:mb-0" />
-            </div>
-        </TimelineItem>
-    );
-}
-
 function ErrorSegment({ segment }) {
     return (
         <TimelineItem tone="error">
@@ -169,13 +218,6 @@ function ErrorSegment({ segment }) {
     );
 }
 
-function MessageSegment({ segment }) {
-    if (segment.type === 'thinking') return <ThinkingSegment segment={segment} />;
-    if (segment.type === 'tool') return <ToolSegment segment={segment} />;
-    if (segment.type === 'error') return <ErrorSegment segment={segment} />;
-    return <RoundSegment segment={segment} />;
-}
-
 function StreamingCursor() {
     return (
         <span className="ml-5 inline-block h-4 w-2 rounded-sm bg-[var(--ifm-color-primary)] align-middle animate-pulse" />
@@ -183,21 +225,20 @@ function StreamingCursor() {
 }
 
 export default function CodeAssistantMessage({ message, isStreaming }) {
-    const segments = buildSegments(message);
+    const groups = buildRoundGroups(message);
     const content = getPlanText(message);
     const error = message.error || (message.isError && !content ? '生成失败，请稍后重试。' : '');
-    const hasContent = segments.length > 0 || !!error;
+    const hasContent = groups.length > 0 || !!error;
 
     return (
         <div className="px-4 py-2 animate-[msg-fade-in_0.3s_ease-out]">
             <div className="relative ml-2 grid min-w-0 gap-4 border-l border-[var(--ifm-color-emphasis-300)] pb-1">
-                {segments.map((segment, index) => (
-                    <React.Fragment key={segment.key}>
-                        <MessageSegment segment={segment} />
-                        {isStreaming && index === segments.length - 1 && segment.kind === 'round' && (
-                            <StreamingCursor />
-                        )}
-                    </React.Fragment>
+                {groups.map((group, index) => (
+                    <RoundGroup
+                        key={group.key}
+                        group={group}
+                        isStreaming={isStreaming && index === groups.length - 1}
+                    />
                 ))}
 
                 {!isStreaming && error && (

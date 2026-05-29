@@ -111,11 +111,11 @@ export class Round {
 
     toJSON(): RoundJSON {
         return {
-            actions: this._actions.map(action => action.toJSON()),
             count: this.count,
             done: this.done,
             status: this.status,
             text: this.text.length > 0 ? this.text : undefined,
+            actions: this._actions.map(action => action.toJSON()),
         };
     }
 }
