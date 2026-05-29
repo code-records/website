@@ -1,6 +1,7 @@
 import {
     Tool,
     type JsonObject,
+    type ToolActivity,
     type ToolInput,
     type ToolLabelContext,
     type ToolPromptSchema,
@@ -59,6 +60,12 @@ export abstract class FileTool extends Tool {
         return `${fileOperationTitle(parsed.operation)}: ${parsed.path || '.'}`;
     }
 
+    formatActivity(input: ToolInput, context: ToolLabelContext = { input }): ToolActivity | null {
+        const parsed = parseFileToolInput(input);
+        if (parsed === null) return null;
+        return fileOperationActivity(parsed);
+    }
+
     protected async execute(input: ToolInput, context: ToolRunContext): Promise<ToolResult> {
         const parsed = parseFileToolInput(input);
         if (parsed === null) {
@@ -84,6 +91,48 @@ export abstract class FileTool extends Tool {
         if (signal?.aborted) {
             throw new DOMException('File tool aborted', 'AbortError');
         }
+    }
+}
+
+function fileOperationActivity(input: FileToolInput): ToolActivity | null {
+    const key = input.path || '.';
+    switch (input.operation) {
+        case 'list':
+            return {
+                key,
+                name: '文件夹',
+                unit: '个',
+                verb: '浏览',
+            };
+        case 'read':
+            return {
+                key,
+                name: '文件',
+                unit: '个',
+                verb: '浏览',
+            };
+        case 'write':
+            return {
+                key,
+                name: '文件',
+                unit: '个',
+                verb: '修改',
+            };
+        case 'delete':
+            return {
+                key,
+                name: '文件',
+                unit: '个',
+                verb: '删除',
+            };
+        case 'exists':
+        case 'stat':
+            return {
+                key,
+                name: '文件',
+                unit: '个',
+                verb: '检查',
+            };
     }
 }
 

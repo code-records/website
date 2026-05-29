@@ -6,8 +6,7 @@
 import React, { useState } from 'react';
 import MarkdownRenderer from '../../doc-agent/ui/MarkdownRenderer.jsx';
 
-const LABEL_LINE_CLASS = 'inline-flex min-w-0 items-center gap-1.5 text-xs leading-relaxed';
-const LABEL_TEXT_CLASS = [LABEL_LINE_CLASS, 'font-normal break-words [overflow-wrap:anywhere]'].join(' ');
+const LABEL_TEXT_CLASS = 'inline-flex min-w-0 items-center gap-1.5 text-xs font-normal leading-relaxed break-words [overflow-wrap:anywhere]';
 const DEBUG_TIMELINE_TAGS = true;
 
 function buildTimelineItems(message) {

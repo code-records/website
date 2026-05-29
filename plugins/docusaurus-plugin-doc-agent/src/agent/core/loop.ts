@@ -5,7 +5,7 @@ import type { Plan } from '../chat/round/Plan';
 import type { Round } from '../chat/round/Round';
 import type { Model } from '../model/Model';
 import type { ModelToolCall } from '../model/Model';
-import type { Tool, ToolResult } from '../tools/tool/Tool';
+import type { Tool, ToolActivity, ToolResult } from '../tools/tool/Tool';
 import { ToolManager } from '../tools/tool/ToolManager';
 import { applyContextPatch, createAskFactory, toAgentModelEvent } from './helper';
 import { logger } from '../utils/logger';
@@ -29,6 +29,7 @@ export interface LoopOptions {
 
 // 一个工具调用 promise 已完成
 interface SettledToolCall {
+    activity?: ToolActivity;
     call: ModelToolCall;
     label: string;
     result: ToolResult;
@@ -140,9 +141,11 @@ export async function* loop(options: LoopOptions): AsyncGenerator<AgentEvent, vo
                 // 15. 先确认工具存在；实际 ask 注入和执行交给 ToolManager。
                 toolManager.require(call.name);
                 const label = toolManager.formatLabel(call);
+                const activity = toolManager.formatActivity(call) ?? undefined;
 
                 const toolStartEvent: AgentEvent = {
                     type: 'tool_start',
+                    activity,
                     agent: agentName,
                     callId: call.id,
                     label,
@@ -156,6 +159,7 @@ export async function* loop(options: LoopOptions): AsyncGenerator<AgentEvent, vo
                 pending.push({
                     token,
                     promise: toolManager.runCallRecord(call).then(record => ({
+                        activity,
                         call,
                         label,
                         result: record.result,
@@ -171,11 +175,12 @@ export async function* loop(options: LoopOptions): AsyncGenerator<AgentEvent, vo
                 const index = pending.findIndex(item => item.token === settled.token);
                 if (index >= 0) pending.splice(index, 1);
 
-                const { call, label, result, tool } = settled;
+                const { activity, call, label, result, tool } = settled;
 
                 // 18. 通知工具完成；UI 可以更新对应 action 的状态和展示文本。
                 const toolDoneEvent: AgentEvent = {
                     type: 'tool_done',
+                    activity: result.activity ?? activity,
                     agent: agentName,
                     callId: call.id,
                     label,
@@ -260,6 +265,7 @@ function updateToolActionLabels(round: Round, toolManager: ToolManager): void {
         try {
             const label = toolManager.formatLabel(call);
             round.updateToolLabel(call.id, label);
+            round.updateToolActivity(call.id, toolManager.formatActivity(call));
         } catch {
             // The loop will surface missing tools when it tries to execute the call.
         }

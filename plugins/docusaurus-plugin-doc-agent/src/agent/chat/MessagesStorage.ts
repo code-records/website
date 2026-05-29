@@ -4,7 +4,7 @@ import type { ActionJSON, ActionType } from './round/Action';
 import type { PlanJSON, PlanStatus } from './round/Plan';
 import type { RoundJSON } from './round/Round';
 import type { ModelToolCall } from '../model/Model';
-import type { JsonObject, JsonValue, ToolEvent } from '../tools/tool/Tool';
+import type { JsonObject, JsonValue, ToolActivity, ToolEvent } from '../tools/tool/Tool';
 
 export interface MessagesMeta {
     [key: string]: string | number | boolean | null;
@@ -240,6 +240,7 @@ function parseAction(value: unknown): ActionJSON | null {
     const type = parseActionType(value.type);
     if (type === null) return null;
 
+    const activity = parseToolActivity(value.activity);
     const call = parseToolCall(value.call);
     const event = parseToolEvent(value.event);
     const id = typeof value.id === 'string' ? value.id : undefined;
@@ -247,6 +248,7 @@ function parseAction(value: unknown): ActionJSON | null {
     const text = typeof value.text === 'string' ? value.text : undefined;
 
     return {
+        ...(activity !== null ? { activity } : {}),
         ...(call !== null ? { call } : {}),
         done: value.done === true,
         ...(event !== null ? { event } : {}),
@@ -255,6 +257,23 @@ function parseAction(value: unknown): ActionJSON | null {
         ...(label !== undefined ? { label } : {}),
         ...(text !== undefined ? { text } : {}),
         type,
+    };
+}
+
+function parseToolActivity(value: unknown): ToolActivity | null {
+    if (!isRecord(value)) return null;
+    if (typeof value.verb !== 'string' || typeof value.name !== 'string' || typeof value.unit !== 'string') {
+        return null;
+    }
+
+    const count = typeof value.count === 'number' ? value.count : undefined;
+    const key = typeof value.key === 'string' ? value.key : undefined;
+    return {
+        ...(count !== undefined ? { count } : {}),
+        ...(key !== undefined ? { key } : {}),
+        name: value.name,
+        unit: value.unit,
+        verb: value.verb,
     };
 }
 

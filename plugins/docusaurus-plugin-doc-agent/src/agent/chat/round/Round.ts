@@ -1,5 +1,6 @@
 ﻿import { Action, type ActionJSON } from './Action';
 import type { ModelResponseKind } from '../../model/Model';
+import type { ToolActivity } from '../../tools/tool/Tool';
 
 export interface RoundJSON {
     actions: ActionJSON[];
@@ -33,6 +34,8 @@ export class Round {
     }
 
     formatLabel(): string {
+        const activityLabel = this.formatActivityLabel();
+        if (activityLabel.length > 0) return activityLabel;
         if (this.toolCount > 0) return `工作 ${this.toolCount} 步`;
         if (this.status === 'tool_calls') return '工作 0 步';
         if (this.status === 'continue') return '继续';
@@ -97,6 +100,7 @@ export class Round {
         }
 
         existing.callId = action.callId;
+        existing.activity = action.activity ?? existing.activity;
         existing.call = action.call ?? existing.call;
         existing.done = existing.done || action.done;
         existing.event = action.event ?? existing.event;
@@ -111,6 +115,15 @@ export class Round {
             return false;
         }
         existing.label = label;
+        return true;
+    }
+
+    updateToolActivity(callId: string, activity: ToolActivity | null): boolean {
+        const existing = this._actions.find(item => item.type === 'tool' && item.callId === callId);
+        if (existing === undefined) {
+            return false;
+        }
+        existing.activity = activity ?? undefined;
         return true;
     }
 
@@ -134,5 +147,74 @@ export class Round {
             actions: this._actions.map(action => action.toJSON()),
         };
     }
+
+    private formatActivityLabel(): string {
+        const groups = this.collectActivityGroups();
+        if (groups.length === 0) return '';
+
+        const byVerb = new Map<string, ActivityGroup[]>();
+        for (const group of groups) {
+            const verbGroups = byVerb.get(group.verb) ?? [];
+            verbGroups.push(group);
+            byVerb.set(group.verb, verbGroups);
+        }
+
+        return Array.from(byVerb.entries())
+            .map(([verb, verbGroups]) => {
+                const prefix = this.done ? `${verb}了 ` : `正在${verb} `;
+                return `${prefix}${verbGroups.map(formatActivityGroup).join('、')}`;
+            })
+            .join('，');
+    }
+
+    private collectActivityGroups(): ActivityGroup[] {
+        const groups = new Map<string, ActivityGroup>();
+        for (const action of this._actions) {
+            if (action.type !== 'tool' || action.activity === undefined) continue;
+            const activity = action.activity;
+            if (!isCountableActivity(activity)) continue;
+
+            const groupKey = `${activity.verb}\u0000${activity.name}\u0000${activity.unit}`;
+            const group = groups.get(groupKey) ?? {
+                count: 0,
+                keyedCount: 0,
+                keys: new Set<string>(),
+                name: activity.name,
+                unit: activity.unit,
+                verb: activity.verb,
+            };
+
+            if (activity.key !== undefined && activity.key.length > 0) {
+                group.keys.add(activity.key);
+                group.keyedCount = group.keys.size;
+            } else {
+                group.count += normalizeActivityCount(activity.count);
+            }
+
+            groups.set(groupKey, group);
+        }
+        return Array.from(groups.values()).filter(group => group.count + group.keyedCount > 0);
+    }
 }
 
+interface ActivityGroup {
+    count: number;
+    keyedCount: number;
+    keys: Set<string>;
+    name: string;
+    unit: string;
+    verb: string;
+}
+
+function formatActivityGroup(group: ActivityGroup): string {
+    return `${group.count + group.keyedCount} ${group.unit}${group.name}`;
+}
+
+function isCountableActivity(activity: ToolActivity): boolean {
+    return activity.verb.length > 0 && activity.name.length > 0 && activity.unit.length > 0;
+}
+
+function normalizeActivityCount(count: number | undefined): number {
+    if (typeof count !== 'number' || !Number.isFinite(count)) return 1;
+    return Math.max(0, Math.floor(count));
+}

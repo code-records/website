@@ -1,6 +1,6 @@
 import type { AgentEvent } from '../../Agent';
 import type { ModelToolCall } from '../../model/Model';
-import type { ToolEvent } from '../../tools/tool/Tool';
+import type { ToolActivity, ToolEvent } from '../../tools/tool/Tool';
 
 export type ActionType =
     | 'context'
@@ -9,6 +9,7 @@ export type ActionType =
     | 'tool';
 
 export interface ActionJSON {
+    activity?: ToolActivity;
     callId?: string;
     call?: ModelToolCall;
     done: boolean;
@@ -21,6 +22,7 @@ export interface ActionJSON {
 }
 
 export class Action {
+    activity?: ToolActivity;
     callId?: string;
     call?: ModelToolCall;
     done = false;
@@ -32,6 +34,7 @@ export class Action {
     type: ActionType;
 
     constructor(json: ActionJSON) {
+        this.activity = json.activity;
         this.type = json.type;
         this.callId = json.callId;
         this.id = json.id ?? createActionId(json);
@@ -50,6 +53,7 @@ export class Action {
         if (event.type !== 'model_event') {
             if (event.type === 'tool_start') {
                 return new Action({
+                    activity: event.activity,
                     callId: event.callId,
                     done: false,
                     label: event.label,
@@ -58,6 +62,7 @@ export class Action {
             }
             if (event.type === 'tool_done') {
                 return new Action({
+                    activity: event.activity ?? event.result.activity,
                     callId: event.callId,
                     done: true,
                     label: event.label,
@@ -132,6 +137,7 @@ export class Action {
 
     toJSON(): ActionJSON {
         return {
+            activity: this.activity,
             callId: this.callId,
             call: this.call,
             done: this.done,

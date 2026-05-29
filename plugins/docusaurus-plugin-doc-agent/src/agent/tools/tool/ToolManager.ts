@@ -2,7 +2,7 @@ import type { Message } from '../../chat/Message';
 import type { Agent } from '../../Agent';
 import type { Model, ModelToolCall } from '../../model/Model';
 import { ToolError } from '../../utils/errors';
-import type { AskModel, Tool, ToolDefinition, ToolResult } from './Tool';
+import type { AskModel, Tool, ToolActivity, ToolDefinition, ToolResult } from './Tool';
 import { SubAgentTool } from '../SubAgentTool';
 import { ToolRegistry } from './ToolRegistry';
 import { ToolRunner, type CompletedToolRunRecord } from './ToolRunner';
@@ -57,6 +57,14 @@ export class ToolManager {
     formatLabel(call: ModelToolCall): string {
         const tool = this.registry.require(call.name);
         return tool.formatLabel(call.input, {
+            call,
+            input: call.input,
+        });
+    }
+
+    formatActivity(call: ModelToolCall): ToolActivity | null {
+        const tool = this.registry.require(call.name);
+        return tool.formatActivity(call.input, {
             call,
             input: call.input,
         });

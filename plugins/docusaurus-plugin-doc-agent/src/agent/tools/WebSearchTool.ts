@@ -98,16 +98,23 @@ export class WebSearchTool extends Tool {
             }
 
             const data = await response.json() as JsonValue;
+            const resultCount = countResults(data);
             const result = this.formatResults !== undefined
                 ? this.formatResults(data, query)
                 : defaultFormatResults(data, query);
 
             return {
+                activity: {
+                    count: resultCount,
+                    name: '网站',
+                    unit: '个',
+                    verb: '搜索',
+                },
                 events: [{
                     data: {
                         mode: 'proxy',
                         query,
-                        resultCount: countResults(data),
+                        resultCount,
                     },
                     type: 'web_search',
                 }],

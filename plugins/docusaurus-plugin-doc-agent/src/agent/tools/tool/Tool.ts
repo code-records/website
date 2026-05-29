@@ -19,6 +19,20 @@ export interface ToolEvent {
     data?: JsonObject;
 }
 
+/** 工具向 Round 暴露的可聚合活动摘要，用于生成“浏览了 1 个文件夹、1 个文件”这类状态文案。 */
+export interface ToolActivity {
+    /** 动作动词，例如“浏览”“搜索”“修改”“运行”。 */
+    verb: string;
+    /** 被操作对象的显示名称，例如“文件”“文件夹”“网站”“命令”。 */
+    name: string;
+    /** 数量单位，例如“个”“条”“次”。 */
+    unit: string;
+    /** 工具已经知道明确数量时填写；适合搜索结果、批处理等一次调用产生多个对象的场景。 */
+    count?: number;
+    /** 可去重的目标标识；适合文件路径、目录路径、命令文本、URL 等单个目标。 */
+    key?: string;
+}
+
 /** 工具对主上下文的修改请求，由 loop 统一应用。 */
 export type ContextPatch =
     | { type: 'append'; context: Message[] }
@@ -33,6 +47,8 @@ export interface ToolResult {
     contextPatch?: ContextPatch;
     /** 可选的副作用事件，供 UI、日志或调度工具消费。 */
     events?: ToolEvent[];
+    /** 工具完成后补充或修正的活动摘要；未提供时使用工具调用开始时的摘要。 */
+    activity?: ToolActivity;
 }
 
 export interface ToolLabelContext {
@@ -93,7 +109,7 @@ export type ToolStatus = 'idle' | 'running' | 'paused' | 'done' | 'error';
 export abstract class Tool {
     abstract name: string;
     abstract description: string;
-    
+
     /** 工具的输入参数定义（采用 JSON Schema 格式），供 Model 识别并生成工具调用指令 */
     abstract prompt: ToolPromptSchema;
 
@@ -108,6 +124,10 @@ export abstract class Tool {
 
     formatLabel(input: ToolInput, context: ToolLabelContext = { input }): string {
         return this.name;
+    }
+
+    formatActivity(input: ToolInput, context: ToolLabelContext = { input }): ToolActivity | null {
+        return null;
     }
 
     /**
