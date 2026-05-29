@@ -34,9 +34,9 @@ export class Round {
 
     formatLabel(): string {
         if (this.toolCount > 0) return `工作 ${this.toolCount} 步`;
-        if (this.status === 'final') return '回复';
-        if (this.status === 'continue') return '继续';
         if (this.status === 'tool_calls') return '工作 0 步';
+        if (this.status === 'continue') return '继续';
+        if (this.status === 'final') return '结果';
         return this.done ? '已完成' : '正在工作';
     }
 

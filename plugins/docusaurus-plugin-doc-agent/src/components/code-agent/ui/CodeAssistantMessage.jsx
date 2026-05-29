@@ -160,13 +160,14 @@ function TypedText({ text, toneClass, type }) {
 }
 
 function RoundText({ text }) {
-    if (!text) return null;
+    return <TypedText text={text} toneClass={ROUND_TEXT_CLASS} type="round" />;
+    // if (!text) return null;
 
-    return (
-        <div className="min-w-0 max-w-full text-xs leading-relaxed break-words [overflow-wrap:anywhere]">
-            <MarkdownRenderer content={text} className="text-xs break-words [overflow-wrap:anywhere] [&_*]:text-xs [&>*:first-child]:mt-0 [&>*:last-child]:mb-0" />
-        </div>
-    );
+    // return (
+    //     <div className="min-w-0 max-w-full text-xs leading-relaxed break-words [overflow-wrap:anywhere]">
+    //         <MarkdownRenderer content={text} className="text-xs break-words [overflow-wrap:anywhere] [&_*]:text-xs [&>*:first-child]:mt-0 [&>*:last-child]:mb-0" />
+    //     </div>
+    // );
 }
 
 function InlineThinkingSegment({ segment }) {

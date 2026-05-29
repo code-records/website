@@ -65,12 +65,12 @@ export class Message {
 
     toJSON(): MessageJSON {
         return {
+            role: this.role,
             ...(this.custom !== undefined ? { custom: this.custom } : {}),
             ...(this.error !== undefined ? { error: this.error } : {}),
             ...(this.isError ? { isError: true } : {}),
             ...(this.local ? { local: true } : {}),
             ...(this.plans.length > 0 ? { plans: this.plans.map(p => p.toJSON()) } : {}),
-            role: this.role,
             ...(this.streaming ? { streaming: true } : {}),
         };
     }
