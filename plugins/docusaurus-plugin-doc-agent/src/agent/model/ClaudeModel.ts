@@ -285,7 +285,7 @@ export class ClaudeModel extends Model {
         }
 
         if (message.role === 'user') {
-            const text = message.plan?.text ?? '';
+            const text = message.plans[0]?.text ?? '';
             return text.length > 0
                 ? [{ content: text, role: 'user' }]
                 : [];
@@ -324,7 +324,7 @@ export class ClaudeModel extends Model {
             return [];
         }
         if (message.role === 'user') {
-            const text = message.plan?.text ?? '';
+            const text = message.plans[0]?.text ?? '';
             return text.length > 0
                 ? [{ content: text, role: 'user' }]
                 : [];
@@ -466,7 +466,7 @@ export class ClaudeModel extends Model {
 
     private roundActions(message: Message): RoundProviderAction[] {
         const actions: RoundProviderAction[] = [];
-        for (const round of message.plan?.items ?? []) {
+        for (const round of message.plans[0]?.items ?? []) {
             if ((round.status === 'final' || round.status === 'continue') && round.text.length > 0) {
                 actions.push({ text: round.text, type: 'content' });
             }

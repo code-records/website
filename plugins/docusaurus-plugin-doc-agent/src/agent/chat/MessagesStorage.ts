@@ -181,10 +181,14 @@ function parseMessage(value: unknown): MessageJSON | null {
     if (value.role !== 'assistant' && value.role !== 'user') return null;
 
     const role = value.role;
-    const plan = parsePlan(value.plan);
+    const plans = Array.isArray(value.plans)
+        ? value.plans
+            .map(parsePlan)
+            .filter(plan => plan !== null)
+        : [];
 
     return {
-        ...(plan !== null ? { plan } : {}),
+        ...(plans.length > 0 ? { plans } : {}),
         role,
     };
 }

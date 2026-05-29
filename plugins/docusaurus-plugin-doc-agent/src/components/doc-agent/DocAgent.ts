@@ -163,7 +163,7 @@ export class DocAgent extends Agent {
             role: 'assistant',
             local: true,
             custom: 'suggest',
-            plan: {
+            plans: [{
                 count: 1,
                 kind: 'plan',
                 rounds: [{
@@ -175,7 +175,7 @@ export class DocAgent extends Agent {
                     text: responseContent,
                 }],
                 status: 'completed',
-            },
+            }],
         };
     }
 

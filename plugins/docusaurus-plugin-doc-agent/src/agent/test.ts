@@ -37,7 +37,7 @@ class MockModel extends Model {
         } else {
             // 第二轮（收到读取结果后）：生成最终回答并展示文件前 150 个字符
             const lastMessage = request.messages[request.messages.length - 1];
-            const actionItems = lastMessage.plan?.items.flatMap(round => round.items) ?? [];
+            const actionItems = lastMessage.plans[0]?.items.flatMap(round => round.items) ?? [];
             console.log('\n🔍 [调试信息] actionItems 数组:', JSON.stringify(actionItems, null, 2));
             const fileActionResult = actionItems.find(item => item.type === 'tool' && item.done);
             const fileContent = fileActionResult?.text ?? '未读取到内容';

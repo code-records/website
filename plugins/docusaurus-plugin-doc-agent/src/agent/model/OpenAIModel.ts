@@ -164,7 +164,7 @@ export class OpenAIModel extends Model {
             return [];
         }
         if (message.role === 'user') {
-            const text = message.plan?.text ?? '';
+            const text = message.plans[0]?.text ?? '';
             return text.length > 0
                 ? [{ content: text, role: 'user' }]
                 : [];
@@ -183,7 +183,7 @@ export class OpenAIModel extends Model {
 
     private roundsToProviderMessages(message: Message): JsonObject[] {
         const result: JsonObject[] = [];
-        for (const round of message.plan?.items ?? []) {
+        for (const round of message.plans[0]?.items ?? []) {
             if ((round.status === 'final' || round.status === 'continue') && round.text.length > 0) {
                 result.push({ content: round.text, role: 'assistant' });
             }

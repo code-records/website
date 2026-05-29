@@ -108,7 +108,7 @@ export class GeminiModel extends Model {
             return [];
         }
         if (message.role === 'user') {
-            const text = message.plan?.text ?? '';
+            const text = message.plans[0]?.text ?? '';
             return text.length > 0
                 ? [{ parts: [{ text }], role: 'user' }]
                 : [];
@@ -116,7 +116,7 @@ export class GeminiModel extends Model {
 
         const parts: JsonValue[] = [];
         const toolResultMessages: JsonObject[] = [];
-        for (const round of message.plan?.items ?? []) {
+        for (const round of message.plans[0]?.items ?? []) {
             if ((round.status === 'final' || round.status === 'continue') && round.text.length > 0) {
                 parts.push({ text: round.text });
             }
@@ -167,7 +167,7 @@ export class GeminiModel extends Model {
     }
 
     private roundToolActions(message: Message): Array<{ call: ModelToolCall; text: string }> {
-        return (message.plan?.items ?? []).flatMap(round => round.items.flatMap(action => {
+        return (message.plans[0]?.items ?? []).flatMap(round => round.items.flatMap(action => {
             if (action.type !== 'tool') {
                 return [];
             }

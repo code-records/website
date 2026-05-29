@@ -7,7 +7,6 @@ export interface MessageJSON {
     error?: string;
     isError?: boolean;
     local?: boolean;
-    plan?: PlanJSON;
     plans?: PlanJSON[];
     role: MessageRole;
     streaming?: boolean;
@@ -33,10 +32,6 @@ export class Message {
         this.streaming = role === 'assistant';
     }
 
-    get plan(): Plan | undefined {
-        return this.plans[0];
-    }
-
     /**
      * Message deliberately has no text/content field.
      * User/local text is stored in Round.text so every textual payload stays inside Plan/Round/Action.
@@ -55,7 +50,7 @@ export class Message {
     }
 
     static fromJSON(json: MessageJSON): Message {
-        const plansJson = json.plans ?? (json.plan ? [json.plan] : []);
+        const plansJson = json.plans ?? [];
         const message = new Message(
             json.role,
             plansJson.map(p => Plan.fromJSON(p)),
@@ -74,7 +69,7 @@ export class Message {
             ...(this.error !== undefined ? { error: this.error } : {}),
             ...(this.isError ? { isError: true } : {}),
             ...(this.local ? { local: true } : {}),
-            ...(this.plans.length > 0 ? { plan: this.plans[0].toJSON(), plans: this.plans.map(p => p.toJSON()) } : {}),
+            ...(this.plans.length > 0 ? { plans: this.plans.map(p => p.toJSON()) } : {}),
             role: this.role,
             ...(this.streaming ? { streaming: true } : {}),
         };

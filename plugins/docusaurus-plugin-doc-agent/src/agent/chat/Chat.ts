@@ -104,8 +104,9 @@ export class Chat {
     togglePlan(index: number): void {
         const assistantMessages = this.history.items.filter(message => message.role === 'assistant');
         const last = assistantMessages[assistantMessages.length - 1];
-        if (last?.plan !== undefined && index === 0) {
-            last.plan.toggle();
+        const plan = last?.plans[index];
+        if (plan !== undefined) {
+            plan.toggle();
             this.notify();
         }
     }
