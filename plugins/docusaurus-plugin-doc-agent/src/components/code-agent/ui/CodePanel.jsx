@@ -141,10 +141,8 @@ export class CodePanel extends React.Component {
         }
     };
 
-    scrollToBottom = () => {
-        const el = this.messagesAreaRef.current;
-        if (!el) return;
-        el.scrollTop = el.scrollHeight;
+    scrollToBottom = (force = false) => {
+        this.messagesAreaRef.current?.scrollToBottom(force);
     };
 
     handleInputChange = (e) => {
@@ -175,6 +173,7 @@ export class CodePanel extends React.Component {
         if (this.inputRef.current) this.inputRef.current.style.height = 'auto';
         this.setState({ inputValue: '', suggestions: [] });
 
+        this.scrollToBottom(true);
         await this.chat.send(question);
     };
 
@@ -185,6 +184,7 @@ export class CodePanel extends React.Component {
     handleSuggestionClick = async (question) => {
         if (!question || this.chat.isSending) return;
         this.setState({ suggestions: [] });
+        this.scrollToBottom(true);
         await this.chat.send(question);
     };
 

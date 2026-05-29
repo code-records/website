@@ -1,11 +1,7 @@
 /*
- * Code assistant 消息 UI 设计约定：
- * - 把运行时对象图按 [...round.actions, round] 平铺成正文流。
- * - round/thinking/error 读取 item.text；tool 展示 item.label。
- * - tool 展示文案由工具 formatLabel 契约提供，UI 不从 tool input/result 推断文案。
- * - 各 type 组件保持轻量；thinking/tool 只在同一条 timeline 上加一个小标记。
- * - thinking 文本暂时最多显示 3 行，超出部分先隐藏，等后续设计展开交互。
- * - tool result 仍保存在 Action.text 给 model 使用，默认不在 UI 展示。
+ * Code assistant message UI notes:
+ * - Build a lightweight display model from plan/round/action runtime data.
+ * - Tool result text stays on Action.text for model context and is hidden by default.
  */
 import React, { useState } from 'react';
 import MarkdownRenderer from '../../doc-agent/ui/MarkdownRenderer.jsx';
@@ -16,8 +12,8 @@ const ACTION_TEXT_CLASS = 'text-blue-500';
 const LABEL_LINE_CLASS = 'inline-flex min-w-0 items-center gap-1.5 text-xs leading-relaxed';
 
 const LABEL_TAG_CLASS = [
-    'inline-flex h-4 shrink-0 items-center rounded border px-1',
-    'text-[10px] font-semibold uppercase leading-none',
+    'inline-flex shrink-0 items-center',
+    'text-xs font-normal normal-case leading-relaxed',
 ].join(' ');
 
 function getPrimaryPlan(message) {
@@ -26,7 +22,7 @@ function getPrimaryPlan(message) {
 
 function getPlanLabel(message) {
     const plan = getPrimaryPlan(message);
-    return plan?.formatLabel();
+    return plan?.formatLabel?.() || '';
 }
 
 function getRounds(message) {
@@ -101,10 +97,12 @@ function buildRoundGroups(message) {
     return getRounds(message).map((round, roundIndex) => {
         const actions = buildActionSegments(round?.actions);
         const text = typeof round?.text === 'string' ? round.text.trim() : '';
+        const shouldMergeSingleAction = text.length === 0 && actions.length === 1;
 
         return {
-            actions,
+            actions: shouldMergeSingleAction ? [] : actions,
             key: `r-${roundIndex}`,
+            mergedAction: shouldMergeSingleAction ? actions[0] : null,
             round,
             text,
             visible: text.length > 0 || actions.length > 0 || round?.status || round?.done === false,
@@ -114,17 +112,24 @@ function buildRoundGroups(message) {
 }
 
 function formatRoundLabel(group) {
-    return group.round.formatLabel();
+    return group.round?.formatLabel?.() || group.round?.label || '';
 }
 
-function RoundText({ text }) {
+function TypedText({ text, toneClass, type }) {
     if (!text) return null;
 
     return (
-        <div className="min-w-0 max-w-full text-sm leading-relaxed break-words [overflow-wrap:anywhere]">
-            <MarkdownRenderer content={text} className="text-sm break-words [overflow-wrap:anywhere] [&>*:first-child]:mt-0 [&>*:last-child]:mb-0" />
+        <div className="flex min-w-0 max-w-full items-start gap-1.5 text-xs leading-relaxed break-words [overflow-wrap:anywhere]">
+            <TypeTag type={type} toneClass={toneClass} />
+            <div className="min-w-0 flex-1">
+                <MarkdownRenderer content={text} className="text-xs break-words [overflow-wrap:anywhere] [&_*]:text-xs [&>*:first-child]:mt-0 [&>*:last-child]:mb-0" />
+            </div>
         </div>
     );
+}
+
+function RoundText({ text }) {
+    return <TypedText text={text} toneClass={ROUND_TEXT_CLASS} type="round" />;
 }
 
 function InlineThinkingSegment({ segment }) {
@@ -138,14 +143,12 @@ function InlineThinkingSegment({ segment }) {
                 className="cursor-pointer border-none bg-transparent p-0 text-left"
                 onClick={() => setExpanded(prev => !prev)}
             >
-                <LabelLine label={label} toneClass={ACTION_TEXT_CLASS} type="action">
+                <LabelLine label={label} toneClass={ACTION_TEXT_CLASS} type={segment.type}>
                     <span className={['transition-transform', expanded ? 'rotate-90' : ''].join(' ')}>&gt;</span>
                 </LabelLine>
             </button>
             {expanded && (
-                <div className={['mt-1 text-xs leading-relaxed break-words [overflow-wrap:anywhere]', ACTION_TEXT_CLASS].join(' ')}>
-                    {segment.text}
-                </div>
+                <TypedText text={segment.text} toneClass={ACTION_TEXT_CLASS} type={segment.type} />
             )}
         </div>
     );
@@ -157,18 +160,16 @@ function InlineActionSegment({ segment }) {
         const label = segment.item?.label || segment.item?.call?.name || '工具';
 
         return (
-            <LabelLine label={label} toneClass={ACTION_TEXT_CLASS} type="action" />
+            <LabelLine label={label} toneClass={ACTION_TEXT_CLASS} type={segment.type} />
         );
     }
     if (segment.type === 'error') {
         return (
-            <div className="min-w-0 text-sm text-[var(--ifm-color-danger)] break-words [overflow-wrap:anywhere]">
-                <MarkdownRenderer content={segment.text} className="text-sm break-words [overflow-wrap:anywhere] [&>*:first-child]:mt-0 [&>*:last-child]:mb-0" />
-            </div>
+            <TypedText text={segment.text} toneClass="text-[var(--ifm-color-danger)]" type={segment.type} />
         );
     }
 
-    return <RoundText text={segment.text} />;
+    return <TypedText text={segment.text} toneClass={ACTION_TEXT_CLASS} type={segment.type} />;
 }
 
 function RoundGroup({ group, isStreaming }) {
@@ -180,6 +181,14 @@ function RoundGroup({ group, isStreaming }) {
             setExpanded(prev => !prev);
         }
     };
+
+    if (group.mergedAction) {
+        return (
+            <TimelineItem running={isStreaming}>
+                <InlineActionSegment segment={group.mergedAction} />
+            </TimelineItem>
+        );
+    }
 
     return (
         <TimelineItem running={isStreaming}>
@@ -220,13 +229,19 @@ function PlanLabel({ label }) {
 function LabelLine({ children, label, toneClass, type }) {
     return (
         <span className={[LABEL_LINE_CLASS, toneClass].join(' ')}>
-            <span className={[LABEL_TAG_CLASS, toneClass, 'border-current'].join(' ')}>
-                {type}
-            </span>
-            <span className="min-w-0 font-semibold break-words [overflow-wrap:anywhere]">
+            <TypeTag type={type} toneClass={toneClass} />
+            <span className="min-w-0 font-normal break-words [overflow-wrap:anywhere]">
                 {label}
             </span>
             {children}
+        </span>
+    );
+}
+
+function TypeTag({ type, toneClass }) {
+    return (
+        <span className={[LABEL_TAG_CLASS, toneClass].join(' ')}>
+            [{type}]
         </span>
     );
 }
@@ -235,10 +250,10 @@ function TimelineItem({ children, running = false, tone = 'default' }) {
     const dotClass = running
         ? 'bg-[var(--ifm-color-primary)] animate-pulse'
         : tone === 'tool'
-        ? 'bg-emerald-400'
-        : tone === 'error'
-            ? 'bg-red-500'
-            : 'bg-[var(--ifm-color-emphasis-700)]';
+            ? 'bg-emerald-400'
+            : tone === 'error'
+                ? 'bg-red-500'
+                : 'bg-[var(--ifm-color-emphasis-700)]';
 
     return (
         <div className="relative min-w-0 pl-5">
@@ -251,9 +266,7 @@ function TimelineItem({ children, running = false, tone = 'default' }) {
 function ErrorSegment({ segment }) {
     return (
         <TimelineItem tone="error">
-            <div className="min-w-0 text-sm text-[var(--ifm-color-danger)] break-words [overflow-wrap:anywhere]">
-                <MarkdownRenderer content={segment.text} className="text-sm break-words [overflow-wrap:anywhere] [&>*:first-child]:mt-0 [&>*:last-child]:mb-0" />
-            </div>
+            <TypedText text={segment.text} toneClass="text-[var(--ifm-color-danger)]" type="error" />
         </TimelineItem>
     );
 }
@@ -283,7 +296,7 @@ export default function CodeAssistantMessage({ message, isStreaming }) {
                 )}
 
                 {!hasContent && !isStreaming && (
-                    <div className="text-sm text-[var(--ifm-color-emphasis-600)]">
+                    <div className="text-xs text-[var(--ifm-color-emphasis-600)]">
                         暂无可展示内容
                     </div>
                 )}
