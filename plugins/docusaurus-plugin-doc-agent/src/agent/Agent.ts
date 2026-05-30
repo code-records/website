@@ -3,7 +3,7 @@ import { OpenAIModel } from './model/OpenAIModel';
 import { ClaudeModel } from './model/ClaudeModel';
 import { GeminiModel } from './model/GeminiModel';
 import { Message } from './chat/Message';
-import { Plan } from './chat/round/Plan';
+import { Flow } from './chat/round/Flow';
 import type { ContextPatch, Tool, ToolUsage, ToolEvent, ToolResult } from './tools/tool/Tool';
 import { CompressTool } from './tools/CompressTool';
 import { MakePlanTool, UpdatePlanTool } from './tools/PlanTool';
@@ -74,10 +74,6 @@ export abstract class Agent {
         ];
     }
 
-    definePlans(): Plan[] {
-        return [new Plan()];
-    }
-
     /**
      * 根据通用配置创建具体 provider 的 Model 实例。
      *
@@ -131,49 +127,56 @@ export abstract class Agent {
     async *run(input: AgentInput): AsyncGenerator<AgentEvent, void, void> {
         yield { type: 'agent_start', agent: this.name };
         let runAssistant: Message | undefined;
+        let currentFlow: Flow | undefined;
 
         try {
             runAssistant = this.ensureCurrentAssistant(input.messages);
-            const plan = runAssistant.plans[0];
-            if (plan === undefined) {
-                throw new Error('Agent.run() requires the pending assistant Message to have a Plan');
-            }
-            logger.plan(plan.toJSON());
+            const runSignal = input.signal ?? this.context.signal;
             let finalResponse: ModelResponse | undefined;
 
-            for await (const event of loop({
-                agentName: this.name,
-                model: this.model,
-                maxRounds: this.context.maxRounds,
-                plan,
-                tools: [...this.defaultTools(), ...this.tools],
-                subAgents: this.subAgents,
-                system: this.systemPrompt,
-                messages: input.messages,
-                signal: input.signal ?? this.context.signal,
-                toolTimeoutMs: this.context.toolTimeoutMs,
-            })) {
-                if (event.type === 'model_event' && event.event.type === 'done') {
-                    if (event.event.response.responseStatus === 'final') {
-                        finalResponse = event.event.response;
+            for (const flow of runAssistant.flows) {
+                if (runSignal?.aborted) break;
+                if (flow.status !== 'pending') continue;
+
+                currentFlow = flow;
+                logger.flow(flow.toJSON());
+
+                const system = this.buildFlowSystemPrompt(runAssistant, flow);
+                const flowMessages = this.buildFlowMessages(input.messages, runAssistant, flow);
+                for await (const event of loop({
+                    agentName: this.name,
+                    model: this.model,
+                    maxRounds: this.context.maxRounds,
+                    flow,
+                    tools: [...this.defaultTools(), ...this.tools],
+                    subAgents: this.subAgents,
+                    system,
+                    messages: flowMessages,
+                    signal: runSignal,
+                    toolTimeoutMs: this.context.toolTimeoutMs,
+                })) {
+                    if (event.type === 'model_event' && event.event.type === 'done') {
+                        if (event.event.response.responseStatus === 'final') {
+                            finalResponse = event.event.response;
+                        }
                     }
+                    yield event;
                 }
-                yield event;
+
+                flow.finish();
+                logger.flow(flow.toJSON());
             }
 
             const doneEvent: AgentEvent = { type: 'agent_done', agent: this.name, response: finalResponse };
             runAssistant.finish();
-            plan.apply(doneEvent);
-            logger.plan(plan.toJSON());
             yield doneEvent;
         } catch (error) {
             const err = toError(error);
             const errorEvent: AgentEvent = { type: 'agent_error', agent: this.name, error: err };
             runAssistant?.fail(err.message);
-            const plan = runAssistant?.plans[0];
-            plan?.apply(errorEvent);
-            if (plan !== undefined) {
-                logger.plan(plan.toJSON());
+            currentFlow?.apply(errorEvent);
+            if (currentFlow !== undefined) {
+                logger.flow(currentFlow.toJSON());
             }
             yield errorEvent;
         }
@@ -202,10 +205,51 @@ export abstract class Agent {
      */
     private ensureCurrentAssistant(messages: readonly Message[]): Message {
         const last = messages[messages.length - 1];
-        if (last?.role === 'assistant' && last.plans[0]?.status === 'pending') {
+        if (last?.role === 'assistant' && last.flows.some(flow => flow.status === 'pending')) {
             return last;
         }
         throw new Error('Agent.run() requires messages to end with a pending assistant Message');
+    }
+
+    private buildFlowSystemPrompt(message: Message, flow: Flow): string {
+        const flowStatus = message.flows
+            .map(item => {
+                const marker = item === flow ? '当前执行' : item.status;
+                return `- ${item.formatLabel()}：${marker}`;
+            })
+            .join('\n');
+
+        return [
+            this.systemPrompt.trim(),
+            message.flows.length > 1
+                ? '你必须严格按任务流顺序执行用户任务。一次只执行“当前执行”的 Flow；当前 Flow 完成后停止本轮内容，让运行器进入下一个 Flow。'
+                : '',
+            message.flows.length > 1 ? `Flow 状态：\n${flowStatus}` : '',
+        ].filter(Boolean).join('\n\n');
+    }
+
+    private buildFlowMessages(messages: readonly Message[], assistant: Message, flow: Flow): readonly Message[] {
+        const input = flow.input.trim();
+        if (input.length === 0) {
+            return messages;
+        }
+
+        const assistantIndex = messages.lastIndexOf(assistant);
+        if (assistantIndex < 0) {
+            return messages;
+        }
+
+        const beforeAssistant = messages.slice(0, assistantIndex);
+        if (beforeAssistant[beforeAssistant.length - 1]?.role === 'user') {
+            return messages;
+        }
+
+        return [
+            ...beforeAssistant,
+            Message.user(input),
+            assistant,
+            ...messages.slice(assistantIndex + 1),
+        ];
     }
 }
 

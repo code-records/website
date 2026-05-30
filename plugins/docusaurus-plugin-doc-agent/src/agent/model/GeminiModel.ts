@@ -108,7 +108,7 @@ export class GeminiModel extends Model {
             return [];
         }
         if (message.role === 'user') {
-            const text = message.plans[0]?.text ?? '';
+            const text = message.flows.map(flow => flow.text).join('');
             return text.length > 0
                 ? [{ parts: [{ text }], role: 'user' }]
                 : [];
@@ -116,9 +116,11 @@ export class GeminiModel extends Model {
 
         const parts: JsonValue[] = [];
         const toolResultMessages: JsonObject[] = [];
-        for (const round of message.plans[0]?.items ?? []) {
-            if ((round.type === 'final' || round.type === 'continue') && round.text.length > 0) {
-                parts.push({ text: round.text });
+        for (const flow of message.flows) {
+            for (const round of flow.items) {
+                if ((round.type === 'final' || round.type === 'continue') && round.text.length > 0) {
+                    parts.push({ text: round.text });
+                }
             }
         }
         for (const action of this.roundToolActions(message)) {
@@ -167,7 +169,7 @@ export class GeminiModel extends Model {
     }
 
     private roundToolActions(message: Message): Array<{ call: ModelToolCall; text: string }> {
-        return (message.plans[0]?.items ?? []).flatMap(round => round.items.flatMap(action => {
+        return message.flows.flatMap(flow => flow.items.flatMap(round => round.items.flatMap(action => {
             if (action.type !== 'tool') {
                 return [];
             }
@@ -178,7 +180,7 @@ export class GeminiModel extends Model {
                 call: action.call,
                 text: action.text,
             }];
-        }));
+        })));
     }
 
     private formatToolDefs(tools: readonly ToolDefinition[]): JsonObject[] {

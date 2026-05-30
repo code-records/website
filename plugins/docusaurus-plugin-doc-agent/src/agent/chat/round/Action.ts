@@ -1,7 +1,7 @@
 import type { AgentEvent } from '../../Agent';
 import type { ModelToolCall } from '../../model/Model';
 import type { ToolEvent, ToolUsage } from '../../tools/tool/Tool';
-import type { ClientStatus } from './Plan';
+import type { ClientStatus } from './Flow';
 
 export type ActionType =
     | 'context'

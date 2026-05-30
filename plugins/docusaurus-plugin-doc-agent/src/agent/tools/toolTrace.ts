@@ -6,8 +6,8 @@ export function collectToolCallInputs(history: HistoryJSON, toolName: string, in
     const seen = new Set<string>();
 
     for (const message of history.messages) {
-        for (const plan of message.plans ?? []) {
-            for (const round of plan.rounds) {
+        for (const flow of message.flows ?? []) {
+            for (const round of flow.rounds) {
                 for (const action of round.actions) {
                     const call = action.call;
                     if (action.type !== 'tool' || call === undefined || call.name !== toolName) {

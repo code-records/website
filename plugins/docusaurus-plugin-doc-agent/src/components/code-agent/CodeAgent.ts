@@ -22,6 +22,8 @@ export interface CodeAgentConfig {
     providers: {
         openai: CodeAgentProviderConfig;
     };
+    rules: string[];
+    skills: string[];
     suggestPrompt: string;
 }
 
@@ -55,6 +57,8 @@ export class CodeAgent extends Agent {
                 },
             },
         },
+        rules: [],
+        skills: [],
         prompt: `你是一个拥有极高工程素养和敏锐重构直觉的顶级 AI 编程助手（CodeAgent）。
             你目前运行在用户的浏览器端，可以通过系统提供的 file 工具访问用户已授权的本地工作区目录。
 
@@ -108,7 +112,7 @@ export class CodeAgent extends Agent {
     }
 
     get systemPrompt(): string {
-        return this.config.prompt;
+        return buildCodeAgentSystemPrompt(this.config);
     }
 
     setCurrentModel(model: string): void {
@@ -175,6 +179,22 @@ export class CodeAgent extends Agent {
             return null;
         }
     }
+}
+
+function buildCodeAgentSystemPrompt(config: CodeAgentConfig): string {
+    return [
+        config.prompt,
+        formatPromptSection('规则', config.rules),
+        formatPromptSection('技能', config.skills),
+    ].filter(Boolean).join('\n\n');
+}
+
+function formatPromptSection(title: string, items: string[]): string {
+    const content = items
+        .map(item => item.trim())
+        .filter(Boolean)
+        .join('\n\n');
+    return content.length > 0 ? `${title}：\n${content}` : '';
 }
 
 function dedupeSuggestionLines(content: string): string | null {

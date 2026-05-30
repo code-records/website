@@ -4,7 +4,7 @@ export * from './chat/History';
 export * from './chat/Message';
 export * from './chat/MessagesStorage';
 export * from './chat/round/Action';
-export * from './chat/round/Plan';
+export * from './chat/round/Flow';
 export * from './chat/round/Round';
 export * from './core/helper';
 export * from './core/loop';

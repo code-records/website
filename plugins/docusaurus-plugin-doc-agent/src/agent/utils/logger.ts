@@ -6,7 +6,7 @@ const baseStyle = 'padding:2px 4px;border-radius:2px;font-weight:bold;color:#fff
 const LoggerStyle = {
     action: `${baseStyle}background:linear-gradient(90deg,#7c3aed,#ec4899);`,
     default: `${baseStyle}background:linear-gradient(90deg,#4a90e2,#6cc8ff);`,
-    plan: `${baseStyle}background:linear-gradient(90deg,#f59e0b,#f97316);`,
+    flow: `${baseStyle}background:linear-gradient(90deg,#f59e0b,#f97316);`,
     round: `${baseStyle}background:linear-gradient(90deg,#059669,#34d399);`,
 } as const;
 
@@ -25,8 +25,8 @@ class Logger {
         this.write(event, data, LoggerStyle.default);
     }
 
-    plan(data: LoggerData = null): void {
-        this.write('agent.plan', data, LoggerStyle.plan);
+    flow(data: LoggerData = null): void {
+        this.write('agent.flow', data, LoggerStyle.flow);
     }
 
     round(data: LoggerData = null): void {

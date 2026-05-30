@@ -285,7 +285,7 @@ export class ClaudeModel extends Model {
         }
 
         if (message.role === 'user') {
-            const text = message.plans[0]?.text ?? '';
+            const text = message.flows.map(flow => flow.text).join('');
             return text.length > 0
                 ? [{ content: text, role: 'user' }]
                 : [];
@@ -324,7 +324,7 @@ export class ClaudeModel extends Model {
             return [];
         }
         if (message.role === 'user') {
-            const text = message.plans[0]?.text ?? '';
+            const text = message.flows.map(flow => flow.text).join('');
             return text.length > 0
                 ? [{ content: text, role: 'user' }]
                 : [];
@@ -466,23 +466,25 @@ export class ClaudeModel extends Model {
 
     private roundActions(message: Message): RoundProviderAction[] {
         const actions: RoundProviderAction[] = [];
-        for (const round of message.plans[0]?.items ?? []) {
-            if ((round.type === 'final' || round.type === 'continue') && round.text.length > 0) {
-                actions.push({ text: round.text, type: 'content' });
-            }
-            for (const action of round.items) {
-                if (action.type === 'thinking') {
-                    actions.push({ text: action.text, type: 'thinking' });
+        for (const flow of message.flows) {
+            for (const round of flow.items) {
+                if ((round.type === 'final' || round.type === 'continue') && round.text.length > 0) {
+                    actions.push({ text: round.text, type: 'content' });
                 }
-                if (action.type === 'tool') {
-                    if (action.call === undefined) {
-                        throw new Error('Tool action must include call before provider conversion');
+                for (const action of round.items) {
+                    if (action.type === 'thinking') {
+                        actions.push({ text: action.text, type: 'thinking' });
                     }
-                    actions.push({
-                        call: action.call,
-                        text: action.text,
-                        type: 'tool',
-                    });
+                    if (action.type === 'tool') {
+                        if (action.call === undefined) {
+                            throw new Error('Tool action must include call before provider conversion');
+                        }
+                        actions.push({
+                            call: action.call,
+                            text: action.text,
+                            type: 'tool',
+                        });
+                    }
                 }
             }
         }

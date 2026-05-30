@@ -12,9 +12,8 @@ import CodeExplorer from './CodeExplorer.jsx';
 import CodeHeader from './CodeHeader.jsx';
 import CodeInput from './CodeInput.jsx';
 import CodeUserMessage from './CodeUserMessage.jsx';
+import CodeWelcome from './CodeWelcome.jsx';
 import SuggestMessage from './SuggestMessage.jsx';
-
-const WELCOME_MESSAGE = '你好！我是 CodeAgent 极客编程助手。我已经搭载了物理文件读写工具，授权连接本地代码库后，我可以直接读取、诊断并物理重写你工作区下的代码，让我们开始吧！';
 
 export class CodePanel extends React.Component {
     constructor(props) {
@@ -188,6 +187,11 @@ export class CodePanel extends React.Component {
         await this.chat.send(question);
     };
 
+    handleWelcomeFlowStart = () => {
+        this.setState({ suggestions: [] });
+        this.scrollToBottom(true);
+    };
+
     handleCopyDisplay = () => {
         const text = this.messagesAreaRef.current?.innerText;
         if (text) navigator.clipboard.writeText(text);
@@ -271,7 +275,13 @@ export class CodePanel extends React.Component {
                     <CodeBody
                         hasRealMessages={hasRealMessages}
                         messagesAreaRef={this.messagesAreaRef}
-                        welcomeMessage={WELCOME_MESSAGE}
+                        welcome={(
+                            <CodeWelcome
+                                chat={this.chat}
+                                disabled={isLoading}
+                                onFlowStart={this.handleWelcomeFlowStart}
+                            />
+                        )}
                     >
                         {this.renderMessages()}
                     </CodeBody>

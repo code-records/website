@@ -299,7 +299,7 @@ class ChatPanel extends React.Component {
                 key={idx}
                 message={message}
                 isStreaming={message.streaming}
-                onTogglePlan={message.streaming ? idx => this.chat.togglePlan(idx) : undefined}
+                onToggleFlow={message.streaming ? idx => this.chat.toggleFlow(idx) : undefined}
             />
         );
     };

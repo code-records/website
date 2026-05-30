@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>OVERLAY DLL</title>
+  <style>
+    :root {
+      --bg: #f6f8fa;
+      --fg: #24292f;
+      --border: #d0d7de;
+      --code-bg: #f0f3f6;
+      --link: #0969da;
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
+      line-height: 1.55;
+      max-width: 920px;
+      margin: 2rem auto;
+      padding: 0 1.25rem;
+      color: var(--fg);
+      background: var(--bg);
+    }
+    h1 { font-size: 1.75rem; border-bottom: 1px solid var(--border); padding-bottom: 0.35rem; }
+    h2 { font-size: 1.35rem; margin-top: 1.75rem; }
+    h3 { font-size: 1.12rem; }
+    a { color: var(--link); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    code, pre {
+      font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+      font-size: 0.9em;
+    }
+    code {
+      background: var(--code-bg);
+      padding: 0.15em 0.35em;
+      border-radius: 4px;
+    }
+    pre {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 0.85rem 1rem;
+      overflow-x: auto;
+    }
+    pre code { background: none; padding: 0; }
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      margin: 1rem 0;
+      font-size: 0.95em;
+    }
+    th, td {
+      border: 1px solid var(--border);
+      padding: 0.45rem 0.65rem;
+      text-align: left;
+    }
+    th { background: #eaeef2; }
+    blockquote {
+      margin: 1rem 0;
+      padding: 0.35rem 1rem;
+      border-left: 4px solid var(--border);
+      color: #57606a;
+      background: #fff;
+    }
+    hr { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
+    .mermaid {
+      background: #fff;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 1rem;
+      margin: 1rem 0;
+      overflow-x: auto;
+    }
+    .footer {
+      margin-top: 3rem;
+      font-size: 0.85rem;
+      color: #57606a;
+    }
+  </style>
+
+</head>
+<body>
+<h1>OverlayDll：挂钩与每帧合成</h1>
+<p>本文说明 <strong><code>OverlayDll.dll</code></strong> 如何进入宿主进程、钩住 DXGI <strong>Present / Present1</strong>，以及在每次 Present <strong>之前</strong>把共享内存里的 Qt 像素画到当前后缓冲上。实现文件：<code>OverlayDll/dllmain.cpp</code>、<code>d3d11_hook.cpp</code>、<code>overlay_renderer.cpp</code>、<code>shared_surface.cpp</code>。</p>
+<hr />
+<h2>1. 导出接口（宿主调用）</h2>
+<table>
+<thead>
+<tr>
+<th>导出</th>
+<th>作用</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>Overlay_Start()</code></td>
+<td>安装 Present / Present1 钩子（内部 <code>InstallPresentHook</code>）。</td>
+</tr>
+<tr>
+<td><code>Overlay_Stop()</code></td>
+<td>移除钩子并 <code>InvalidateDevice</code>（释放 D3D 资源与共享内存读取器）。</td>
+</tr>
+<tr>
+<td><code>Overlay_SetDrawEnabled(int)</code></td>
+<td>非 0：正常读共享内存并合成；0：挂钩仍执行，但跳过 Qt 纹理路径（便于只测钩子或省电）。</td>
+</tr>
+<tr>
+<td><code>Overlay_SetDebugHookTint(int)</code></td>
+<td>非 0：不读共享内存，画半透明纯色全屏三角（验证 MinHook + 状态保存/恢复是否工作）。</td>
+</tr>
+</tbody>
+</table>
+<p>入口在 <code>dllmain.cpp</code>：<code>Overlay_Start</code> 仅调用 <code>InstallPresentHook()</code>。</p>
+<hr />
+<h2>2. 为什么钩 Present</h2>
+<p>游戏的 <strong>交换链</strong>每帧结束时调用 <strong><code>IDXGISwapChain::Present</code></strong>（或 <strong><code>IDXGISwapChain1::Present1</code></strong>）。在 <strong>原始 Present 被调用之前</strong>插入逻辑，可以把 overlay 画进 <strong>当前即将提交的后缓冲</strong>，玩家看到的就是「游戏画面 + UI」的合成结果。</p>
+<p>要点：</p>
+<ul>
+<li>钩子是 <strong>进程内</strong>的：DLL 被 <code>LoadLibrary</code> 进 <strong>TestGame</strong> 后，与游戏共用同一 D3D11 设备和上下文（通过 <code>swapChain-&gt;GetDevice</code> / <code>GetImmediateContext</code> 取得）。</li>
+<li>必须在 Present 路径里做合成，而不是随意线程里画：否则目标 RT 与帧边界不对齐，容易出现闪屏或画在错误缓冲上。</li>
+</ul>
+<hr />
+<h2>3. 如何拿到 Present / Present1 地址</h2>
+<p>游戏自己的交换链在运行时才会创建，但 <strong>vtable 里 Present 槽位</strong>对标准 DXGI swap chain 是稳定的。工程里用 <strong>临时设备</strong>算一次函数指针（<code>GetPresentAddresses</code>）：</p>
+<ol>
+<li>注册临时窗口类，创建 2×2 隐藏窗口。</li>
+<li><code>D3D11CreateDeviceAndSwapChain</code> 得到 <code>IDXGISwapChain*</code>。</li>
+<li><code>vtable[8]</code> → <strong><code>Present</code></strong>（与 DXGI 接口布局一致）。</li>
+<li><code>QueryInterface(IDXGISwapChain1)</code>，取 <strong><code>Present1</code></strong>（代码里为 vtable 下标 <strong>22</strong>，注释中推演了 IUnknown → … → <code>Present1</code> 的偏移）。</li>
+<li>销毁临时窗口与设备。</li>
+</ol>
+<p>这样得到的是 <strong>该 DXGI 版本下 Present 在虚表中的地址</strong>；MinHook 对该地址下钩后，<strong>任意进程内</strong>随后创建的 swap chain，只要走同一实现，都会进入 <code>HookedPresent</code> / <code>HookedPresent1</code>。</p>
+<hr />
+<h2>4. MinHook 安装顺序</h2>
+<p><code>InstallPresentHook</code>（<code>d3d11_hook.cpp</code>）大致步骤：</p>
+<ol>
+<li><code>MH_Initialize</code></li>
+<li><code>MH_CreateHook(present, HookedPresent, &amp;g_originalPresent)</code> + <code>MH_EnableHook</code></li>
+<li>若 <code>Present1</code> 地址存在且与 <code>Present</code> 不同，再对 <strong>Present1</strong> 单独 <code>CreateHook</code> + <code>EnableHook</code></li>
+</ol>
+<p>被钩函数里先做 <strong><code>overlay::RenderOverlay(sc)</code></strong>，再调用 <strong>保存下来的原始函数</strong>（<code>g_originalPresent</code> / <code>g_originalPresent1</code>），保证游戏原有 Present 行为不变。</p>
+<p><code>HookedPresent1</code> 里把 <code>IDXGISwapChain1*</code> <strong>QueryInterface 成 <code>IDXGISwapChain*</code></strong> 再交给 <code>RenderOverlay</code>，这样 <strong>纹理上传与画四边形</strong>只实现一份。</p>
+<p><code>RemovePresentHook</code> 中 <code>DisableHook</code> / <code>RemoveHook</code> 后 <code>MH_Uninitialize</code>，并调用 <code>overlay::InvalidateDevice()</code>。</p>
+<hr />
+<h2>5. <code>RenderOverlay</code> 一帧在做什么</h2>
+<p>逻辑在 <code>overlay_renderer.cpp</code> 的 <code>RenderOverlay(IDXGISwapChain* swapChain)</code>。</p>
+<h3>5.1 设备与资源</h3>
+<ol>
+<li><code>swapChain-&gt;GetDevice(IID_ID3D11Device)</code>，<code>GetImmediateContext</code>。</li>
+<li><code>EnsureResources(device, ctx)</code>：若当前 <code>g_res</code> 绑定的 device 变了（或首次），会 <strong>重建</strong> VS/PS、采样器、混合、光栅（含 scissor）、深度模板（深度关闭）、动态常量缓冲、以及 <code>SharedSurfaceReader::Open()</code>。</li>
+<li><strong>调试路径</strong>：若 <code>g_debugHookTint</code> → <code>DrawSolidDebugOverlay</code>（全屏三角 + 青色 PS），然后 return。</li>
+<li><strong>关闭绘制</strong>：若 <code>g_drawEnabled == 0</code>，直接 return。</li>
+</ol>
+<h3>5.2 读共享内存</h3>
+<ol>
+<li><code>g_res-&gt;reader.LockForRead(&amp;hdr, &amp;pixels)</code>（见 <code>shared_surface.cpp</code>）：<code>OpenFileMapping</code> / <code>MapViewOfFile(…, 0)</code>、<code>WaitForSingleObject(mutex)</code>，校验宽高、stride、映射长度。</li>
+<li>若 <code>hdr-&gt;overlayVisible == 0</code>，解锁并 return（与 OverlayUI 里复选框一致）。</li>
+</ol>
+<h3>5.3 CPU 像素 → GPU 纹理</h3>
+<ol>
+<li><code>EnsureTexture(w, h)</code>：按需创建 <strong>DYNAMIC</strong> <code>R8G8B8A8_UNORM</code> 纹理 + SRV。</li>
+<li><code>Map</code> 纹理，<code>memcpy</code> 每行：源 stride 用 <code>hdr-&gt;stride</code>（与 OverlayUI 紧密打包一致），目标用 <code>mapped.RowPitch</code>（可能大于 <code>w*4</code>）。</li>
+<li><code>Unmap</code>，<code>UnlockRead()</code> 释放互斥量。</li>
+</ol>
+<h3>5.4 画到后缓冲（居中 1:1 四边形）</h3>
+<ol>
+<li><strong><code>GetCurrentBackBufferIndex(swapChain)</code></strong>：<br />
+   - 单缓冲或非 flip 链 → <strong>0</strong>；<br />
+   - flip 模型 → 尽量用 <code>IDXGISwapChain3::GetCurrentBackBufferIndex</code>，与游戏实际将要 Present 的缓冲一致（否则可能画到「另一张」缓冲上看不见）。</li>
+<li><code>GetBuffer(bbIndex)</code> → 临时 <strong>RTV</strong>，绑定为唯一 render target（深度设为 nullptr）。</li>
+<li><strong>保存/恢复一大块管线状态</strong>：RTV/DSV、viewport、scissor、blend、RS、DSS、VS/PS/GS、SRV、 sampler、input layout、topology、VB/IB、VS 常量缓冲槽 0 等。<br />
+   - 若某状态原为 <strong>null</strong>（例如 RS），恢复时 <strong><code>RSSetState(nullptr)</code></strong>，避免把无效状态留回游戏。</li>
+<li>设置全屏 viewport + 全屏 scissor、预乘 alpha 混合、关闭深度测试。</li>
+<li><strong>常量缓冲</strong>写入 <code>OverlayQuadCB</code>：<code>origin</code> / <code>quadW/H</code> 为 <strong>后缓冲上居中</strong> 的像素矩形（逻辑尺寸不超过 <code>w,h</code> 且不超过后缓冲宽高），<code>backbufferW/H</code> 供 VS 转 NDC。</li>
+<li>VS <strong><code>vsOverlayQuad</code></strong>：生成 <strong>6 个顶点</strong>的矩形，按 <strong>像素对齐</strong> 放到屏幕；PS 用 <strong><code>sampPoint</code></strong> 点采样纹理，避免小图拉伸糊成一片。</li>
+<li><code>Draw(6, 0)</code> 后按保存值 <strong>全部还原</strong>，释放临时 RTV。</li>
+</ol>
+<hr />
+<h2>6. 与 OverlayUI 的约定</h2>
+<ul>
+<li><strong>共享内存名 / 互斥量名</strong>：<code>common/overlay_ipc.h</code> 与 OverlayUI 一致。</li>
+<li><strong>像素布局</strong>：<code>SharedOverlayHeader</code> 后紧跟 RGBA，行紧密 <code>width*4</code>（DLL 读 <code>hdr-&gt;stride</code>）。</li>
+<li><strong>可见性</strong>：<code>overlayVisible</code> 为 0 时不画（仅透明/跳过）。</li>
+</ul>
+<p>语义管道（<code>GameOverlaySemantics</code>）由 OverlayUI 单独提供；<strong>OverlayDll 当前不消费语义</strong>，只消费位图。</p>
+<hr />
+<h2>7. 调试与日志</h2>
+<ul>
+<li><strong><code>Overlay_SetDebugHookTint(1)</code></strong>：确认钩子与 D3D 状态恢复是否正常（不依赖 Qt）。</li>
+<li><strong>日志文件</strong>：部分失败路径会追加 <code>%TEMP%\GameOverlayDemo_dll.log</code>（如 <code>LockForRead</code>、纹理创建失败等）；<code>shared_surface.cpp</code> 里 <code>OpenFileMapping</code> / <code>MapViewOfFile</code> 等也会 <strong>单次</strong>记入，避免刷屏。</li>
+</ul>
+<hr />
+<h2>8. 风险与限制（心里有数）</h2>
+<ul>
+<li><strong>多设备 / 多 swap chain</strong>：当前实现按「单 immediate context + 每次 Present 的链」工作；若游戏多窗口或多设备，需要扩展「按 swapChain 存 g_res」等策略。</li>
+<li><strong>Present1 与 Present 并存</strong>：对部分运行库两者都会走，已尽量分别挂钩；若仍遇特例需结合具体游戏验证。</li>
+<li><strong>反作弊 / 完整性</strong>：进程内挂钩属于敏感能力，商业游戏环境需单独评估。</li>
+</ul>
+<hr />
+<h2>9. TestGame：谁在何时调用 <code>Overlay_Start</code></h2>
+<p>本 demo 里，<strong>只有 <code>TestGame.exe</code></strong> 会加载 <code>OverlayDll.dll</code>；调用链在 <code>TestGame/main.cpp</code> 的 <strong><code>LoadOverlayDll()</code></strong>。</p>
+<h3>9.1 启动顺序（<code>wWinMain</code>）</h3>
+<ol>
+<li>创建窗口、<code>InitD3D</code>：创建 <strong>D3D11 设备与交换链</strong>（之后每帧 <code>PresentFrame</code> 里会调用 <code>g_swap-&gt;Present</code>）。</li>
+<li><strong><code>LoadOverlayDll()</code></strong>：在 D3D 已就绪 <strong>之后</strong>立刻执行（仍在进入消息循环之前）。</li>
+<li><code>EnsureOverlayUiRunning()</code>：如需要则拉起 <strong>OverlayUI.exe</strong>（共享内存生产者）。</li>
+<li><code>StartOverlaySemanticsReaderThread()</code>：连接语义管道（与 DLL 无关）。</li>
+<li>进入主循环：每帧 <code>PresentFrame</code> → <strong><code>Present</code></strong> → 已被钩住则先走 <strong><code>RenderOverlay</code></strong>，再进游戏原本的 Present。</li>
+</ol>
+<p>这样保证：<strong>第一次 Present 发生时，MinHook 已经安装</strong>（否则首几帧可能漏画 overlay）。</p>
+<h3>9.2 <code>LoadOverlayDll()</code> 做了什么</h3>
+<ol>
+<li>用 <strong><code>GetModuleFileNameW</code></strong> 得到当前 exe 路径，把文件名换成同目录下的 <strong><code>OverlayDll.dll</code></strong>（避免依赖当前工作目录；与 CMake post-build 拷贝位置一致）。</li>
+<li><strong><code>LoadLibraryW</code></strong>、<code>GetProcAddress</code> 解析：<br />
+   - <code>Overlay_Start</code><br />
+   - <code>Overlay_SetDrawEnabled</code><br />
+   - <code>Overlay_SetDebugHookTint</code></li>
+<li>若 <code>Overlay_Start</code> 非空，<strong>立即调用</strong> → 内部 <code>InstallPresentHook()</code>。</li>
+<li>将 <strong><code>g_drawOverlay</code> 设为 true</strong>，并调用 <strong><code>Overlay_SetDrawEnabled(1)</code></strong>，使默认进入游戏即可看到 Qt 合成（无需再按一次热键）。</li>
+</ol>
+<h3>9.3 运行期热键（仍通过同一函数指针）</h3>
+<table>
+<thead>
+<tr>
+<th>按键</th>
+<th>行为</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>F1</strong></td>
+<td>仅把 <strong>OverlayUI</strong> 窗口前置（<code>BringOverlayUiWindowToForeground</code>），<strong>不</strong>关合成。</td>
+</tr>
+<tr>
+<td><strong>F4</strong></td>
+<td>切换 <strong><code>g_drawOverlay</code></strong>，并调用 <strong><code>Overlay_SetDrawEnabled(0/1)</code></strong>（挂钩仍在，DLL 内跳过纹理路径）。</td>
+</tr>
+<tr>
+<td><strong>F3</strong></td>
+<td>切换 <strong><code>Overlay_SetDebugHookTint</code></strong>（纯色调试路径，验证钩子与 D3D 状态）。</td>
+</tr>
+</tbody>
+</table>
+<p>鼠标在面板区域内时，仍由 <code>WndProc</code> 通过管道发输入给 Qt（与 <code>Overlay_Start</code> 无直接调用关系）。</p>
+<h3>9.4 退出时</h3>
+<p>主循环结束后依次 <strong><code>ReleaseD3D</code></strong>、<code>ShutdownOverlayUiIfLaunchedByUs</code>，然后 <strong><code>FreeLibrary(g_overlayDll)</code></strong>。</p>
+<p>当前 demo <strong>未</strong>在卸库前显式调用 <strong><code>Overlay_Stop()</code></strong>；若需严格卸钩再释放，可在 <code>FreeLibrary</code> 前 <code>GetProcAddress("Overlay_Stop")</code> 并调用（与你们工程策略一致即可）。</p>
+<hr />
+<h2>10. 相关源码索引</h2>
+<table>
+<thead>
+<tr>
+<th>主题</th>
+<th>位置</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>导出</td>
+<td><code>OverlayDll/dllmain.cpp</code></td>
+</tr>
+<tr>
+<td>Present 地址、MinHook</td>
+<td><code>OverlayDll/d3d11_hook.cpp</code></td>
+</tr>
+<tr>
+<td>渲染、状态保存/恢复</td>
+<td><code>OverlayDll/overlay_renderer.cpp</code></td>
+</tr>
+<tr>
+<td>共享内存读、互斥量</td>
+<td><code>OverlayDll/shared_surface.cpp</code></td>
+</tr>
+<tr>
+<td>头字段与面板尺寸</td>
+<td><code>common/overlay_ipc.h</code></td>
+</tr>
+<tr>
+<td>加载 DLL、<code>Overlay_Start</code> / 热键</td>
+<td><code>TestGame/main.cpp</code>（<code>LoadOverlayDll</code>、<code>WndProc</code>、<code>wWinMain</code>）</td>
+</tr>
+</tbody>
+</table>
+<p class="footer">Generated from Markdown.</p>
+</body>
+</html>

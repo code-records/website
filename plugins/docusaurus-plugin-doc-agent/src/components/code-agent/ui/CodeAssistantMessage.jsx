@@ -1,6 +1,6 @@
 /*
  * Code assistant message UI.
- * - Builds a timeline from plan/round runtime state.
+ * - Builds a timeline from flow/round runtime state.
  * - Tool result text stays on Action.text and is hidden by default.
  */
 import React, { useState } from 'react';
@@ -10,43 +10,47 @@ const LABEL_TEXT_CLASS = 'inline-flex min-w-0 items-center gap-1.5 text-xs font-
 const DEBUG_TIMELINE_TAGS = true;
 
 function buildTimelineItems(message) {
-    const plan = message.plans[0];
+    const items = [];
 
-    const items = [{
-        kind: 'plan',
-        label: plan.formatLabel(),
-    }];
-
-    // Keep the timeline at plan/round level; actions stay nested under rounds.
-    for (const round of plan.rounds) {
-        const actions = round.actions
-            .filter(action => action.type !== 'thinking')
-            .map(action => ({
-                kind: 'action',
-                id: action.id || action.callId || '',
-                label: action.label || action.call?.name || '',
-                text: typeof action.text === 'string' ? action.text.trim() : '',
-                type: action.type,
-                usage: action.usage,
-            }))
-            .filter(action => action.type === 'tool' ? action.label.length > 0 : action.text.length > 0);
-
-        const text = typeof round.text === 'string' ? round.text.trim() : '';
-        if (text.length === 0) {
-            const previous = items[items.length - 1];
-            if (actions.length > 0 && previous?.kind === 'round') {
-                previous.actions = previous.actions.concat(actions);
-                previous.label = formatActionsUsageLabel(previous.actions, round.status) || formatRoundLabel(round);
-            }
-            continue;
-        }
-
+    for (const flow of message.flows) {
         items.push({
-            actions,
-            kind: 'round',
-            label: formatRoundLabel(round),
-            text,
+            kind: 'flow',
+            label: flow.formatLabel(),
         });
+
+        // Keep the timeline at flow/round level; actions stay nested under rounds.
+        for (const round of flow.rounds) {
+            const actions = round.actions
+                .filter(action => action.type !== 'thinking')
+                .map(action => ({
+                    kind: 'action',
+                    id: action.id || action.callId || '',
+                    label: action.label || action.call?.name || '',
+                    text: typeof action.text === 'string' ? action.text.trim() : '',
+                    type: action.type,
+                    usage: action.usage,
+                    call: action.call,
+                }))
+                .filter(action => action.type === 'tool' ? action.label.length > 0 : action.text.length > 0);
+
+            const text = typeof round.text === 'string' ? round.text.trim() : '';
+            if (text.length === 0) {
+                const previous = items[items.length - 1];
+                if (actions.length > 0 && previous?.kind === 'round') {
+                    previous.actions = previous.actions.concat(actions);
+                    previous.label = formatActionsUsageLabel(previous.actions, round.status) || formatRoundLabel(round);
+                }
+                continue;
+            }
+
+            const label = formatActionsUsageLabel(actions, round.status) || formatRoundLabel(round);
+            items.push({
+                actions,
+                kind: 'round',
+                label,
+                text,
+            });
+        }
     }
 
     return items;
@@ -91,7 +95,7 @@ function collectUsageGroups(actions) {
             verb: usage.verb,
         };
 
-        if (typeof usage.key === 'string' && usage.key.length > 0) {
+        if (typeof usage.key === 'string' && usage.key.length > 0 && !shouldCountUsagePerAction(action)) {
             group.keys.add(usage.key);
             group.keyedCount = group.keys.size;
         } else {
@@ -118,7 +122,13 @@ function normalizeUsageCount(count) {
         : 1;
 }
 
-function getPlanText(items) {
+function shouldCountUsagePerAction(action) {
+    if (action.type !== 'tool') return false;
+    if (action.call?.name === 'file' && action.call?.input?.operation === 'list') return true;
+    return typeof action.label === 'string' && action.label.startsWith('List files:');
+}
+
+function getFlowText(items) {
     return items
         .filter(item => item.kind === 'round')
         .map(item => item.text)
@@ -209,7 +219,7 @@ function TimelineItem({ children, running = false, tone = 'default' }) {
 
 export default function CodeAssistantMessage({ message, isStreaming }) {
     const items = buildTimelineItems(message);
-    const content = getPlanText(items);
+    const content = getFlowText(items);
     const error = message.error || (message.isError && !content ? '生成失败，请稍后重试。' : '');
     const hasContent = items.length > 0 || !!error;
 
@@ -217,11 +227,11 @@ export default function CodeAssistantMessage({ message, isStreaming }) {
         <div className="px-4 py-2 animate-[msg-fade-in_0.3s_ease-out]">
             <div className="relative ml-2 grid min-w-0 gap-4 border-l border-[var(--ifm-color-emphasis-300)] pb-1">
                 {items.map((item, index) => (
-                    item.kind === 'plan'
+                    item.kind === 'flow'
                         ? (
                             <TimelineItem key={getTimelineItemKey(item, index)}>
                                 <span className={LABEL_TEXT_CLASS}>
-                                    {withDebugTag('plan', item.label)}
+                                    {withDebugTag('flow', item.label)}
                                 </span>
                             </TimelineItem>
                         )

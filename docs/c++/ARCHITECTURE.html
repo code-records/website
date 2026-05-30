@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ARCHITECTURE</title>
+  <style>
+    :root {
+      --bg: #f6f8fa;
+      --fg: #24292f;
+      --border: #d0d7de;
+      --code-bg: #f0f3f6;
+      --link: #0969da;
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
+      line-height: 1.55;
+      max-width: 920px;
+      margin: 2rem auto;
+      padding: 0 1.25rem;
+      color: var(--fg);
+      background: var(--bg);
+    }
+    h1 { font-size: 1.75rem; border-bottom: 1px solid var(--border); padding-bottom: 0.35rem; }
+    h2 { font-size: 1.35rem; margin-top: 1.75rem; }
+    h3 { font-size: 1.12rem; }
+    a { color: var(--link); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    code, pre {
+      font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+      font-size: 0.9em;
+    }
+    code {
+      background: var(--code-bg);
+      padding: 0.15em 0.35em;
+      border-radius: 4px;
+    }
+    pre {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 0.85rem 1rem;
+      overflow-x: auto;
+    }
+    pre code { background: none; padding: 0; }
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      margin: 1rem 0;
+      font-size: 0.95em;
+    }
+    th, td {
+      border: 1px solid var(--border);
+      padding: 0.45rem 0.65rem;
+      text-align: left;
+    }
+    th { background: #eaeef2; }
+    blockquote {
+      margin: 1rem 0;
+      padding: 0.35rem 1rem;
+      border-left: 4px solid var(--border);
+      color: #57606a;
+      background: #fff;
+    }
+    hr { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
+    .mermaid {
+      background: #fff;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 1rem;
+      margin: 1rem 0;
+      overflow-x: auto;
+    }
+    .footer {
+      margin-top: 3rem;
+      font-size: 0.85rem;
+      color: #57606a;
+    }
+  </style>
+
+  <script type="module">
+    import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs";
+    mermaid.initialize({ startOnLoad: true, theme: "neutral" });
+  </script>
+
+</head>
+<body>
+<h1>OverlayWindow 如何「传到」TestGame.exe（架构说明）</h1>
+<p>本文说明 <strong><code>OverlayWindow</code> 并不会作为 Qt 对象进入 TestGame</strong>；跨进程传递的是 <strong>像素</strong>、<strong>输入消息</strong>，以及（可选）<strong>语义通道</strong>上的控件树 JSON。阅读时建议先看 <strong>结论</strong>，再按需跳章节。</p>
+<p><strong>OverlayDll</strong>（DXGI Present 钩子、每帧 <code>RenderOverlay</code>、共享内存读入与 D3D 合成）的逐项说明见 <strong><a href="OVERLAY_DLL.md">OVERLAY_DLL.md</a></strong>。</p>
+<hr />
+<h2>目录</h2>
+<ul>
+<li><a href="#结论先讲清楚">结论（先讲清楚）</a></li>
+<li><a href="#数据流总览">数据流总览</a></li>
+<li><a href="#1-像素路径">1. 像素路径</a></li>
+<li><a href="#2-输入路径">2. 输入路径</a></li>
+<li><a href="#3-进程与加载关系">3. 进程与加载关系</a></li>
+<li><a href="#4-常见误解对照">4. 常见误解对照</a></li>
+<li><a href="#5-扩展与其它-ipc">5. 扩展与其它 IPC</a></li>
+<li><a href="OVERLAY_DLL.md">OverlayDll 详解</a></li>
+</ul>
+<hr />
+<h2>结论（先讲清楚）</h2>
+<ul>
+<li><strong><code>OverlayWindow</code>（<code>QMainWindow</code>）只存在于 <code>OverlayUI.exe</code> 进程</strong>，不会序列化、也不会被 TestGame 加载。</li>
+<li>TestGame 里看到的「Qt 界面」是：<strong>同一套布局在 OverlayUI 里 <code>grab()</code> 成 <code>QImage</code> → 写入共享内存 → OverlayDll 读出来当 D3D 纹理画到游戏画面上</strong>。</li>
+<li><strong>反向</strong>：你在游戏窗口上点的鼠标，由 <strong>TestGame 的 <code>WndProc</code></strong> 换算成面板坐标，经 <strong>命名管道</strong> 发回 OverlayUI，<code>OverlayWindow</code> 里 <strong><code>sendEvent</code> 注入 <code>QMouseEvent</code></strong>，按钮才能响应。</li>
+<li><strong>语义（控件树等）</strong>：若需要结构化 UI 信息，demo 里另有 <strong>命名管道 <code>GameOverlaySemantics</code></strong>（<code>OverlaySemanticsWireHeader</code> + JSON），与位图通道分离；详见 <a href="common/overlay_ipc.h">common/overlay_ipc.h</a> 与 <code>TestGame/semantics_reader.cpp</code>。</li>
+</ul>
+<hr />
+<h2>数据流总览</h2>
+<h3>图（支持 Mermaid 的编辑器里会渲染）</h3>
+<div class="mermaid">
+flowchart LR
+  subgraph overlayUI [OverlayUI.exe]
+    OW[OverlayWindow]
+    Panel[panel_ QFrame]
+    Timer[QTimer ~60fps]
+    Grab[grab to QImage]
+    SHM_W[CreateFileMapping + Write]
+    PipeS[QLocalServer GameOverlayPipe]
+    OW --> Panel
+    Timer --> Grab --> SHM_W
+    PipeS --> deliver[deliverPanelInput sendEvent]
+  end
+
+  subgraph testGame [TestGame.exe]
+    Wnd[WndProc mouse]
+    PipeC[CreateFile WriteFile pipe]
+    Load[LoadLibrary OverlayDll]
+    Wnd --> PipeC
+    Load --> Hook[Present hook]
+  end
+
+  subgraph overlayDll [OverlayDll in TestGame]
+    SHM_R[OpenFileMapping MapView LockForRead]
+    D3D[Upload texture + draw quad]
+    Hook --> SHM_R --> D3D
+  end
+
+  SHM_W -.->|MMF GameOverlaySharedMem| SHM_R
+  PipeC -.->|IpcInputEventMsg| PipeS
+</div>
+
+<h3>文字版（与上图等价）</h3>
+<ol>
+<li><strong>OverlayUI</strong>：定时器触发 → 对 <code>panel_</code> 做 <code>grab()</code> → 得到 <code>QImage</code>。</li>
+<li><strong>OverlayUI</strong>：把图像写入 <strong>共享内存</strong>（头 + RGBA 像素，互斥量保护）。</li>
+<li><strong>TestGame</strong>：<code>LoadLibrary(OverlayDll.dll)</code> → 钩住 <strong>Present</strong>。</li>
+<li><strong>OverlayDll</strong>：每帧 Present 前从共享内存 <strong>读像素</strong> → 上传 D3D 纹理 → 在交换链上画 <strong>居中矩形</strong>（与面板同逻辑尺寸）。</li>
+<li><strong>鼠标</strong>：TestGame 窗口收到鼠标消息 → 换算成面板局部坐标 → <strong>管道</strong>发给 OverlayUI → <code>sendEvent</code> 交给具体子控件。</li>
+</ol>
+<hr />
+<h2>1. 像素路径（UI「长什么样」进游戏）</h2>
+<table>
+<thead>
+<tr>
+<th>步骤</th>
+<th>位置</th>
+<th>作用</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>定时抓帧</td>
+<td><a href="OverlayUI/overlay_window.cpp">OverlayUI/overlay_window.cpp</a> <code>onTimer()</code></td>
+<td><code>panel_-&gt;grab().toImage()</code>，得到与 <code>panel_</code> 同尺寸的位图（含 QSS 样式）</td>
+</tr>
+<tr>
+<td>写入共享内存</td>
+<td>同上 <code>writeFrame()</code> + <code>ensureMapping()</code></td>
+<td><code>CreateFileMappingA</code> 名 <strong><code>GameOverlaySharedMem</code></strong>，头部 <a href="common/overlay_ipc.h"><code>SharedOverlayHeader</code></a>，紧接 <strong>RGBA 像素</strong>；用 <strong><code>GameOverlaySharedMutex</code></strong> 保护</td>
+</tr>
+<tr>
+<td>读出并绘制</td>
+<td><a href="OverlayDll/overlay_renderer.cpp">OverlayDll/overlay_renderer.cpp</a> <code>RenderOverlay()</code> → <a href="OverlayDll/shared_surface.cpp">OverlayDll/shared_surface.cpp</a> <code>LockForRead</code></td>
+<td><code>OpenFileMapping</code> / <code>MapViewOfFile(...,0,0,0)</code> 映射整块；拷到动态纹理；用 <strong>居中像素矩形</strong> + 点采样画到当前 swap chain 的后备缓冲（在 <strong>Present 之前</strong>）</td>
+</tr>
+</tbody>
+</table>
+<p>约定尺寸与布局来自 <a href="common/overlay_ipc.h">common/overlay_ipc.h</a> 的 <code>kOverlayPanelWidth</code> / <code>kOverlayPanelHeight</code> 与 <code>kOverlaySharedMappingBytes</code>，OverlayUI 与 DLL <strong>必须一致</strong>。</p>
+<hr />
+<h2>2. 输入路径（游戏里点按钮）</h2>
+<table>
+<thead>
+<tr>
+<th>步骤</th>
+<th>位置</th>
+<th>作用</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>命中检测与坐标换算</td>
+<td><a href="TestGame/main.cpp">TestGame/main.cpp</a> <code>WM_*MOUSE*</code></td>
+<td>用 <code>MapGameClientToOverlayPanel</code> / <code>...Clamped</code>（与 DLL 居中矩形同一套数学）得到 <strong>面板局部 (x,y)</strong></td>
+</tr>
+<tr>
+<td>发到管道</td>
+<td>同上 <code>SendOverlayInputToQt()</code></td>
+<td><code>WriteFile</code> 到 <strong><code>\\.\pipe\GameOverlayPipe</code></strong>，载荷 <a href="common/overlay_ipc.h"><code>IpcInputEventMsg</code></a>（move / left down / left up 等）</td>
+</tr>
+<tr>
+<td>接收并注入 Qt</td>
+<td><a href="OverlayUI/overlay_window.cpp">OverlayUI/overlay_window.cpp</a> <code>onPipeReadyRead</code> → <code>deliverPanelInput</code></td>
+<td><code>panel_-&gt;childAt</code> 找到子控件，<code>QCoreApplication::sendEvent</code> 发 <strong>合成鼠标事件</strong></td>
+</tr>
+</tbody>
+</table>
+<p>因此：<strong>不是</strong> <code>OverlayWindow</code> 被传过去，而是 <strong>「游戏里的屏幕坐标 → 管道 → Qt 里模拟鼠标」</strong>。</p>
+<hr />
+<h2>3. 进程与加载关系</h2>
+<ul>
+<li><strong>TestGame</strong> <code>LoadLibrary</code> <strong>OverlayDll.dll</strong>（与 exe 同目录），<code>Overlay_Start</code> 安装 <strong>DXGI Present / Present1</strong> 钩子，在每次 Present 前调用 <code>RenderOverlay</code>。细节见 <a href="OVERLAY_DLL.md">OVERLAY_DLL.md</a> 第 9 节。</li>
+<li><strong>OverlayUI.exe</strong> 可由 TestGame <code>CreateProcess</code> 拉起（同目录 <code>OverlayUI.exe</code>），也可手动开；只要 <strong>共享内存 + 管道</strong> 能连上，逻辑就成立。</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th>组件</th>
+<th>谁启动</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>OverlayDll.dll</code></td>
+<td>TestGame <code>LoadLibrary</code>（与 exe 同目录）</td>
+<td><code>Overlay_Start</code> → Present 钩子里调用 <code>RenderOverlay</code>。</td>
+</tr>
+<tr>
+<td><code>OverlayUI.exe</code></td>
+<td>TestGame 可 <code>CreateProcess</code> 拉起，也可手动开</td>
+<td>生产像素与输入服务；语义管道由 OverlayUI 侧 <code>QLocalServer</code> 提供。</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2>4. 常见误解对照</h2>
+<table>
+<thead>
+<tr>
+<th>误解</th>
+<th>实际情况</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>把 <code>OverlayWindow</code> 或 QWidget 指针交给 TestGame</td>
+<td>跨进程只有 <strong>字节流</strong>（像素 + 小消息）；TestGame 侧只有 D3D 和 Win32，没有 Qt 对象指针。</td>
+</tr>
+<tr>
+<td>游戏窗口里嵌了真 Qt 子窗口</td>
+<td>是 <strong>全屏游戏 HWND + 每帧贴一张与 Qt 同步的纹理</strong>，看起来像叠层。</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2>5. 扩展与其它 IPC</h2>
+<p>若不仅要位图，还要 <strong>控件树、布局元数据、可访问性信息</strong> 等，一般需要 <strong>单独协议</strong>（结构化序列化 + 与帧同步的序号）或改为 <strong>进程内嵌 Qt</strong>——那是另一条架构路线。</p>
+<p>本仓库 demo 已包含 <strong>独立语义管道</strong> <strong><code>GameOverlaySemantics</code></strong>：<code>OverlayUI</code> 在帧更新后推送 <code>OverlaySemanticsWireHeader</code> + JSON 节点列表；<code>TestGame</code> 侧可用 <code>semantics_reader</code> 线程消费（调试输出）。<strong>OverlayDll 不解析该 JSON</strong>，仅负责位图合成。协议字段见 <a href="common/overlay_ipc.h">common/overlay_ipc.h</a>。</p>
+<p class="footer">Generated from Markdown.</p>
+</body>
+</html>

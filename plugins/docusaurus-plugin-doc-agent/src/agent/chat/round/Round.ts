@@ -1,5 +1,5 @@
 import { Action, type ActionJSON } from './Action';
-import type { ClientStatus } from './Plan';
+import type { ClientStatus } from './Flow';
 import type { ModelResponseType } from '../../model/Model';
 import type { ToolUsage } from '../../tools/tool/Tool';
 

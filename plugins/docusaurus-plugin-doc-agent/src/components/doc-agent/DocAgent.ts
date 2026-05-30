@@ -163,9 +163,9 @@ export class DocAgent extends Agent {
             role: 'assistant',
             local: true,
             custom: 'suggest',
-            plans: [{
+            flows: [{
                 count: 1,
-                kind: 'plan',
+                kind: 'flow',
                 rounds: [{
                     actions: [],
                     count: 1,

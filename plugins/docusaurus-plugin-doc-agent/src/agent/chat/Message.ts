@@ -1,19 +1,19 @@
-import { Plan, type PlanJSON } from './round/Plan';
+import { Flow, type FlowJSON } from './round/Flow';
 
 export type MessageRole = 'assistant' | 'user';
 
 export interface MessageJSON {
     custom?: string;
     error?: string;
+    flows?: FlowJSON[];
     isError?: boolean;
     local?: boolean;
-    plans?: PlanJSON[];
     role: MessageRole;
     streaming?: boolean;
 }
 
 export class Message {
-    readonly plans: Plan[] = [];
+    readonly flows: Flow[] = [];
     readonly role: MessageRole;
     custom?: string;
     error?: string;
@@ -21,12 +21,12 @@ export class Message {
     local = false;
     streaming = false;
 
-    private constructor(role: MessageRole, plans: Plan[] = []) {
+    private constructor(role: MessageRole, flows: Flow[] = []) {
         this.role = role;
-        this.plans = plans;
-        this.plans.forEach((plan, index) => {
-            if (plan.count === 0) {
-                plan.count = index + 1;
+        this.flows = flows;
+        this.flows.forEach((flow, index) => {
+            if (flow.count === 0) {
+                flow.count = index + 1;
             }
         });
         this.streaming = role === 'assistant';
@@ -34,26 +34,29 @@ export class Message {
 
     /**
      * Message deliberately has no text/content field.
-     * User/local text is stored in Round.text so every textual payload stays inside Plan/Round/Action.
+     * User/local text is stored in Round.text so every textual payload stays inside Flow/Round/Action.
      */
     static user(text: string): Message {
-        const plan = new Plan();
+        const flow = new Flow();
         if (text.length > 0) {
-            plan.appendUserText(text);
+            flow.appendUserText(text);
         }
-        plan.finish();
-        return new Message('user', [plan]);
+        flow.finish();
+        return new Message('user', [flow]);
     }
 
-    static assistant(plans: Plan[] = [new Plan()]): Message {
-        return new Message('assistant', plans);
+    static assistant(flows: Flow[] = [new Flow()]): Message {
+        if (flows.length === 0) {
+            throw new Error('Assistant message requires at least one flow');
+        }
+        return new Message('assistant', flows);
     }
 
     static fromJSON(json: MessageJSON): Message {
-        const plansJson = json.plans ?? [];
+        const flowsJson = json.flows ?? [];
         const message = new Message(
             json.role,
-            plansJson.map(p => Plan.fromJSON(p)),
+            flowsJson.map(flow => Flow.fromJSON(flow)),
         );
         message.custom = json.custom;
         message.error = json.error;
@@ -68,9 +71,9 @@ export class Message {
             role: this.role,
             ...(this.custom !== undefined ? { custom: this.custom } : {}),
             ...(this.error !== undefined ? { error: this.error } : {}),
+            ...(this.flows.length > 0 ? { flows: this.flows.map(flow => flow.toJSON()) } : {}),
             ...(this.isError ? { isError: true } : {}),
             ...(this.local ? { local: true } : {}),
-            ...(this.plans.length > 0 ? { plans: this.plans.map(p => p.toJSON()) } : {}),
             ...(this.streaming ? { streaming: true } : {}),
         };
     }

@@ -1,7 +1,7 @@
 import { History, type HistoryJSON } from './History';
 import type { MessageJSON } from './Message';
 import type { ActionJSON, ActionType } from './round/Action';
-import type { ClientStatus, PlanJSON } from './round/Plan';
+import type { ClientStatus, FlowJSON } from './round/Flow';
 import type { RoundJSON } from './round/Round';
 import type { ModelToolCall } from '../model/Model';
 import type { JsonObject, JsonValue, ToolUsage, ToolEvent } from '../tools/tool/Tool';
@@ -181,28 +181,30 @@ function parseMessage(value: unknown): MessageJSON | null {
     if (value.role !== 'assistant' && value.role !== 'user') return null;
 
     const role = value.role;
-    const plans = Array.isArray(value.plans)
-        ? value.plans
-            .map(parsePlan)
-            .filter(plan => plan !== null)
+    const flows = Array.isArray(value.flows)
+        ? value.flows
+            .map(parseFlow)
+            .filter(flow => flow !== null)
         : [];
 
     return {
-        ...(plans.length > 0 ? { plans } : {}),
+        ...(flows.length > 0 ? { flows } : {}),
         role,
     };
 }
 
-function parsePlan(value: unknown): PlanJSON | null {
+function parseFlow(value: unknown): FlowJSON | null {
     if (!isRecord(value) || !Array.isArray(value.rounds)) return null;
-    if (!hasOptionalKind(value, 'plan')) return null;
+    if (!hasOptionalKind(value, 'flow')) return null;
 
     const count = typeof value.count === 'number' ? value.count : undefined;
+    const input = typeof value.input === 'string' ? value.input : undefined;
     const label = typeof value.label === 'string' ? value.label : undefined;
 
     return {
         count: count ?? 0,
-        ...(value.kind === 'plan' ? { kind: value.kind } : {}),
+        ...(value.kind === 'flow' ? { kind: value.kind } : {}),
+        ...(input !== undefined ? { input } : {}),
         ...(label !== undefined ? { label } : {}),
         rounds: value.rounds
             .map(parseRound)

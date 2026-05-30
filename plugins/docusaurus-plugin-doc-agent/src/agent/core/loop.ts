@@ -1,7 +1,7 @@
 import type { AgentEvent } from '../Agent';
 import type { Agent } from '../Agent';
 import { Message } from '../chat/Message';
-import type { Plan } from '../chat/round/Plan';
+import type { Flow } from '../chat/round/Flow';
 import type { Round } from '../chat/round/Round';
 import type { Model, ModelToolCall } from '../model/Model';
 import type { Tool, ToolResult, ToolUsage } from '../tools/tool/Tool';
@@ -14,7 +14,7 @@ export interface LoopOptions {
     maxRounds?: number;
     messages: readonly Message[];
     model: Model;
-    plan: Plan;
+    flow: Flow;
     signal?: AbortSignal;
     subAgents?: Agent[];
     system: string;
@@ -36,7 +36,7 @@ export async function* loop(options: LoopOptions): AsyncGenerator<AgentEvent, vo
         agentName = 'agent',
         maxRounds = 16,
         model,
-        plan,
+        flow,
         signal,
         subAgents = [],
         system,
@@ -68,7 +68,7 @@ export async function* loop(options: LoopOptions): AsyncGenerator<AgentEvent, vo
             signal,
         })) {
             const agentEvent = toAgentModelEvent(agentName, event);
-            round = plan.apply(agentEvent) ?? round;
+            round = flow.apply(agentEvent) ?? round;
             if (round !== undefined) {
                 round.count = count;
                 updateToolActionLabels(round, toolManager);
@@ -124,7 +124,7 @@ export async function* loop(options: LoopOptions): AsyncGenerator<AgentEvent, vo
                     tool: call.name,
                     usage,
                 };
-                plan.apply(toolStartEvent);
+                flow.apply(toolStartEvent);
                 yield toolStartEvent;
 
                 const token = Symbol(call.id);
@@ -157,7 +157,7 @@ export async function* loop(options: LoopOptions): AsyncGenerator<AgentEvent, vo
                     tool,
                     usage: result.usage ?? usage,
                 };
-                plan.apply(toolDoneEvent);
+                flow.apply(toolDoneEvent);
                 yield toolDoneEvent;
 
                 for (const event of result.events ?? []) {
@@ -169,7 +169,7 @@ export async function* loop(options: LoopOptions): AsyncGenerator<AgentEvent, vo
                         label,
                         tool,
                     };
-                    plan.apply(toolEvent);
+                    flow.apply(toolEvent);
                     yield toolEvent;
                 }
 
@@ -182,7 +182,7 @@ export async function* loop(options: LoopOptions): AsyncGenerator<AgentEvent, vo
                         patch: result.contextPatch,
                         tool,
                     };
-                    plan.apply(contextPatchEvent);
+                    flow.apply(contextPatchEvent);
                     yield contextPatchEvent;
                 }
             }

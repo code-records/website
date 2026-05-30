@@ -164,7 +164,7 @@ export class OpenAIModel extends Model {
             return [];
         }
         if (message.role === 'user') {
-            const text = message.plans[0]?.text ?? '';
+            const text = message.flows.map(flow => flow.text).join('');
             return text.length > 0
                 ? [{ content: text, role: 'user' }]
                 : [];
@@ -183,28 +183,30 @@ export class OpenAIModel extends Model {
 
     private roundsToProviderMessages(message: Message): JsonObject[] {
         const result: JsonObject[] = [];
-        for (const round of message.plans[0]?.items ?? []) {
-            if ((round.type === 'final' || round.type === 'continue') && round.text.length > 0) {
-                result.push({ content: round.text, role: 'assistant' });
-            }
-            for (const action of round.items) {
-                if (action.type !== 'tool') continue;
-                if (action.call === undefined) {
-                    throw new Error('Tool action must include call before provider conversion');
+        for (const flow of message.flows) {
+            for (const round of flow.items) {
+                if ((round.type === 'final' || round.type === 'continue') && round.text.length > 0) {
+                    result.push({ content: round.text, role: 'assistant' });
                 }
+                for (const action of round.items) {
+                    if (action.type !== 'tool') continue;
+                    if (action.call === undefined) {
+                        throw new Error('Tool action must include call before provider conversion');
+                    }
 
-                result.push({
-                    arguments: JSON.stringify(action.call.input ?? {}),
-                    call_id: action.call.id,
-                    name: action.call.name,
-                    type: 'function_call',
-                });
-                if (action.text.length > 0) {
                     result.push({
+                        arguments: JSON.stringify(action.call.input ?? {}),
                         call_id: action.call.id,
-                        output: action.text,
-                        type: 'function_call_output',
+                        name: action.call.name,
+                        type: 'function_call',
                     });
+                    if (action.text.length > 0) {
+                        result.push({
+                            call_id: action.call.id,
+                            output: action.text,
+                            type: 'function_call_output',
+                        });
+                    }
                 }
             }
         }

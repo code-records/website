@@ -11,18 +11,18 @@ function formatLabel(action) {
     return action?.label || action?.call?.name || '工具';
 }
 
-function getPlanContent(plans) {
-    return (Array.isArray(plans) ? plans : [])
-        .flatMap(plan => Array.isArray(plan?.rounds) ? plan.rounds : [])
+function getFlowContent(flows) {
+    return (Array.isArray(flows) ? flows : [])
+        .flatMap(flow => Array.isArray(flow?.rounds) ? flow.rounds : [])
         .filter(round => round?.type === 'final' || round?.type === 'continue' || (round?.type === undefined && round?.status === 'pending'))
         .map(round => typeof round?.text === 'string' ? round.text : '')
         .join('');
 }
 
-function PlanItem({ plan, idx, onToggle, isLast, isCompleted, isError }) {
+function FlowItem({ flow, idx, onToggle, isLast, isCompleted, isError }) {
     const [localExpanded, setLocalExpanded] = useState(false);
     const scrollRef = React.useRef(null);
-    const actions = flattenRoundActions(plan?.rounds);
+    const actions = flattenRoundActions(flow?.rounds);
 
     React.useEffect(() => {
         if (scrollRef.current) {
@@ -30,14 +30,14 @@ function PlanItem({ plan, idx, onToggle, isLast, isCompleted, isError }) {
         }
     }, [actions.length]);
 
-    const expanded = onToggle ? plan.expanded : localExpanded;
+    const expanded = onToggle ? flow.expanded : localExpanded;
     const noItems = actions.length === 0;
-    const failed = isError || plan?.status === 'failed';
+    const failed = isError || flow?.status === 'failed';
     const label = failed
         ? '分析异常'
         : isCompleted && isLast && noItems
             ? '分析完毕，已生成回答'
-            : (plan?.status === 'pending' ? '正在工作' : '分析完毕');
+            : (flow?.status === 'pending' ? '正在工作' : '分析完毕');
 
     const handleClick = () => {
         if (onToggle) {
@@ -50,7 +50,7 @@ function PlanItem({ plan, idx, onToggle, isLast, isCompleted, isError }) {
     if (noItems) {
         return (
             <div className="flex items-center gap-1.5 px-2 min-h-7 py-0.5">
-                <svg className={`w-3.5 h-3.5 ${failed ? 'text-red-500' : 'text-[var(--ifm-color-emphasis-600)]'} ${plan.status === 'pending' ? 'animate-pulse' : ''}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                <svg className={`w-3.5 h-3.5 ${failed ? 'text-red-500' : 'text-[var(--ifm-color-emphasis-600)]'} ${flow.status === 'pending' ? 'animate-pulse' : ''}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
                     <path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z" />
                 </svg>
                 <span className={`text-xs ${failed ? 'text-red-500' : 'text-[var(--ifm-color-emphasis-600)]'}`}>{label}</span>
@@ -65,7 +65,7 @@ function PlanItem({ plan, idx, onToggle, isLast, isCompleted, isError }) {
                 onClick={handleClick}
                 className="group flex items-center gap-1.5 w-full text-left text-sm px-2 min-h-7 py-0.5 rounded-lg select-none text-[var(--ifm-font-color-base)] hover:bg-[var(--ifm-color-emphasis-100)] transition-colors bg-transparent border-none cursor-pointer"
             >
-                <svg className={`w-3.5 h-3.5 ${failed ? 'text-red-500' : 'text-[var(--ifm-color-emphasis-600)]'} ${plan.status === 'pending' ? 'animate-pulse' : ''}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                <svg className={`w-3.5 h-3.5 ${failed ? 'text-red-500' : 'text-[var(--ifm-color-emphasis-600)]'} ${flow.status === 'pending' ? 'animate-pulse' : ''}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
                     <path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z" />
                 </svg>
                 <span className={`text-xs ${failed ? 'text-red-500' : 'text-[var(--ifm-color-emphasis-600)]'}`}>{label}</span>
@@ -99,12 +99,12 @@ function PlanItem({ plan, idx, onToggle, isLast, isCompleted, isError }) {
 
 
 
-export default function ChatMessage({ message, isStreaming, onTogglePlan }) {
+export default function ChatMessage({ message, isStreaming, onToggleFlow }) {
     const [copied, setCopied] = useState(false);
     const textRef = React.useRef(null);
     const isUser = message.role === 'user';
-    const plans = Array.isArray(message.plans) ? message.plans : [];
-    const content = getPlanContent(plans);
+    const flows = Array.isArray(message.flows) ? message.flows : [];
+    const content = getFlowContent(flows);
     const error = message.error || (message.isError && !content ? '生成失败，请稍后重试。' : '');
 
     const handleCopy = () => {
@@ -131,19 +131,19 @@ export default function ChatMessage({ message, isStreaming, onTogglePlan }) {
     return (
         <div className="px-4 py-1.5 animate-[msg-fade-in_0.3s_ease-out]">
             <div className="flex flex-col gap-0.5 w-full">
-                {plans.map((plan, idx) => (
-                    <PlanItem
+                {flows.map((flow, idx) => (
+                    <FlowItem
                         key={idx}
-                        plan={plan}
+                        flow={flow}
                         idx={idx}
-                        onToggle={onTogglePlan}
-                        isLast={idx === plans.length - 1}
+                        onToggle={onToggleFlow}
+                        isLast={idx === flows.length - 1}
                         isCompleted={!isStreaming}
                         isError={!!message.isError}
                     />
                 ))}
 
-                {isStreaming && !content && plans.length === 0 && (
+                {isStreaming && !content && flows.length === 0 && (
                     <div className="flex items-center gap-1.5 px-2 py-1 text-xs text-[var(--ifm-color-emphasis-600)]">
                         <svg className="w-3.5 h-3.5 opacity-70 animate-pulse" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
                             <path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z" />

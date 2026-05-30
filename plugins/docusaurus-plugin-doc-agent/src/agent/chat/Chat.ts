@@ -1,6 +1,11 @@
 import type { Agent, AgentEvent } from '../Agent';
 import { History } from './History';
 import { Message, type MessageJSON } from './Message';
+import { Flow } from './round/Flow';
+
+export interface ChatSendOptions {
+    signal?: AbortSignal;
+}
 
 export interface ChatOptions {
     agent: Agent;
@@ -44,18 +49,36 @@ export class Chat {
         return true;
     }
 
-    async send(content: string, signal?: AbortSignal): Promise<void> {
-        for await (const _event of this.stream(content, signal)) {
+    async send(content: string, options: ChatSendOptions = {}): Promise<void> {
+        for await (const _event of this.stream(content, options)) {
             void _event;
         }
     }
 
-    async *stream(content: string, signal?: AbortSignal): AsyncGenerator<AgentEvent, void, void> {
+    stream(content: string, options: ChatSendOptions = {}): AsyncGenerator<AgentEvent, void, void> {
+        const input = requireUserContent(content);
+        const user = Message.user(input);
+        const assistant = Message.assistant([new Flow({ input })]);
+        return this.runPrepared(user, assistant, options.signal);
+    }
+
+    async runFlows(flows: Flow[], options: ChatSendOptions = {}): Promise<void> {
+        for await (const _event of this.streamFlows(flows, options)) {
+            void _event;
+        }
+    }
+
+    streamFlows(flows: Flow[], options: ChatSendOptions = {}): AsyncGenerator<AgentEvent, void, void> {
+        const assistant = Message.assistant(requireUserFlows(flows));
+        return this.runPrepared(undefined, assistant, options.signal);
+    }
+
+    private async *runPrepared(user: Message | undefined, assistant: Message, signal?: AbortSignal): AsyncGenerator<AgentEvent, void, void> {
         if (this.activeMessage !== undefined) return;
 
-        const user = Message.user(content);
-        const assistant = Message.assistant(this.agent.definePlans());
-        this.history.add(user);
+        if (user !== undefined) {
+            this.history.add(user);
+        }
         this.history.add(assistant);
         this.activeMessage = assistant;
         this.abortController = new AbortController();
@@ -101,12 +124,12 @@ export class Chat {
         return removed?.toJSON();
     }
 
-    togglePlan(index: number): void {
+    toggleFlow(index: number): void {
         const assistantMessages = this.history.items.filter(message => message.role === 'assistant');
         const last = assistantMessages[assistantMessages.length - 1];
-        const plan = last?.plans[index];
-        if (plan !== undefined) {
-            plan.toggle();
+        const flow = last?.flows[index];
+        if (flow !== undefined) {
+            flow.toggle();
             this.notify();
         }
     }
@@ -118,4 +141,24 @@ export class Chat {
     private notify(): void {
         this.onChange?.();
     }
+}
+
+function requireUserContent(content: string): string {
+    const normalizedContent = content.trim();
+    if (!normalizedContent) {
+        throw new Error('普通发送内容不能为空');
+    }
+    return normalizedContent;
+}
+
+function requireUserFlows(flows: Flow[]): Flow[] {
+    if (flows.length === 0) {
+        throw new Error('任务流不能为空');
+    }
+    for (const flow of flows) {
+        if (!flow.input.trim()) {
+            throw new Error(`任务流缺少 input: ${flow.formatLabel()}`);
+        }
+    }
+    return flows;
 }

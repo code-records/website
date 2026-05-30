@@ -4,22 +4,34 @@ import { Round, type RoundJSON } from './Round';
 
 export type ClientStatus = 'pending' | 'completed' | 'failed';
 
-export interface PlanJSON {
+export interface FlowJSON {
     count: number;
     expanded?: boolean;
-    kind?: 'plan';
+    input?: string;
+    kind?: 'flow';
     label?: string;
     rounds: RoundJSON[];
     status: ClientStatus;
 }
 
-export class Plan {
-    readonly kind = 'plan';
+export interface FlowOptions {
+    input?: string;
+    label?: string;
+}
+
+export class Flow {
+    readonly kind = 'flow';
     status: ClientStatus = 'pending';
     count = 0;
     label = '';
+    input = '';
     expanded = false;
     private readonly _rounds: Round[] = [];
+
+    constructor(options: FlowOptions = {}) {
+        this.input = options.input ?? '';
+        this.label = options.label ?? '';
+    }
 
     get rounds(): readonly Round[] {
         return this._rounds;
@@ -38,23 +50,25 @@ export class Plan {
     }
 
     formatLabel(): string {
-        return `计划 ${this.count}`;
+        if (this.label.length > 0) return this.label;
+        return `执行 ${this.count}`;
     }
 
     get currentRound(): Round | undefined {
         return this._rounds[this._rounds.length - 1];
     }
 
-    static fromJSON(json: PlanJSON): Plan {
-        const plan = new Plan();
-        plan.count = json.count ?? 0;
-        plan.expanded = json.expanded === true;
-        plan.label = json.label ?? '';
-        plan.status = json.status;
+    static fromJSON(json: FlowJSON): Flow {
+        const flow = new Flow();
+        flow.count = json.count ?? 0;
+        flow.expanded = json.expanded === true;
+        flow.input = json.input ?? '';
+        flow.label = json.label ?? '';
+        flow.status = json.status;
         for (const round of json.rounds) {
-            plan._rounds.push(Round.fromJSON(round));
+            flow._rounds.push(Round.fromJSON(round));
         }
-        return plan;
+        return flow;
     }
 
     apply(event: AgentEvent): Round | null {
@@ -119,11 +133,12 @@ export class Plan {
         this.expanded = !this.expanded;
     }
 
-    toJSON(): PlanJSON {
+    toJSON(): FlowJSON {
         return {
             kind: this.kind,
             status: this.status,
             count: this.count,
+            input: this.input,
             label: this.label,
             expanded: this.expanded,
             rounds: this._rounds.map(round => round.toJSON()),
@@ -161,5 +176,4 @@ export class Plan {
             last.fail();
         }
     }
-
 }
