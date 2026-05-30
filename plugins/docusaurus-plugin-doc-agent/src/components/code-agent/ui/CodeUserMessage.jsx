@@ -1,7 +1,7 @@
 import React from 'react';
 
 export default function CodeUserMessage({ message }) {
-    const content = message.flows?.[0]?.result?.rounds?.[0]?.text || '';
+    const content = message.content || message.flows?.[0]?.result?.rounds?.[0]?.text || '';
 
     return (
         <div className="px-4 pt-4 pb-2 animate-[msg-fade-in_0.3s_ease-out]">

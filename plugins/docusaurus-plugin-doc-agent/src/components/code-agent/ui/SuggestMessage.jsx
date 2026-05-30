@@ -5,7 +5,20 @@ import {
 } from '../../../agent';
 import { BrowserFileTool } from '../../../agent/tools/browser/BrowserFileTool';
 
+const SUGGEST_PROMPT = `你是一个顶级 AI 编程专家。你需要根据用户当前连接授权的项目目录文件列表，动态生成 3 个最具工程深度、最贴近“测试 AI 编程与本地物理重构能力”的硬核推荐问题。
+                    请把推荐方向彻底打开，不要局限于简单的概念提问，而是引导用户发出检验你“物理文件读写特长”的实战工程指令，例如：
+                    1. 【深度 Bug 诊断与自动物理修复】：如“请全面扫描我们当前的核心逻辑源码，找出其中影响性能或存在安全隐患的 Bug，并直接物理重写修复它。”
+                    2. 【核心代码重构与类型/架构强化】：如“帮我们挑选出一个最核心的代码文件，结合其语言特性（如强类型标注、性能重构）直接物理改写，进行高水准的架构重构。”
+                    3. 【自动化单元测试落盘】：如“扫描我们的核心逻辑函数、类或组件，自动生成一套高质量的单元测试用例，并直接物理创建并写入对应的测试文件中。”
+                    
+                    要求：
+                    - 结合用户当前的项目特征（如具体的开发语言、打包框架等）生成专属的硬核问题。
+                    - 只输出推荐问题，每行一个问题，不要编号，不要解释。
+                    - 最多输出 3 个问题。
+                    `;
+
 const DEFAULT_CODE_SUGGESTIONS = [
+    '输出当前项目结构',
     '梳理依赖关系',
     '检测代码问题',
     '给出改进建议',
@@ -29,7 +42,7 @@ async function suggestWorkspaceQuestions(agent, { signal } = {}) {
             context: Context.from(`这是我当前项目的根目录文件列表：\n${fileListStr}`),
             result: new AgentResult(),
             signal,
-            system: agent.config.suggestPrompt,
+            system: SUGGEST_PROMPT,
         });
         return dedupeSuggestionLines(response.content || '');
     } catch (e) {
