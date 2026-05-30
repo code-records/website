@@ -4,7 +4,6 @@ import { GeminiModel } from '../model/GeminiModel';
 import { OpenAIModel } from '../model/OpenAIModel';
 import type { Tool } from '../tools/tool/Tool';
 import { toError } from '../utils/errors';
-import { logger } from '../utils/logger';
 import { loop } from './loop';
 import { AgentResult } from './AgentResult';
 import { Context } from './Context';
@@ -122,13 +121,11 @@ export abstract class Agent {
             }
 
             prepared.result.complete();
-            logger.flow(prepared.result.toJSON());
             yield { type: 'agent_done', agent: this.name, response: finalResponse };
         } catch (error) {
             const err = toError(error);
             const errorEvent: AgentEvent = { type: 'agent_error', agent: this.name, error: err };
             prepared.result.apply(errorEvent);
-            logger.flow(prepared.result.toJSON());
             yield errorEvent;
         }
     }

@@ -75,9 +75,9 @@ export async function* loop(options: LoopOptions): AsyncGenerator<AgentEvent, vo
             round = agentResult.apply(agentEvent) ?? round;
             if (round !== undefined) {
                 round.count = count;
-                updateToolActionLabels(round, toolManager);
+                updateToolStepLabels(round, toolManager);
                 loggerRoundStart(round, loggedRoundStarts);
-                loggerRoundAction(round);
+                loggerRoundStep(round);
             }
             yield agentEvent;
 
@@ -128,7 +128,11 @@ export async function* loop(options: LoopOptions): AsyncGenerator<AgentEvent, vo
                     tool: call.name,
                     usage,
                 };
-                agentResult.apply(toolStartEvent);
+                const toolStartRound = agentResult.apply(toolStartEvent);
+                if (toolStartRound !== null) {
+                    toolStartRound.count = count;
+                    loggerRoundStep(toolStartRound);
+                }
                 yield toolStartEvent;
 
                 const token = Symbol(call.id);
@@ -161,7 +165,11 @@ export async function* loop(options: LoopOptions): AsyncGenerator<AgentEvent, vo
                     tool,
                     usage: result.usage ?? usage,
                 };
-                agentResult.apply(toolDoneEvent);
+                const toolDoneRound = agentResult.apply(toolDoneEvent);
+                if (toolDoneRound !== null) {
+                    toolDoneRound.count = count;
+                    loggerRoundStep(toolDoneRound);
+                }
                 yield toolDoneEvent;
 
                 for (const event of result.events ?? []) {
@@ -173,7 +181,11 @@ export async function* loop(options: LoopOptions): AsyncGenerator<AgentEvent, vo
                         label,
                         tool,
                     };
-                    agentResult.apply(toolEvent);
+                    const toolEventRound = agentResult.apply(toolEvent);
+                    if (toolEventRound !== null) {
+                        toolEventRound.count = count;
+                        loggerRoundStep(toolEventRound);
+                    }
                     yield toolEvent;
                 }
 
@@ -186,7 +198,11 @@ export async function* loop(options: LoopOptions): AsyncGenerator<AgentEvent, vo
                         patch: result.contextPatch,
                         tool,
                     };
-                    agentResult.apply(contextPatchEvent);
+                    const contextPatchRound = agentResult.apply(contextPatchEvent);
+                    if (contextPatchRound !== null) {
+                        contextPatchRound.count = count;
+                        loggerRoundStep(contextPatchRound);
+                    }
                     yield contextPatchEvent;
                 }
             }
@@ -218,14 +234,14 @@ function loggerRoundStart(round: Round, loggedRoundStarts: WeakSet<Round>): void
     logger.round(round.toJSON());
 }
 
-function loggerRoundAction(round: Round): void {
+function loggerRoundStep(round: Round): void {
     const step = round.steps[round.steps.length - 1];
     if (step === undefined) return;
     if (step.type === 'thinking') return;
-    logger.action(step.toJSON());
+    logger.step(step.toJSON());
 }
 
-function updateToolActionLabels(round: Round, toolManager: ToolManager): void {
+function updateToolStepLabels(round: Round, toolManager: ToolManager): void {
     for (const step of round.steps) {
         const call = step.call;
         if (step.type !== 'tool' || call === undefined) continue;

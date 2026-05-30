@@ -4,10 +4,10 @@ type LoggerSink = (message: string, style: string, ...args: unknown[]) => void;
 const baseStyle = 'padding:2px 4px;border-radius:2px;font-weight:bold;color:#fff;';
 
 const LoggerStyle = {
-    action: `${baseStyle}background:linear-gradient(90deg,#7c3aed,#ec4899);`,
     default: `${baseStyle}background:linear-gradient(90deg,#4a90e2,#6cc8ff);`,
     flow: `${baseStyle}background:linear-gradient(90deg,#f59e0b,#f97316);`,
     round: `${baseStyle}background:linear-gradient(90deg,#059669,#34d399);`,
+    step: `${baseStyle}background:linear-gradient(90deg,#7c3aed,#ec4899);`,
 } as const;
 
 class Logger {
@@ -25,16 +25,16 @@ class Logger {
         this.write(event, data, LoggerStyle.default);
     }
 
-    flow(data: LoggerData = null): void {
-        this.write('agent.flow', data, LoggerStyle.flow);
+    flow(event: string, data: LoggerData = null): void {
+        this.write(`agent.chat.flow.${event}`, data, LoggerStyle.flow);
     }
 
     round(data: LoggerData = null): void {
         this.write('agent.loop.round', data, LoggerStyle.round);
     }
 
-    action(data: LoggerData = null): void {
-        this.write('agent.loop.action', data, LoggerStyle.action);
+    step(data: LoggerData = null): void {
+        this.write('agent.loop.step', data, LoggerStyle.step);
     }
 
     private write(event: string, data: LoggerData, style: string): void {

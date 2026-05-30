@@ -2,6 +2,7 @@ import type { Agent } from '../core/Agent';
 import { AgentResult } from '../core/AgentResult';
 import { Context, ContextMessage } from '../core/Context';
 import type { AgentEvent } from '../core/type';
+import { logger } from '../utils/logger';
 import { Flow } from './Flow';
 import { History } from './History';
 import { Message, type MessageJSON } from './Message';
@@ -115,6 +116,7 @@ export class Chat {
         const context = this.projectContext(assistant, flow);
         const result = new AgentResult();
         flow.start(result);
+        logger.flow('start', flow.toJSON());
         this.notify();
 
         try {
@@ -126,8 +128,13 @@ export class Chat {
                 yield event;
             }
             flow.finish();
+            logger.flow('done', flow.toJSON());
         } catch (error) {
             flow.fail();
+            logger.flow('error', {
+                ...flow.toJSON(),
+                error: error instanceof Error ? error.message : String(error),
+            });
             throw error;
         }
     }
