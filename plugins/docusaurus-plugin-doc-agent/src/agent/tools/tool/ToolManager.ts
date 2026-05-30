@@ -1,5 +1,5 @@
-import type { Message } from '../../chat/Message';
-import type { Agent } from '../../Agent';
+import type { Context } from '../../core/Context';
+import type { Agent } from '../../core/Agent';
 import type { Model, ModelToolCall } from '../../model/Model';
 import { ToolError } from '../../utils/errors';
 import type { AskModel, Tool, ToolUsage, ToolDefinition, ToolResult } from './Tool';
@@ -8,7 +8,7 @@ import { ToolRegistry } from './ToolRegistry';
 import { ToolRunner, type CompletedToolRunRecord } from './ToolRunner';
 
 export interface ToolManagerOptions {
-    context: readonly Message[];
+    context: Context;
     createAsk?: (toolName: string) => AskModel;
     defaultTimeoutMs?: number;
     model: Model;
@@ -44,7 +44,7 @@ export class ToolManager {
         this.context = context;
     }
 
-    private context: readonly Message[];
+    private context: Context;
 
     definitions(): ToolDefinition[] {
         return this.registry.definitions();
@@ -70,7 +70,7 @@ export class ToolManager {
         });
     }
 
-    setContext(context: readonly Message[]): void {
+    setContext(context: Context): void {
         this.context = context;
     }
 

@@ -1,5 +1,6 @@
 import type { JsonObject, JsonValue, ToolDefinition } from '../tools/tool/Tool';
-import type { Message } from '../chat/Message';
+import type { AgentResult } from '../core/AgentResult';
+import type { Context, ContextMessage } from '../core/Context';
 
 // ─── 通用类型 ────────────────────────────────────────
 
@@ -15,7 +16,7 @@ export type ProviderResponseBody = JsonObject;
 export type ProviderMessage = JsonObject;
 export type ProviderStreamChunk = JsonValue;
 
-/** 模型产出的工具调用意图，由 loop/tool 层消费并由 Round/Action 记录。 */
+/** 模型产出的工具调用意图，由 loop/tool 层消费并由 Round/Step 记录。 */
 export interface ModelToolCall {
     id: string;
     name: string;
@@ -29,9 +30,10 @@ export type ModelAction =
 
 /** provider 无关的单次模型请求。 */
 export interface ModelRequest {
-    messages: readonly Message[];
+    context: Context;
+    continuation?: string;
+    result: AgentResult;
     /** 工具向模型发起的一次性回问，不写入长期 Message[]。 */
-    toolAsk?: string;
     tools?: ToolDefinition[];
     system?: string;
     signal?: AbortSignal;
@@ -120,14 +122,16 @@ export abstract class Model {
      * 一条公共 assistant Message 可能包含最终文本、round、tool call、tool result，
      * 所以展开结果允许是 0..N 条 provider message。
      */
-    protected abstract expandMessageToProviderMessages(message: Message): ProviderMessage[];
+    protected abstract expandContextMessageToProviderMessages(message: ContextMessage): ProviderMessage[];
+
+    protected abstract expandResultToProviderMessages(result: AgentResult): ProviderMessage[];
 
     /**
      * 将工具回问展开成 provider 请求片段。
      *
      * toolAsk 只服务于 Tool.askModel() 这条链路，不进入长期 Message[]。
      */
-    protected abstract expandToolAskToProviderMessages(toolAsk: string): ProviderMessage[];
+    protected abstract expandTextToProviderUserMessage(text: string): ProviderMessage[];
 
     // ─── 便捷方法（子类通常不用覆盖） ─────────────────
 
@@ -155,11 +159,17 @@ export abstract class Model {
      * 基类只负责统一遍历公共 Message[] 和追加工具回问；
      * provider 具体格式由子类的 expand* 方法决定。
      */
-    protected buildProviderMessages(messages: readonly Message[], toolAsk?: string): ProviderMessage[] {
-        const result = messages.flatMap(message => this.expandMessageToProviderMessages(message));
-        if (toolAsk !== undefined && toolAsk.length > 0) {
-            result.push(...this.expandToolAskToProviderMessages(toolAsk));
+    protected buildProviderMessages(request: ModelRequest): ProviderMessage[] {
+        const result: ProviderMessage[] = [];
+        if (request.context.summary.length > 0) {
+            result.push(...this.expandTextToProviderUserMessage(`[Previous context summary]\n${request.context.summary}`));
         }
+        result.push(...request.context.messages.flatMap(message => this.expandContextMessageToProviderMessages(message)));
+        result.push(...this.expandResultToProviderMessages(request.result));
+        if (request.continuation !== undefined && request.continuation.length > 0) {
+            result.push(...this.expandTextToProviderUserMessage(request.continuation));
+        }
+
         return result;
     }
 

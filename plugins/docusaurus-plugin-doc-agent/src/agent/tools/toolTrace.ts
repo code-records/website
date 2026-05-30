@@ -1,28 +1,31 @@
-import type { HistoryJSON } from '../chat/History';
+import type { ContextJSON } from '../core/Context';
 import type { JsonValue } from './tool/Tool';
 
-export function collectToolCallInputs(history: HistoryJSON, toolName: string, inputKey?: string): JsonValue[] {
+export interface ToolTraceHistory {
+    context: ContextJSON;
+}
+
+export function collectToolCallInputs(history: ToolTraceHistory, toolName: string, inputKey?: string): JsonValue[] {
     const values: JsonValue[] = [];
     const seen = new Set<string>();
 
-    for (const message of history.messages) {
-        for (const flow of message.flows ?? []) {
-            for (const round of flow.rounds) {
-                for (const action of round.actions) {
-                    const call = action.call;
-                    if (action.type !== 'tool' || call === undefined || call.name !== toolName) {
-                        continue;
-                    }
-
-                    const value = inputKey === undefined ? call.input : call.input[inputKey];
-                    if (value === undefined) continue;
-
-                    const key = typeof value === 'string' ? value : safeStringify(value);
-                    if (seen.has(key)) continue;
-
-                    seen.add(key);
-                    values.push(value);
+    for (const message of history.context.messages) {
+        if (message.result === undefined) continue;
+        for (const round of message.result.rounds) {
+            for (const step of round.steps) {
+                const call = step.call;
+                if (step.type !== 'tool' || call === undefined || call.name !== toolName) {
+                    continue;
                 }
+
+                const value = inputKey === undefined ? call.input : call.input[inputKey];
+                if (value === undefined) continue;
+
+                const key = typeof value === 'string' ? value : safeStringify(value);
+                if (seen.has(key)) continue;
+
+                seen.add(key);
+                values.push(value);
             }
         }
     }

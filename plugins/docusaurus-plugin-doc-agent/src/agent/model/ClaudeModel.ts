@@ -11,7 +11,8 @@ import {
     type ProviderStreamChunk,
     type ModelToolCall,
 } from './Model';
-import type { Message } from '../chat/Message';
+import type { AgentResult } from '../core/AgentResult';
+import type { ContextMessage } from '../core/Context';
 import type { JsonObject, JsonValue, ToolDefinition } from '../tools/tool/Tool';
 import { optionalArray, optionalString, requireJsonObject, requireString, safeParseJsonObject } from '../utils/json';
 import { parseSseStream } from '../utils/sse';
@@ -260,14 +261,14 @@ export class ClaudeModel extends Model {
         return isChatCompletions
             ? {
                 max_tokens: CLAUDE_MAX_TOKENS,
-                messages: this.toChatCompletionsMessages(request.messages, request.system ?? '', request.toolAsk),
+                messages: this.toChatCompletionsMessages(request),
                 model: this.model,
                 ...(request.tools?.length ? { tools: this.toChatCompletionsTools(request.tools) } : {}),
                 stream: true,
             }
             : {
                 max_tokens: CLAUDE_MAX_TOKENS,
-                messages: this.buildProviderMessages(request.messages, request.toolAsk),
+                messages: this.buildProviderMessages(request),
                 model: this.model,
                 ...(request.system ? { system: request.system } : {}),
                 ...(request.tools?.length ? { tools: this.formatToolDefs(request.tools) } : {}),
@@ -275,24 +276,30 @@ export class ClaudeModel extends Model {
             };
     }
 
-    protected expandMessageToProviderMessages(message: Message): ProviderMessage[] {
+    protected expandContextMessageToProviderMessages(message: ContextMessage): ProviderMessage[] {
         if (this.isChatCompletionsEndpoint()) {
             return this.messageToChatCompletionsMessages(message);
         }
 
-        if (message.local === true) {
-            return [];
+        if (message.role === 'assistant') {
+            return message.result !== undefined
+                ? this.resultToNativeMessages(message.result)
+                : [{ content: message.content, role: 'assistant' }];
         }
+        return [
+            { content: message.content, role: message.role },
+        ];
+    }
 
-        if (message.role === 'user') {
-            const text = message.flows.map(flow => flow.text).join('');
-            return text.length > 0
-                ? [{ content: text, role: 'user' }]
-                : [];
-        }
+    protected expandResultToProviderMessages(result: AgentResult): ProviderMessage[] {
+        return this.isChatCompletionsEndpoint()
+            ? this.resultToChatCompletionsMessages(result)
+            : this.resultToNativeMessages(result);
+    }
 
+    private resultToNativeMessages(agentResult: AgentResult): ProviderMessage[] {
         const content: JsonValue[] = [];
-        for (const action of this.roundActions(message)) {
+        for (const action of this.resultActions(agentResult)) {
             if (action.type === 'content' && action.text.length > 0) {
                 content.push({ text: action.text, type: 'text' });
             }
@@ -315,21 +322,22 @@ export class ClaudeModel extends Model {
         return content.length > 0 ? [{ content, role: 'assistant' }] : [];
     }
 
-    protected expandToolAskToProviderMessages(toolAsk: string): ProviderMessage[] {
-        return [{ content: toolAsk, role: 'user' }];
+    protected expandTextToProviderUserMessage(text: string): ProviderMessage[] {
+        return [{ content: text, role: 'user' }];
     }
 
-    private messageToChatCompletionsMessages(message: Message): JsonObject[] {
-        if (message.local === true) {
-            return [];
+    private messageToChatCompletionsMessages(message: ContextMessage): JsonObject[] {
+        if (message.role === 'assistant') {
+            return message.result !== undefined
+                ? this.resultToChatCompletionsMessages(message.result)
+                : [{ content: message.content, role: 'assistant' }];
         }
-        if (message.role === 'user') {
-            const text = message.flows.map(flow => flow.text).join('');
-            return text.length > 0
-                ? [{ content: text, role: 'user' }]
-                : [];
-        }
-        const actions = this.roundActions(message);
+        return [{ content: message.content, role: message.role }];
+    }
+
+    private resultToChatCompletionsMessages(agentResult: AgentResult): JsonObject[] {
+        const actions = this.resultActions(agentResult);
+        if (actions.length === 0) return [];
         const toolCalls = actions
             .filter((action): action is Extract<RoundProviderAction, { type: 'tool' }> => action.type === 'tool')
             .map(action => ({
@@ -452,39 +460,43 @@ export class ClaudeModel extends Model {
         }));
     }
 
-    private toChatCompletionsMessages(messages: readonly Message[], system: string, toolAsk?: string): JsonValue[] {
+    private toChatCompletionsMessages(request: ModelRequest): JsonValue[] {
         const result: JsonValue[] = [];
+        const system = request.system ?? '';
         if (system.length > 0) {
             result.push({ content: system, role: 'system' });
         }
-        result.push(...messages.flatMap(message => this.messageToChatCompletionsMessages(message)));
-        if (toolAsk !== undefined && toolAsk.length > 0) {
-            result.push({ content: toolAsk, role: 'user' });
+        if (request.context.summary.length > 0) {
+            result.push({ content: `[Previous context summary]\n${request.context.summary}`, role: 'user' });
+        }
+        result.push(...request.context.messages.flatMap(message => this.messageToChatCompletionsMessages(message)));
+        result.push(...this.expandResultToProviderMessages(request.result));
+        if (request.continuation !== undefined && request.continuation.length > 0) {
+            result.push({ content: request.continuation, role: 'user' });
         }
         return result;
     }
 
-    private roundActions(message: Message): RoundProviderAction[] {
+    private resultActions(agentResult: AgentResult): RoundProviderAction[] {
         const actions: RoundProviderAction[] = [];
-        for (const flow of message.flows) {
-            for (const round of flow.items) {
-                if ((round.type === 'final' || round.type === 'continue') && round.text.length > 0) {
-                    actions.push({ text: round.text, type: 'content' });
+
+        for (const round of agentResult.rounds) {
+            if ((round.type === 'final' || round.type === 'continue') && round.text.length > 0) {
+                actions.push({ text: round.text, type: 'content' });
+            }
+            for (const step of round.steps) {
+                if (step.type === 'thinking') {
+                    actions.push({ text: step.text, type: 'thinking' });
                 }
-                for (const action of round.items) {
-                    if (action.type === 'thinking') {
-                        actions.push({ text: action.text, type: 'thinking' });
+                if (step.type === 'tool') {
+                    if (step.call === undefined) {
+                        throw new Error('Tool action must include call before provider conversion');
                     }
-                    if (action.type === 'tool') {
-                        if (action.call === undefined) {
-                            throw new Error('Tool action must include call before provider conversion');
-                        }
-                        actions.push({
-                            call: action.call,
-                            text: action.text,
-                            type: 'tool',
-                        });
-                    }
+                    actions.push({
+                        call: step.call,
+                        text: step.text,
+                        type: 'tool',
+                    });
                 }
             }
         }

@@ -1,8 +1,7 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { Model, type ModelEvent, type ModelRequest, type ModelResponseType } from './model/Model';
-import { Agent } from './Agent';
-import { Message } from './chat/Message';
+import { Agent } from './core/Agent';
 import { ToolRunContext } from './tools/tool/Tool';
 import { FileTool, type FileToolInput, type FileToolOutput } from './tools/FileTool';
 
@@ -36,11 +35,10 @@ class MockModel extends Model {
             };
         } else {
             // 第二轮（收到读取结果后）：生成最终回答并展示文件前 150 个字符
-            const lastMessage = request.messages[request.messages.length - 1];
-            const actionItems = lastMessage.flows[0]?.items.flatMap(round => round.items) ?? [];
-            console.log('\n🔍 [调试信息] actionItems 数组:', JSON.stringify(actionItems, null, 2));
-            const fileActionResult = actionItems.find(item => item.type === 'tool' && item.status === 'completed');
-            const fileContent = fileActionResult?.text ?? '未读取到内容';
+            const steps = request.result.rounds.flatMap(round => round.steps);
+            console.log('\n🔍 [调试信息] steps 数组:', JSON.stringify(steps, null, 2));
+            const fileStepResult = steps.find(item => item.type === 'tool' && item.status === 'completed');
+            const fileContent = fileStepResult?.text ?? '未读取到内容';
 
             const reply = `[测试成功] File工具已成功读取 package.json。内容预览（前120字符）:\n\n${fileContent.slice(0, 120)}...`;
             yield { type: 'content', content: reply };
@@ -58,8 +56,9 @@ class MockModel extends Model {
     protected resolveResponseStatus(): ModelResponseType { return 'final'; }
     protected async request(): Promise<any> { return {}; }
     protected async *requestStream(): AsyncGenerator<any> { }
-    protected expandMessageToProviderMessages(): any[] { return []; }
-    protected expandToolAskToProviderMessages(): any[] { return []; }
+    protected expandContextEntryToProviderMessages(): any[] { return []; }
+    protected expandCurrentRunToProviderMessages(): any[] { return []; }
+    protected expandTextToProviderUserMessage(): any[] { return []; }
 }
 
 // ─── 2. 实现 FileTool 的真实只读具体子类 ───────────────────
@@ -109,17 +108,9 @@ async function runAgentTest() {
 
     const agent = new TestAgent();
 
-    // 核心前置断言：Message 树的尾部必须是一个激活的 assistant 角色消息
-    const activeAssistantMessage = Message.assistant();
-
-    const messages = [
-        Message.user('分析当前工作目录的架构'),
-        activeAssistantMessage
-    ];
-
     try {
         // 流式执行，驱动 AsyncGenerator 并阻塞直到全部跑完
-        for await (const event of agent.run({ messages })) {
+        for await (const event of agent.run({ input: '分析当前工作目录的架构' })) {
             console.log(`🔔 [收到事件] 类型: ${event.type}`);
 
             if (event.type === 'model_event') {

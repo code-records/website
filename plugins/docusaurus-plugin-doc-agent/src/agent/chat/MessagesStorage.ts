@@ -1,8 +1,9 @@
 import { History, type HistoryJSON } from './History';
 import type { MessageJSON } from './Message';
-import type { ActionJSON, ActionType } from './round/Action';
-import type { ClientStatus, FlowJSON } from './round/Flow';
-import type { RoundJSON } from './round/Round';
+import type { StepJSON, StepType } from '../core/Step';
+import type { FlowJSON } from './Flow';
+import type { RoundJSON } from '../core/Round';
+import type { ClientStatus } from '../core/type';
 import type { ModelToolCall } from '../model/Model';
 import type { JsonObject, JsonValue, ToolUsage, ToolEvent } from '../tools/tool/Tool';
 
@@ -181,6 +182,7 @@ function parseMessage(value: unknown): MessageJSON | null {
     if (value.role !== 'assistant' && value.role !== 'user') return null;
 
     const role = value.role;
+    const content = typeof value.content === 'string' ? value.content : undefined;
     const flows = Array.isArray(value.flows)
         ? value.flows
             .map(parseFlow)
@@ -188,24 +190,36 @@ function parseMessage(value: unknown): MessageJSON | null {
         : [];
 
     return {
+        ...(content !== undefined ? { content } : {}),
         ...(flows.length > 0 ? { flows } : {}),
         role,
     };
 }
 
 function parseFlow(value: unknown): FlowJSON | null {
-    if (!isRecord(value) || !Array.isArray(value.rounds)) return null;
-    if (!hasOptionalKind(value, 'flow')) return null;
+    if (!isRecord(value)) return null;
+    if (value.kind !== 'flow') return null;
 
     const count = typeof value.count === 'number' ? value.count : undefined;
     const input = typeof value.input === 'string' ? value.input : undefined;
     const label = typeof value.label === 'string' ? value.label : undefined;
+    const result = parseAgentResult(value.result);
 
     return {
         count: count ?? 0,
         ...(value.kind === 'flow' ? { kind: value.kind } : {}),
-        ...(input !== undefined ? { input } : {}),
+        input: input ?? '',
         ...(label !== undefined ? { label } : {}),
+        status: parseClientStatus(value.status),
+        ...(result !== null ? { result } : {}),
+    };
+}
+
+function parseAgentResult(value: unknown): FlowJSON['result'] | null {
+    if (!isRecord(value) || !Array.isArray(value.rounds)) return null;
+    if (value.kind !== 'agent_result') return null;
+    return {
+        kind: value.kind,
         rounds: value.rounds
             .map(parseRound)
             .filter(round => round !== null),
@@ -214,8 +228,8 @@ function parseFlow(value: unknown): FlowJSON | null {
 }
 
 function parseRound(value: unknown): RoundJSON | null {
-    if (!isRecord(value) || !Array.isArray(value.actions)) return null;
-    if (!hasOptionalKind(value, 'round')) return null;
+    if (!isRecord(value) || !Array.isArray(value.steps)) return null;
+    if (value.kind !== 'round') return null;
 
     const count = typeof value.count === 'number' ? value.count : undefined;
     const label = typeof value.label === 'string' ? value.label : undefined;
@@ -224,23 +238,23 @@ function parseRound(value: unknown): RoundJSON | null {
     const type = parseRoundType(value.type);
 
     return {
-        actions: value.actions
-            .map(parseAction)
-            .filter(action => action !== null),
         count: count ?? 0,
-        ...(value.kind === 'round' ? { kind: value.kind } : {}),
+        kind: value.kind,
         ...(label !== undefined ? { label } : {}),
         status,
+        steps: value.steps
+            .map(parseStep)
+            .filter(step => step !== null),
         ...(text !== undefined ? { text } : {}),
         type,
     };
 }
 
-function parseAction(value: unknown): ActionJSON | null {
+function parseStep(value: unknown): StepJSON | null {
     if (!isRecord(value)) return null;
-    if (!hasOptionalKind(value, 'action')) return null;
+    if (value.kind !== 'step') return null;
 
-    const type = parseActionType(value.type);
+    const type = parseStepType(value.type);
     if (type === null) return null;
 
     const usage = parseToolUsage(value.usage);
@@ -256,7 +270,7 @@ function parseAction(value: unknown): ActionJSON | null {
         ...(call !== null ? { call } : {}),
         ...(event !== null ? { event } : {}),
         ...(id !== undefined ? { id } : {}),
-        ...(value.kind === 'action' ? { kind: value.kind } : {}),
+        kind: value.kind,
         ...(label !== undefined ? { label } : {}),
         status,
         ...(text !== undefined ? { text } : {}),
@@ -320,7 +334,7 @@ function parseRoundType(value: unknown): RoundJSON['type'] {
     return undefined;
 }
 
-function parseActionType(value: unknown): ActionType | null {
+function parseStepType(value: unknown): StepType | null {
     if (
         value === 'context'
         || value === 'error'
@@ -346,10 +360,6 @@ function parseMeta(value: unknown): MessagesMeta {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
     return value !== null && typeof value === 'object' && !Array.isArray(value);
-}
-
-function hasOptionalKind(value: Record<string, unknown>, kind: string): boolean {
-    return value.kind === undefined || value.kind === kind;
 }
 
 function parseJsonObject(value: unknown): JsonObject | null {

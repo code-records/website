@@ -1,7 +1,7 @@
 /*
  * Code assistant message UI.
  * - Builds a timeline from flow/round runtime state.
- * - Tool result text stays on Action.text and is hidden by default.
+ * - Tool result text stays on Step.text and is hidden by default.
  */
 import React, { useState } from 'react';
 import MarkdownRenderer from '../../doc-agent/ui/MarkdownRenderer.jsx';
@@ -18,36 +18,36 @@ function buildTimelineItems(message) {
             label: flow.formatLabel(),
         });
 
-        // Keep the timeline at flow/round level; actions stay nested under rounds.
-        for (const round of flow.rounds) {
-            const actions = round.actions
-                .filter(action => action.type !== 'thinking')
-                .map(action => ({
-                    kind: 'action',
-                    id: action.id || action.callId || '',
-                    label: action.label || action.call?.name || '',
-                    text: typeof action.text === 'string' ? action.text.trim() : '',
-                    type: action.type,
-                    usage: action.usage,
-                    call: action.call,
+        // Keep the timeline at flow/round level; steps stay nested under rounds.
+        for (const round of flow.result?.rounds ?? []) {
+            const steps = round.steps
+                .filter(step => step.type !== 'thinking')
+                .map(step => ({
+                    kind: 'step',
+                    id: step.id || step.callId || '',
+                    label: step.label || step.call?.name || '',
+                    text: typeof step.text === 'string' ? step.text.trim() : '',
+                    type: step.type,
+                    usage: step.usage,
+                    call: step.call,
                 }))
-                .filter(action => action.type === 'tool' ? action.label.length > 0 : action.text.length > 0);
+                .filter(step => step.type === 'tool' ? step.label.length > 0 : step.text.length > 0);
 
             const text = typeof round.text === 'string' ? round.text.trim() : '';
             if (text.length === 0) {
                 const previous = items[items.length - 1];
-                if (actions.length > 0 && previous?.kind === 'round') {
-                    previous.actions = previous.actions.concat(actions);
-                    previous.label = formatActionsUsageLabel(previous.actions, round.status) || formatRoundLabel(round);
+                if (steps.length > 0 && previous?.kind === 'round') {
+                    previous.steps = previous.steps.concat(steps);
+                    previous.label = formatStepsUsageLabel(previous.steps, round.status) || formatRoundLabel(round);
                 }
                 continue;
             }
 
-            const label = formatActionsUsageLabel(actions, round.status) || formatRoundLabel(round);
+            const label = formatStepsUsageLabel(steps, round.status) || formatRoundLabel(round);
             items.push({
-                actions,
                 kind: 'round',
                 label,
+                steps,
                 text,
             });
         }
@@ -60,8 +60,8 @@ function formatRoundLabel(round) {
     return round.formatLabel();
 }
 
-function formatActionsUsageLabel(actions, status) {
-    const groups = collectUsageGroups(actions);
+function formatStepsUsageLabel(steps, status) {
+    const groups = collectUsageGroups(steps);
     if (groups.length === 0) return '';
 
     const byVerb = new Map();
@@ -79,11 +79,11 @@ function formatActionsUsageLabel(actions, status) {
         .join('；');
 }
 
-function collectUsageGroups(actions) {
+function collectUsageGroups(steps) {
     const groups = new Map();
-    for (const action of actions) {
-        const usage = action.usage;
-        if (action.type !== 'tool' || usage === undefined || !isCountableUsage(usage)) continue;
+    for (const step of steps) {
+        const usage = step.usage;
+        if (step.type !== 'tool' || usage === undefined || !isCountableUsage(usage)) continue;
 
         const groupKey = `${usage.verb}\u0000${usage.name}\u0000${usage.unit}`;
         const group = groups.get(groupKey) || {
@@ -95,7 +95,7 @@ function collectUsageGroups(actions) {
             verb: usage.verb,
         };
 
-        if (typeof usage.key === 'string' && usage.key.length > 0 && !shouldCountUsagePerAction(action)) {
+        if (typeof usage.key === 'string' && usage.key.length > 0 && !shouldCountUsagePerStep(step)) {
             group.keys.add(usage.key);
             group.keyedCount = group.keys.size;
         } else {
@@ -122,10 +122,10 @@ function normalizeUsageCount(count) {
         : 1;
 }
 
-function shouldCountUsagePerAction(action) {
-    if (action.type !== 'tool') return false;
-    if (action.call?.name === 'file' && action.call?.input?.operation === 'list') return true;
-    return typeof action.label === 'string' && action.label.startsWith('List files:');
+function shouldCountUsagePerStep(step) {
+    if (step.type !== 'tool') return false;
+    if (step.call?.name === 'file' && step.call?.input?.operation === 'list') return true;
+    return typeof step.label === 'string' && step.label.startsWith('List files:');
 }
 
 function getFlowText(items) {
@@ -148,31 +148,31 @@ function TypedText({ text, type }) {
     );
 }
 
-function InlineActionSegment({ action }) {
-    if (action.type === 'tool') {
+function InlineStepSegment({ step }) {
+    if (step.type === 'tool') {
         return (
             <span className={LABEL_TEXT_CLASS}>
-                {withDebugTag(action.type, action.label)}
+                {withDebugTag(step.type, step.label)}
             </span>
         );
     }
 
-    if (action.type === 'error') {
+    if (step.type === 'error') {
         return (
-            <TypedText text={action.text} type={action.type} />
+            <TypedText text={step.text} type={step.type} />
         );
     }
 
-    return <TypedText text={action.text} type={action.type} />;
+    return <TypedText text={step.text} type={step.type} />;
 }
 
 function RoundGroup({ item, running }) {
     const [expanded, setExpanded] = useState(false);
-    const hasActions = item.actions.length > 0;
+    const hasSteps = item.steps.length > 0;
 
     return (
         <TimelineItem running={running}>
-            {hasActions ? (
+            {hasSteps ? (
                 <button
                     type="button"
                     className={[LABEL_TEXT_CLASS, 'mb-1 w-full cursor-pointer border-none bg-transparent p-0 text-left [font-family:inherit]'].join(' ')}
@@ -186,10 +186,10 @@ function RoundGroup({ item, running }) {
                     {withDebugTag('round.label', item.label)}
                 </span>
             )}
-            {expanded && hasActions && (
+            {expanded && hasSteps && (
                 <div className="mb-2 grid min-w-0 gap-2">
-                    {item.actions.map((action, index) => (
-                        <InlineActionSegment key={action.id || index} action={action} />
+                    {item.steps.map((step, index) => (
+                        <InlineStepSegment key={step.id || index} step={step} />
                     ))}
                 </div>
             )}

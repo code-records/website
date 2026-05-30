@@ -1,8 +1,8 @@
-import type { AgentEvent } from '../Agent';
-import type { Agent } from '../Agent';
-import { Message } from '../chat/Message';
-import type { Flow } from '../chat/round/Flow';
-import type { Round } from '../chat/round/Round';
+import type { Agent } from './Agent';
+import type { Context } from './Context';
+import type { AgentResult } from './AgentResult';
+import type { Round } from './Round';
+import type { AgentEvent } from './type';
 import type { Model, ModelToolCall } from '../model/Model';
 import type { Tool, ToolResult, ToolUsage } from '../tools/tool/Tool';
 import { ToolManager } from '../tools/tool/ToolManager';
@@ -11,15 +11,15 @@ import { applyContextPatch, createAskFactory, toAgentModelEvent } from './helper
 
 export interface LoopOptions {
     agentName?: string;
+    context: Context;
     maxRounds?: number;
-    messages: readonly Message[];
     model: Model;
-    flow: Flow;
     signal?: AbortSignal;
     subAgents?: Agent[];
     system: string;
     toolTimeoutMs?: number;
     tools: Tool[];
+    agentResult: AgentResult;
 }
 
 interface SettledToolCall {
@@ -34,20 +34,22 @@ interface SettledToolCall {
 export async function* loop(options: LoopOptions): AsyncGenerator<AgentEvent, void, void> {
     const {
         agentName = 'agent',
+        context,
         maxRounds = 16,
         model,
-        flow,
         signal,
         subAgents = [],
         system,
         toolTimeoutMs,
         tools,
+        agentResult,
     } = options;
 
-    let runMessages = [...options.messages];
+    let runContext = context.clone();
+    let continuation = '';
     const createAsk = createAskFactory({ model, signal, system });
     const toolManager = new ToolManager({
-        context: runMessages,
+        context: runContext,
         createAsk,
         defaultTimeoutMs: toolTimeoutMs,
         model,
@@ -62,13 +64,15 @@ export async function* loop(options: LoopOptions): AsyncGenerator<AgentEvent, vo
         let round: Round | undefined;
 
         for await (const event of model.stream({
+            context: runContext,
+            continuation,
+            result: agentResult,
             system,
-            messages: runMessages,
             tools: toolManager.definitions(),
             signal,
         })) {
             const agentEvent = toAgentModelEvent(agentName, event);
-            round = flow.apply(agentEvent) ?? round;
+            round = agentResult.apply(agentEvent) ?? round;
             if (round !== undefined) {
                 round.count = count;
                 updateToolActionLabels(round, toolManager);
@@ -97,7 +101,7 @@ export async function* loop(options: LoopOptions): AsyncGenerator<AgentEvent, vo
         if (round.type === 'continue') {
             round.complete();
             loggerRoundDone(round);
-            runMessages = [...runMessages, Message.user('\u7ee7\u7eed\u5b8c\u6210\u4e0a\u4e00\u8f6e\u672a\u5b8c\u6210\u7684\u4efb\u52a1\u3002\u82e5\u9700\u8981\u5de5\u5177\uff0c\u8bf7\u76f4\u63a5\u8c03\u7528\u5de5\u5177\uff1b\u5426\u5219\u76f4\u63a5\u7eed\u5199\u6700\u7ec8\u56de\u7b54\uff0c\u4e0d\u8981\u53ea\u8bf4\u660e\u4f60\u5c06\u7ee7\u7eed\u3002')];
+            continuation = '继续完成上一轮未完成的任务。若需要工具，请直接调用工具；否则直接续写最终回答，不要只说明你将继续。';
             continue;
         }
 
@@ -124,7 +128,7 @@ export async function* loop(options: LoopOptions): AsyncGenerator<AgentEvent, vo
                     tool: call.name,
                     usage,
                 };
-                flow.apply(toolStartEvent);
+                agentResult.apply(toolStartEvent);
                 yield toolStartEvent;
 
                 const token = Symbol(call.id);
@@ -157,7 +161,7 @@ export async function* loop(options: LoopOptions): AsyncGenerator<AgentEvent, vo
                     tool,
                     usage: result.usage ?? usage,
                 };
-                flow.apply(toolDoneEvent);
+                agentResult.apply(toolDoneEvent);
                 yield toolDoneEvent;
 
                 for (const event of result.events ?? []) {
@@ -169,20 +173,20 @@ export async function* loop(options: LoopOptions): AsyncGenerator<AgentEvent, vo
                         label,
                         tool,
                     };
-                    flow.apply(toolEvent);
+                    agentResult.apply(toolEvent);
                     yield toolEvent;
                 }
 
                 if (result.contextPatch !== undefined) {
-                    runMessages = applyContextPatch(runMessages, result.contextPatch);
-                    toolManager.setContext(runMessages);
+                    runContext = applyContextPatch(runContext, result.contextPatch);
+                    toolManager.setContext(runContext);
                     const contextPatchEvent: AgentEvent = {
                         type: 'context_patch',
                         agent: agentName,
                         patch: result.contextPatch,
                         tool,
                     };
-                    flow.apply(contextPatchEvent);
+                    agentResult.apply(contextPatchEvent);
                     yield contextPatchEvent;
                 }
             }
@@ -199,8 +203,8 @@ export async function* loop(options: LoopOptions): AsyncGenerator<AgentEvent, vo
 }
 
 function getRoundToolCalls(round: Round): ModelToolCall[] {
-    return round.actions
-        .map(action => action.call)
+    return round.steps
+        .map(step => step.call)
         .filter((call): call is ModelToolCall => call !== undefined);
 }
 
@@ -215,16 +219,16 @@ function loggerRoundStart(round: Round, loggedRoundStarts: WeakSet<Round>): void
 }
 
 function loggerRoundAction(round: Round): void {
-    const action = round.actions[round.actions.length - 1];
-    if (action === undefined) return;
-    if (action.type === 'thinking') return;
-    logger.action(action.toJSON());
+    const step = round.steps[round.steps.length - 1];
+    if (step === undefined) return;
+    if (step.type === 'thinking') return;
+    logger.action(step.toJSON());
 }
 
 function updateToolActionLabels(round: Round, toolManager: ToolManager): void {
-    for (const action of round.actions) {
-        const call = action.call;
-        if (action.type !== 'tool' || call === undefined) continue;
+    for (const step of round.steps) {
+        const call = step.call;
+        if (step.type !== 'tool' || call === undefined) continue;
         try {
             const label = toolManager.formatLabel(call);
             round.updateToolLabel(call.id, label);

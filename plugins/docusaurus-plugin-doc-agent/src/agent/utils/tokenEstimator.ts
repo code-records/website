@@ -1,4 +1,4 @@
-import type { Message } from '../chat/Message';
+import type { Context } from '../core/Context';
 import { isJsonObject } from './json';
 
 const CJK_RANGE = /[\u3400-\u9fff\u3040-\u30ff\uac00-\ud7af]/g;
@@ -10,11 +10,18 @@ export function estimateTokens(text: string): number {
     return Math.ceil(otherChars / 4 + cjkChars / 1.5);
 }
 
-export function estimateContextTokens(context: readonly Message[]): number {
+export function estimateContextTokens(context: Context): number {
     let total = 0;
-    for (const message of context) {
+    if (context.summary.length > 0) {
+        total += estimateTokens(context.summary);
+    }
+    for (const message of context.messages) {
         total += 4;
-        total += estimateMessagePayloadTokens(message);
+        total += estimateTokens(message.role);
+        total += estimateTokens(message.content);
+        if (message.result !== undefined) {
+            total += estimateMessagePayloadTokens(message.result.toJSON());
+        }
     }
     return total;
 }

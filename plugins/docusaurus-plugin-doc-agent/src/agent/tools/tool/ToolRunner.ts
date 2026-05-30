@@ -1,4 +1,4 @@
-import { Message } from '../../chat/Message';
+import type { Context } from '../../core/Context';
 import type { Model, ModelToolCall } from '../../model/Model';
 import { toError } from '../../utils/errors';
 import type { AskModel, JsonObject, ToolResult } from './Tool';
@@ -36,7 +36,7 @@ export interface CompletedToolRunRecord extends ToolRunRecord {
 
 export interface ToolRunnerOptions {
     createAsk?: (toolName: string) => AskModel;
-    context: readonly Message[];
+    context: Context;
     defaultTimeoutMs?: number;
     model: Model;
     registry: ToolRegistry;
@@ -45,7 +45,7 @@ export interface ToolRunnerOptions {
 
 export class ToolRunner {
     private readonly controllers = new Map<string, AbortController>();
-    private context: readonly Message[];
+    private context: Context;
     private readonly createAsk?: (toolName: string) => AskModel;
     private readonly defaultTimeoutMs: number;
     private readonly model: Model;
@@ -161,7 +161,6 @@ export class ToolRunner {
 
             const run = tool.run(item.input, {
                 context: this.context,
-                createUserContextMessage: Message.user,
                 runner: this.createScopedRunner(this.context),
                 signal: controller.signal,
                 tools: this.registry.asReadonlyMap(),
@@ -225,7 +224,7 @@ export class ToolRunner {
         }
     }
 
-    private createScopedRunner(context: readonly Message[]): ToolRunner {
+    private createScopedRunner(context: Context): ToolRunner {
         return new ToolRunner({
             context,
             createAsk: this.createAsk,

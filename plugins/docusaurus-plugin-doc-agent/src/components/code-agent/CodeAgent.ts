@@ -1,6 +1,7 @@
 import {
     Agent,
-    Message,
+    AgentResult,
+    Context,
 } from '../../agent';
 import { BrowserFileTool } from '../../agent/tools/browser/BrowserFileTool';
 
@@ -168,7 +169,8 @@ export class CodeAgent extends Agent {
 
             const runtimeModel = this.model;
             const response = await runtimeModel.complete({
-                messages: [Message.user(`这是我当前项目的根目录文件列表：\n${fileListStr}`)],
+                context: Context.from(`这是我当前项目的根目录文件列表：\n${fileListStr}`),
+                result: new AgentResult(),
                 signal,
                 system: this.config.suggestPrompt,
                 toolChoice: 'none',

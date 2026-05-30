@@ -11,7 +11,8 @@ import {
     type ProviderStreamChunk,
     type ModelToolCall,
 } from './Model';
-import type { Message } from '../chat/Message';
+import type { AgentResult } from '../core/AgentResult';
+import type { ContextMessage } from '../core/Context';
 import type { JsonObject, JsonValue, ToolDefinition } from '../tools/tool/Tool';
 import { optionalArray, optionalString, requireJsonObject, requireString, safeParseJsonObject } from '../utils/json';
 import { parseSseStream } from '../utils/sse';
@@ -30,7 +31,7 @@ export class OpenAIModel extends Model {
 
     async *stream(request: ModelRequest): AsyncGenerator<ModelEvent, void, void> {
         const body: ProviderRequestBody = {
-            input: this.buildProviderMessages(request.messages, request.toolAsk),
+            input: this.buildProviderMessages(request),
             model: this.model,
             ...(request.system ? { instructions: request.system } : {}),
             ...(request.tools?.length ? { tools: this.formatToolDefs(request.tools) } : {}),
@@ -159,54 +160,47 @@ export class OpenAIModel extends Model {
         }
     }
 
-    protected expandMessageToProviderMessages(message: Message): ProviderMessage[] {
-        if (message.local === true) {
-            return [];
+    protected expandContextMessageToProviderMessages(message: ContextMessage): ProviderMessage[] {
+        if (message.role === 'assistant') {
+            return message.result !== undefined
+                ? this.resultToProviderMessages(message.result)
+                : [{ content: message.content, role: 'assistant' }];
         }
-        if (message.role === 'user') {
-            const text = message.flows.map(flow => flow.text).join('');
-            return text.length > 0
-                ? [{ content: text, role: 'user' }]
-                : [];
-        }
-
-        const result: JsonObject[] = [];
-        const roundMessages = this.roundsToProviderMessages(message);
-        result.push(...roundMessages);
-
-        return result;
+        return [{ content: message.content, role: message.role }];
     }
 
-    protected expandToolAskToProviderMessages(toolAsk: string): ProviderMessage[] {
-        return [{ content: toolAsk, role: 'user' }];
+    protected expandResultToProviderMessages(result: AgentResult): ProviderMessage[] {
+        return this.resultToProviderMessages(result);
     }
 
-    private roundsToProviderMessages(message: Message): JsonObject[] {
+    protected expandTextToProviderUserMessage(text: string): ProviderMessage[] {
+        return [{ content: text, role: 'user' }];
+    }
+
+    private resultToProviderMessages(agentResult: AgentResult): JsonObject[] {
         const result: JsonObject[] = [];
-        for (const flow of message.flows) {
-            for (const round of flow.items) {
-                if ((round.type === 'final' || round.type === 'continue') && round.text.length > 0) {
-                    result.push({ content: round.text, role: 'assistant' });
+        for (const round of agentResult.rounds) {
+            if ((round.type === 'final' || round.type === 'continue') && round.text.length > 0) {
+                result.push({ content: round.text, role: 'assistant' });
+            }
+            for (const step of round.steps) {
+                if (step.type !== 'tool') continue;
+                if (step.call === undefined) {
+                    throw new Error('Tool action must include call before provider conversion');
                 }
-                for (const action of round.items) {
-                    if (action.type !== 'tool') continue;
-                    if (action.call === undefined) {
-                        throw new Error('Tool action must include call before provider conversion');
-                    }
 
+                result.push({
+                    arguments: JSON.stringify(step.call.input ?? {}),
+                    call_id: step.call.id,
+                    name: step.call.name,
+                    type: 'function_call',
+                });
+                if (step.text.length > 0) {
                     result.push({
-                        arguments: JSON.stringify(action.call.input ?? {}),
-                        call_id: action.call.id,
-                        name: action.call.name,
-                        type: 'function_call',
+                        call_id: step.call.id,
+                        output: step.text,
+                        type: 'function_call_output',
                     });
-                    if (action.text.length > 0) {
-                        result.push({
-                            call_id: action.call.id,
-                            output: action.text,
-                            type: 'function_call_output',
-                        });
-                    }
                 }
             }
         }

@@ -1,19 +1,19 @@
 ﻿import React, { useState } from 'react';
 import MarkdownRenderer from './MarkdownRenderer.jsx';
 
-function flattenRoundActions(rounds) {
+function flattenRoundSteps(rounds) {
     return (Array.isArray(rounds) ? rounds : [])
-        .flatMap(round => Array.isArray(round?.actions) ? round.actions : [])
-        .filter(action => action?.type === 'tool');
+        .flatMap(round => Array.isArray(round?.steps) ? round.steps : [])
+        .filter(step => step?.type === 'tool');
 }
 
-function formatLabel(action) {
-    return action?.label || action?.call?.name || '工具';
+function formatLabel(step) {
+    return step?.label || step?.call?.name || '工具';
 }
 
 function getFlowContent(flows) {
     return (Array.isArray(flows) ? flows : [])
-        .flatMap(flow => Array.isArray(flow?.rounds) ? flow.rounds : [])
+        .flatMap(flow => Array.isArray(flow?.result?.rounds) ? flow.result.rounds : [])
         .filter(round => round?.type === 'final' || round?.type === 'continue' || (round?.type === undefined && round?.status === 'pending'))
         .map(round => typeof round?.text === 'string' ? round.text : '')
         .join('');
@@ -22,16 +22,16 @@ function getFlowContent(flows) {
 function FlowItem({ flow, idx, onToggle, isLast, isCompleted, isError }) {
     const [localExpanded, setLocalExpanded] = useState(false);
     const scrollRef = React.useRef(null);
-    const actions = flattenRoundActions(flow?.rounds);
+    const steps = flattenRoundSteps(flow?.result?.rounds);
 
     React.useEffect(() => {
         if (scrollRef.current) {
             scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
         }
-    }, [actions.length]);
+    }, [steps.length]);
 
     const expanded = onToggle ? flow.expanded : localExpanded;
-    const noItems = actions.length === 0;
+    const noItems = steps.length === 0;
     const failed = isError || flow?.status === 'failed';
     const label = failed
         ? '分析异常'
@@ -85,7 +85,7 @@ function FlowItem({ flow, idx, onToggle, isLast, isCompleted, isError }) {
                         ref={scrollRef}
                         className="flex flex-col gap-0.5 py-0.5 pl-6 pr-2 max-h-[110px] overflow-y-auto thin-scrollbar"
                     >
-                        {actions.map((item, i) => (
+                        {steps.map((item, i) => (
                             <div key={i} className="text-xs text-[var(--ifm-color-emphasis-600)] py-0.5 shrink-0">
                                 {formatLabel(item)}
                             </div>

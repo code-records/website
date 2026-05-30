@@ -19,7 +19,7 @@ provider request/response/stream
 
 - 定义模型层公共契约：`ModelRequest`、`ModelEvent`、`ModelResponse`。
 - 定义模型产出的工具调用动作：`ModelToolCall`。
-- 把 `Message / Plan / Round / Action` 提炼成 provider 私有请求格式。
+- 把 `Message / Flow / Round / Action` 提炼成 provider 私有请求格式。
 - 把 provider stream chunk 或完整 response 转成统一 `ModelEvent`。
 - 处理 provider 的 URL、headers、HTTP 请求、错误格式和工具定义格式。
 - 判断模型输出状态：`final`、`tool`、`continue`。

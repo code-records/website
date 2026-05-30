@@ -1,14 +1,14 @@
-import { Action, type ActionJSON } from './Action';
-import type { ClientStatus } from './Flow';
-import type { ModelResponseType } from '../../model/Model';
-import type { ToolUsage } from '../../tools/tool/Tool';
+import { Step, type StepJSON } from './Step';
+import type { ClientStatus } from './type';
+import type { ModelResponseType } from '../model/Model';
+import type { ToolUsage } from '../tools/tool/Tool';
 
 export interface RoundJSON {
-    actions: ActionJSON[];
     count: number;
     kind?: 'round';
     label?: string;
     status: ClientStatus;
+    steps: StepJSON[];
     text?: string;
     type?: ModelResponseType;
 }
@@ -20,18 +20,14 @@ export class Round {
     count = 0;
     label = '';
     text = '';
-    private readonly _actions: Action[] = [];
+    private readonly _steps: Step[] = [];
 
-    get actions(): readonly Action[] {
-        return this._actions;
-    }
-
-    get items(): readonly Action[] {
-        return this._actions;
+    get steps(): readonly Step[] {
+        return this._steps;
     }
 
     get toolCount(): number {
-        return this._actions.filter(action => action.type === 'tool').length;
+        return this._steps.filter(step => step.type === 'tool').length;
     }
 
     formatLabel(): string {
@@ -51,8 +47,8 @@ export class Round {
         round.label = json.label ?? '';
         round.status = json.status;
         round.type = json.type;
-        for (const action of json.actions) {
-            round.add(Action.fromJSON(action));
+        for (const step of json.steps) {
+            round.add(Step.fromJSON(step));
         }
         return round;
     }
@@ -61,12 +57,12 @@ export class Round {
         this.text += text;
     }
 
-    add(action: Action): void {
-        this._actions.push(action);
+    add(step: Step): void {
+        this._steps.push(step);
     }
 
-    appendToLast(type: Action['type'], text: string): boolean {
-        const last = this._actions[this._actions.length - 1];
+    appendToLast(type: Step['type'], text: string): boolean {
+        const last = this._steps[this._steps.length - 1];
         if (last === undefined || last.type !== type || last.status !== 'pending') {
             return false;
         }
@@ -74,44 +70,44 @@ export class Round {
         return true;
     }
 
-    updateLast(action: Action): boolean {
-        const last = this._actions[this._actions.length - 1];
-        if (last === undefined || last.type !== action.type || last.status !== 'pending') {
+    updateLast(step: Step): boolean {
+        const last = this._steps[this._steps.length - 1];
+        if (last === undefined || last.type !== step.type || last.status !== 'pending') {
             return false;
         }
-        if (action.type === 'tool') {
+        if (step.type === 'tool') {
             return false;
         }
-        last.call = action.call;
-        last.callId = action.callId;
-        last.event = action.event;
-        last.label = action.label || last.label;
-        last.text = action.text;
+        last.call = step.call;
+        last.callId = step.callId;
+        last.event = step.event;
+        last.label = step.label || last.label;
+        last.text = step.text;
         return true;
     }
 
-    updateTool(action: Action): boolean {
-        if (action.type !== 'tool' || action.callId === undefined) {
+    updateTool(step: Step): boolean {
+        if (step.type !== 'tool' || step.callId === undefined) {
             return false;
         }
 
-        const existing = this._actions.find(item => item.type === 'tool' && item.callId === action.callId);
+        const existing = this._steps.find(item => item.type === 'tool' && item.callId === step.callId);
         if (existing === undefined) {
             return false;
         }
 
-        existing.call = action.call ?? existing.call;
-        existing.callId = action.callId;
-        existing.event = action.event ?? existing.event;
-        existing.label = action.label || existing.label;
-        existing.status = mergeClientStatus(existing.status, action.status);
-        existing.text = action.text || existing.text;
-        existing.usage = action.usage ?? existing.usage;
+        existing.call = step.call ?? existing.call;
+        existing.callId = step.callId;
+        existing.event = step.event ?? existing.event;
+        existing.label = step.label || existing.label;
+        existing.status = mergeClientStatus(existing.status, step.status);
+        existing.text = step.text || existing.text;
+        existing.usage = step.usage ?? existing.usage;
         return true;
     }
 
     updateToolLabel(callId: string, label: string): boolean {
-        const existing = this._actions.find(item => item.type === 'tool' && item.callId === callId);
+        const existing = this._steps.find(item => item.type === 'tool' && item.callId === callId);
         if (existing === undefined) {
             return false;
         }
@@ -120,7 +116,7 @@ export class Round {
     }
 
     updateToolUsage(callId: string, usage: ToolUsage): boolean {
-        const existing = this._actions.find(item => item.type === 'tool' && item.callId === callId);
+        const existing = this._steps.find(item => item.type === 'tool' && item.callId === callId);
         if (existing === undefined) {
             return false;
         }
@@ -131,15 +127,15 @@ export class Round {
     complete(type = this.type): void {
         this.type = type;
         this.status = 'completed';
-        for (const action of this._actions) {
-            action.finish();
+        for (const step of this._steps) {
+            step.finish();
         }
     }
 
     fail(): void {
         this.status = 'failed';
-        for (const action of this._actions) {
-            action.finish();
+        for (const step of this._steps) {
+            step.finish();
         }
     }
 
@@ -152,7 +148,7 @@ export class Round {
             count: this.count,
             label,
             text: this.text.length > 0 ? this.text : undefined,
-            actions: this._actions.map(action => action.toJSON()),
+            steps: this._steps.map(step => step.toJSON()),
         };
     }
 
@@ -177,9 +173,9 @@ export class Round {
 
     private collectUsageGroups(): UsageGroup[] {
         const groups = new Map<string, UsageGroup>();
-        for (const action of this._actions) {
-            if (action.type !== 'tool' || action.usage === undefined) continue;
-            const usage = action.usage;
+        for (const step of this._steps) {
+            if (step.type !== 'tool' || step.usage === undefined) continue;
+            const usage = step.usage;
             if (!isCountableUsage(usage)) continue;
 
             const groupKey = `${usage.verb}\u0000${usage.name}\u0000${usage.unit}`;

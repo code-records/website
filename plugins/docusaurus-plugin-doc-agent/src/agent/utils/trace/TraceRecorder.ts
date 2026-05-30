@@ -1,5 +1,5 @@
 import { Trace } from './Trace';
-import type { AgentEvent } from '../../Agent';
+import type { AgentEvent } from '../../core/type';
 
 export interface TraceRecorder {
     record(event: AgentEvent): void;

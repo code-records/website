@@ -9,7 +9,7 @@
 - 普通聊天永远只创建一个 `Flow`。
 - 只有编程类特殊任务流才会创建多个 `Flow`。
 - `Flow.input` 替代原来的 `Plan.prompt`。
-- `Flow.rounds` 替代原来的 `Plan.rounds`。
+- `Flow.result.rounds` 替代原来的 `Plan.rounds`。
 - `loop` 只执行当前 `Flow`，不再理解计划概念。
 
 目标结构：
@@ -17,7 +17,7 @@
 ```ts
 Message
   -> flows[]
-      -> rounds[]
+      -> result.rounds[]
           -> actions[]
 ```
 
@@ -27,7 +27,7 @@ Message
 
 - `label`：给 UI 展示的执行标题。
 - `input`：本次执行输入，会作为模型请求里的用户上下文。
-- `rounds`：该执行单元内的模型和工具回合。
+- `result`：该执行单元对应的一次 AgentResult，内部包含模型和工具回合。
 - `status`：该执行单元的运行状态。
 
 `input` 不再叫 `prompt`，因为它不是系统提示词，也不是长期计划配置，而是本次 `Flow` 的真实输入。

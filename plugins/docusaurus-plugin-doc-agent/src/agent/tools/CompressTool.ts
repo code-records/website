@@ -1,4 +1,4 @@
-import type { Message } from '../chat/Message';
+import { Context, type ContextMessage } from '../core/Context';
 import { estimateContextTokens } from '../utils/tokenEstimator';
 import {
     Tool,
@@ -54,7 +54,7 @@ export class CompressTool extends Tool {
             '- unresolved tasks',
             '',
             `Estimated tokens: ${input.tokenEstimate}`,
-            `Tail messages kept verbatim: ${input.keepTail}`,
+            `Tail runs kept verbatim: ${input.keepTail}`,
             '',
             'Context preview:',
             input.contextPreview,
@@ -87,8 +87,8 @@ export class CompressTool extends Tool {
             };
         }
 
-        const tail = context.context.slice(-this.keepTail);
-        const compacted = context.context.slice(0, Math.max(0, context.context.length - this.keepTail));
+        const tail = context.context.messages.slice(-this.keepTail);
+        const compacted = context.context.messages.slice(0, Math.max(0, context.context.length - this.keepTail));
         const answer = await this.askModel({
             input: {
                 contextPreview: previewContext(compacted),
@@ -104,32 +104,37 @@ export class CompressTool extends Tool {
             };
         }
 
-        const summaryMessage = context.createUserContextMessage(`[Previous context summary]\n${answer.summary}`);
+        const compactedContext = new Context({
+            messages: tail,
+            summary: [context.context.summary, answer.summary].filter(Boolean).join('\n\n'),
+        });
         return {
             contextPatch: {
-                context: [
-                    summaryMessage,
-                    ...tail,
-                ],
+                context: compactedContext,
                 summary: answer.summary,
                 type: 'compact',
             },
             events: [{
                 data: {
-                    afterCount: tail.length + 1,
+                    afterCount: tail.length,
                     beforeCount: context.context.length,
                     tokenEstimate,
                 },
                 type: 'context_compacted',
             }],
-            result: `Context compacted. Kept ${tail.length} tail messages and summarized ${compacted.length} earlier messages.`,
+            result: `Context compacted. Kept ${tail.length} tail entries and summarized ${compacted.length} earlier entries.`,
         };
     }
 }
 
-function previewContext(context: readonly Message[]): string {
-    return context
-        .map((message, index) => `${index + 1}. [${message.role}] ${safeStringify(message)}`)
+function previewContext(messages: readonly ContextMessage[]): string {
+    return messages
+        .map((message, index) => {
+            const result = message.result !== undefined
+                ? `\nresult: ${safeStringify(message.result.toJSON())}`
+                : '';
+            return `${index + 1}. ${message.role}: ${message.content}${result}`;
+        })
         .join('\n')
         .slice(0, 12000);
 }

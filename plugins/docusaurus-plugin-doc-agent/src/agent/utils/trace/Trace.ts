@@ -1,4 +1,4 @@
-import type { AgentEvent } from '../../Agent';
+import type { AgentEvent } from '../../core/type';
 
 export interface TraceEntry {
     event: AgentEvent;

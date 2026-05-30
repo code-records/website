@@ -15,7 +15,7 @@ function parseSuggestItems(content) {
 }
 
 export default function SuggestMessage({ message, onSelectSuggestion, floating = false }) {
-    const suggestions = parseSuggestItems(message.flows?.[0]?.rounds?.[0]?.text);
+    const suggestions = parseSuggestItems(message.flows?.[0]?.result?.rounds?.[0]?.text);
     if (!suggestions.length) return null;
 
     return (

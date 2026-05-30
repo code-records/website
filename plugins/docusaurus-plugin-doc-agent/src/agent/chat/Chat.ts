@@ -1,7 +1,10 @@
-import type { Agent, AgentEvent } from '../Agent';
+import type { Agent } from '../core/Agent';
+import { AgentResult } from '../core/AgentResult';
+import { Context, ContextMessage } from '../core/Context';
+import type { AgentEvent } from '../core/type';
+import { Flow } from './Flow';
 import { History } from './History';
 import { Message, type MessageJSON } from './Message';
-import { Flow } from './round/Flow';
 
 export interface ChatSendOptions {
     signal?: AbortSignal;
@@ -87,10 +90,16 @@ export class Chat {
         const runSignal = signal ?? this.abortController.signal;
 
         try {
-            for await (const event of this.agent.run({ messages: this.history.items, signal: runSignal })) {
-                this.notify();
-                yield event;
+            for (const flow of assistant.flows) {
+                if (runSignal?.aborted) break;
+                if (flow.status !== 'pending') continue;
+
+                for await (const event of this.runFlow(flow, assistant, runSignal)) {
+                    this.notify();
+                    yield event;
+                }
             }
+            assistant.finish();
         } catch (error) {
             assistant.fail(error instanceof Error ? error.message : String(error));
         } finally {
@@ -99,6 +108,27 @@ export class Chat {
             }
             this.abortController = undefined;
             this.notify();
+        }
+    }
+
+    private async *runFlow(flow: Flow, assistant: Message, signal?: AbortSignal): AsyncGenerator<AgentEvent, void, void> {
+        const context = this.projectContext(assistant, flow);
+        const result = new AgentResult();
+        flow.start(result);
+        this.notify();
+
+        try {
+            for await (const event of this.agent.run({
+                context,
+                result,
+                signal,
+            })) {
+                yield event;
+            }
+            flow.finish();
+        } catch (error) {
+            flow.fail();
+            throw error;
         }
     }
 
@@ -136,6 +166,34 @@ export class Chat {
 
     toJSON(): MessageJSON[] {
         return this.history.items.map(message => message.toJSON());
+    }
+
+    private projectContext(assistant: Message, currentFlow: Flow): Context {
+        const context = new Context();
+
+        for (const message of this.history.items) {
+            if (message === assistant) {
+                for (const flow of assistant.flows) {
+                    if (flow === currentFlow) break;
+                    if (flow.status !== 'completed' || flow.result === undefined) continue;
+                    if (flow.input.trim().length === 0) continue;
+                    context.append(ContextMessage.user(flow.input));
+                    context.append(ContextMessage.assistant(flow.result.content, flow.result));
+                }
+                context.append(ContextMessage.user(currentFlow.input));
+                continue;
+            }
+
+            if (message.role !== 'assistant') continue;
+            for (const flow of message.flows) {
+                if (flow.status !== 'completed' || flow.result === undefined) continue;
+                if (flow.input.trim().length === 0) continue;
+                context.append(ContextMessage.user(flow.input));
+                context.append(ContextMessage.assistant(flow.result.content, flow.result));
+            }
+        }
+
+        return context;
     }
 
     private notify(): void {

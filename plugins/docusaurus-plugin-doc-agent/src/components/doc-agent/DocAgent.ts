@@ -1,14 +1,15 @@
 import {
     Agent,
+    AgentResult,
     ClaudeModel,
+    Context,
     GeminiModel,
-    Message,
     OpenAIModel,
     type Model,
 } from '../../agent';
 import { DOC_AGENT_TOOLS } from './tools/index';
 import { readDocByUrl } from './tools/ReadDocTool';
-import type { MessageJSON } from '../../agent';
+import type { MessageJSON } from '../../agent/chat';
 import type { DocAgentPluginOptions, DocAgentProviderOption, DocAgentProviders } from '../../index';
 
 const SUGGEST_SURFACE_ID = 'message-docs-suggestions';
@@ -149,7 +150,8 @@ export class DocAgent extends Agent {
 
         const runtimeModel = createDocAgentModel(model);
         const response = await runtimeModel.complete({
-            messages: [Message.user(content.slice(0, 3000))],
+            context: Context.from(content.slice(0, 3000)),
+            result: new AgentResult(),
             signal,
             system: [SUGGEST_PROMPT, a2uiPromptText].filter(Boolean).join('\n\n'),
             toolChoice: 'none',
@@ -159,21 +161,28 @@ export class DocAgent extends Agent {
 
         if (!responseContent) return null;
 
+        const rounds = [{
+            count: 1,
+            kind: 'round' as const,
+            status: 'completed' as const,
+            steps: [],
+            text: responseContent,
+            type: 'final' as const,
+        }];
+
         return {
             role: 'assistant',
             local: true,
             custom: 'suggest',
             flows: [{
                 count: 1,
+                input: '',
                 kind: 'flow',
-                rounds: [{
-                    actions: [],
-                    count: 1,
-                    kind: 'round',
+                result: {
+                    kind: 'agent_result',
                     status: 'completed',
-                    text: responseContent,
-                    type: 'final',
-                }],
+                    rounds,
+                },
                 status: 'completed',
             }],
         };
@@ -238,10 +247,6 @@ export function createDocAgentModel(model: string): Model {
     throw new Error(`Unknown adapter type: ${String(provider.adapter)}`);
 }
 
-export function createDocAgentUserMessage(model: Model, content: string): Message {
-    void model;
-    return Message.user(content);
-}
 
 
 

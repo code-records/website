@@ -1,225 +1,35 @@
-﻿## Flow
+# Chat
 
-正常运行时只使用 class 对象图：
-
-```text
-Chat
-└── Message[]
-    ├── user Message
-    └── assistant Message
-        └── Plan[]
-            └── Round[]
-                └── Action[]
-```
-
-```json
-{
-  "messages": [
-    {
-      "role": "user",
-      "plan": {
-        "expanded": false,
-        "rounds": [
-          {
-            "count": 1,
-            "actions": [],
-            "done": true,
-            "status": "final",
-            "text": "帮我解释这段代码"
-          }
-        ],
-        "status": "completed"
-      },
-      "plans": [
-        {
-          "expanded": false,
-          "rounds": [
-            {
-              "count": 1,
-              "actions": [],
-              "done": true,
-              "status": "final",
-              "text": "帮我解释这段代码"
-            }
-          ],
-          "status": "completed"
-        }
-      ]
-    },
-    {
-      "role": "assistant",
-      "plan": {
-        "expanded": false,
-        "rounds": [
-          {
-            "count": 1,
-            "actions": [
-              {
-                "done": true,
-                "label": "思考",
-                "text": "需要读取代码上下文。",
-                "type": "thinking"
-              },
-              {
-                "callId": "readFile-1",
-                "done": true,
-                "label": "Read input",
-                "text": "文件内容较长，省略...",
-                "type": "tool"
-              }
-            ],
-            "done": true,
-            "status": "tool_calls",
-            "text": "我先查看相关文件..."
-          },
-          {
-            "count": 2,
-            "actions": [],
-            "done": true,
-            "status": "final",
-            "text": "这段代码主要做了三件事：初始化状态、读取数据、更新 UI。细节较长，省略..."
-          }
-        ],
-        "status": "completed"
-      },
-      "plans": [
-        {
-          "expanded": false,
-          "status": "completed",
-          "rounds": [
-            {
-              "count": 1,
-              "actions": [
-                {
-                  "done": true,
-                  "label": "思考",
-                "text": "需要读取代码上下文。",
-                  "type": "thinking"
-                },
-                {
-                  "callId": "readFile-1",
-                  "done": true,
-                  "label": "Read input",
-                  "text": "文件内容较长，省略...",
-                  "type": "tool"
-                }
-              ],
-              "done": true,
-              "status": "tool_calls",
-              "text": "我先查看相关文件..."
-            },
-            {
-              "count": 2,
-              "actions": [],
-              "done": true,
-              "status": "final",
-              "text": "这段代码主要做了三件事：初始化状态、读取数据、更新 UI。细节较长，省略..."
-            }
-          ]
-        }
-      ]
-    }
-  ]
-}
-```
-
-`Message / Plan / Round / Action` 是唯一运行状态源。JSON 只作为保存、导出、恢复时的快照格式，不参与正常流转。
-
-## 线性流程
+`chat/` 是聊天场景适配层，只负责 UI/session/history/flow 编排。依赖方向固定为：
 
 ```text
-1. Chat 初始化
-   Chat 内部保存 Message[]
-
-2. 用户发送新问题
-   Chat 追加 user Message
-   Chat 创建 assistant Message
-
-3. assistant Message.generate()
-   创建新的 Plan
-   Plan.status = active
-   Plan.rounds = []
-
-4. Agent.loop(options)
-   system 在 Agent 层拼好
-   tools 是运行时工具表
-   history 是当前 Message[]，包含当前用户问题
-   rounds 直接引用 assistant Message 当前 Plan.rounds
-   notify 是 onchange，只触发 UI 重读
-
-5. loop 初始化 provider state
-   adapter.toApiMessages(history) -> provider messages
-   adapter.formatToolDefs(Object.values(tools)) -> ToolDefinition[]
-
-6. loop 调用模型
-   adapter.chat(messages, toolDefs, system)
-   adapter 返回 { raw, actions, status }
-
-7. status = continue
-   loop 写入 raw
-   loop 追加 user("继续")
-   loop 继续请求模型
-   多次 continue 的 content 会合并成一个 Round
-
-8. status = tool
-   loop 把 actions 包成 Round
-   loop push Round 到 rounds
-   notify()
-   loop 并发执行 tool actions
-   tools[call.name].execute(call.input)
-   loop 按 call.id 写回 action.call.result
-   loop 把结果转成 provider tool result message
-   每个工具完成后 notify()
-   回到第 6 步
-
-9. status = final
-   loop finalizeRound(round)
-   loop push final Round 到 rounds
-   notify()
-   loop 结束，不返回业务数据
-
-10. assistant Message 收尾
-    正文保留在 Round.text
-    Plan.status = completed
-    assistant.streaming = false
+chat -> agent/core
 ```
 
-## Content 归属
+core 不依赖 chat。
 
-`Message` 层完全不保存文本字段；不要添加 `Message.text` 或 `Message.content`。
-文本只属于 `Round.text` 或 `Action.text`。
+聊天层展示结构：
 
-- `Round.text`：只保存本轮模型输出到用户可见正文通道的文本增量。
-- `Action.text`：只保存该 action 自身的文本，例如 thinking 文本、工具结果、错误信息或上下文变更说明。
-- `thinking` action 的 `text` 来自模型返回的 reasoning / thinking 字段，它属于 action 内部数据，不等同于接口语义上的正文。
-- `tool` 状态轮里的 `Round.text` 可以作为临时过渡文本存在，但不会进入最终回答汇总，也不会作为 assistant 正文写回 provider history。
+```text
+Message
+  -> Flow[]
+      -> result: AgentResult
+          -> Round[]
+              -> Action[]
+```
 
-## 边界规则
+`Flow` 是聊天/任务流层概念。Agent core 只产出一次运行的 `AgentResult`，Chat 把这个 `result` 挂回对应的 `Flow`。
 
-- `Chat` 持有消息列表。
-- `Message` 持有当前 Plan，并负责开始和结束一次生成。
-- `Plan` 持有 Round[]，负责 active/completed/failed、折叠状态和快照。
-- `loop` 是编排器，负责模型请求、工具执行、provider history，并写入当前 `rounds`。
-- `adapter` 只读 class 对象图并转换 provider API 数据，不持有运行状态。
-- `Action` 是状态数据，不执行工具。
-- 工具是纯函数入口：`execute(input)`。
-- UI 可以直接读取 class；状态变化后由 `notify()` 触发重读。
-- `notify()` 不携带事件类型，也不承担外部执行工具的控制流。
+## 边界
 
-## 不是纯状态机
+- `Chat.ts`：会话控制器，提供 `send()`、`stream()`、`runFlows()`。
+- `History.ts`：长期聊天消息容器。
+- `MessagesStorage.ts`：保存和读取 `HistoryJSON`。
+- `Message.ts` / `Flow.ts`：只属于 chat/session/UI，不是 core 类型。
 
-当前 loop 不是纯状态机，它会直接调用模型、执行工具、维护 provider history，并写入 `rounds`。
+## 约定
 
-纯状态机只接收当前 `state` 和 `event`，返回下一个 `state` 与 `effects` 描述；模型请求、工具执行、网络调用都在状态机外部执行，再把结果作为 event 喂回状态机。
-
-## 接口模式与流模式
-
-详见 [adapter/MODES.md](./adapter/MODES.md)。
-
-
-
-
-
-
-
-
+- 普通聊天创建一个 user message 和一个 assistant message。
+- 特殊任务流可以创建多个 `Flow`，挂在同一个 assistant message 上，由 Chat 顺序调用 `Agent.run()`。
+- `Flow` 不保存 `rounds` 快照；运行轨迹只在 `Flow.result.rounds`。
+- `chat` 不执行模型、不执行工具、不理解 provider 请求格式。

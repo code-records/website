@@ -1,5 +1,6 @@
-import type { Agent, AgentEvent } from '../Agent';
-import { Message } from '../chat/Message';
+import type { Agent } from '../core/Agent';
+import { ContextMessage } from '../core/Context';
+import type { AgentEvent } from '../core/type';
 import { Tool, type JsonObject, type ToolUsage, type ToolInput, type ToolPromptSchema, type ToolResult, type ToolRunContext } from './tool/Tool';
 
 export interface SubAgentToolOptions {
@@ -77,10 +78,12 @@ export class SubAgentTool extends Tool {
             : parsed.task;
 
         const events: JsonObject[] = [];
-        const subAssistant = Message.assistant();
-        const subContext = [Message.user(prompt), subAssistant];
+        let content = '';
 
-        for await (const event of subAgent.run({ messages: subContext, signal: context.signal })) {
+        const subContext = context.context.clone();
+        subContext.append(ContextMessage.user(prompt));
+
+        for await (const event of subAgent.run({ context: subContext, signal: context.signal })) {
             events.push(agentEventToJson(event));
             if (event.type === 'agent_error') {
                 return {
@@ -95,9 +98,14 @@ export class SubAgentTool extends Tool {
                     result: `[Sub-agent error] ${event.error.message}`,
                 };
             }
+            if (event.type === 'agent_done') {
+                content = event.response?.content ?? content;
+            }
+            if (event.type === 'model_event' && event.event.type === 'content') {
+                content += event.event.content;
+            }
         }
 
-        const content = subAssistant.flows[0]?.text ?? '';
         const result = truncate(content.trim(), this.maxResultChars) || '[Sub-agent returned no content]';
 
         return {

@@ -1,18 +1,20 @@
-import type { Message } from '../../chat/Message';
+import { Context } from '../../core/Context';
 import type { ContextPatch } from './Tool';
 
-export function applyContextPatch(messages: readonly Message[], patch: ContextPatch): Message[] {
+export function applyContextPatch(context: Context, patch: ContextPatch): Context {
     if (patch.type === 'append') {
-        return [...messages, ...patch.context];
+        const next = context.clone();
+        next.merge(patch.context);
+        return next;
     }
     if (patch.type === 'replace' || patch.type === 'compact') {
-        return [...patch.context];
+        return patch.context.clone();
     }
-    return [...messages];
+    return context.clone();
 }
 
 export function mergeContextPatches(
-    baseContext: readonly Message[],
+    baseContext: Context,
     patches: readonly ContextPatch[],
 ): ContextPatch | undefined {
     if (patches.length === 0) {
@@ -20,13 +22,17 @@ export function mergeContextPatches(
     }
 
     if (patches.every(patch => patch.type === 'append')) {
+        const context = new Context();
+        for (const patch of patches) {
+            context.merge(patch.context);
+        }
         return {
-            context: patches.flatMap(patch => patch.context),
+            context,
             type: 'append',
         };
     }
 
-    let finalContext = [...baseContext];
+    let finalContext = baseContext.clone();
     let compactSummary: string | undefined;
     let hasCompact = false;
 

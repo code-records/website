@@ -37,7 +37,7 @@ graph TD
 ### 核心设计哲学
 
 1. **单状态源（Single Source of Truth）**
-   * **不引入第二状态源**：没有公共的临时线性 `ContextMessage[]`。系统唯一的状态源就是 `Message / Plan / Round / Action`。
+   * **不引入第二状态源**：没有公共的临时线性 `ContextMessage[]`。系统唯一的状态源就是 `Message / Flow / Round / Action`。
    * **按需提炼**：在向 Model 发送请求时，Model 适配器根据当前上下文（如历史轮次、当前正在执行的轮次）从 `Message[]` 树中提炼出 provider 特有的线性消息格式（如 OpenAI 的 `function_call`，Claude 的 `tool_use`）。
    * **保持一致**：GUI 看到的完整推理过程（Thinking、Tool Call、Tool Result）与下一轮模型请求需要的事实，均来自于同一份公共状态源，从而实现完美的状态同步与回放支持。
 
@@ -57,11 +57,11 @@ graph TD
 
 | 层次/模块 | 物理路径 | 核心职责 | 典型接口与类 |
 | :--- | :--- | :--- | :--- |
-| **智能体入口** | `src/agent/` | **对外统一声明与边界封装**：声明 Agent 身份（`name`）、目标与提示词（`instructions`）、绑定工具箱（`tools`）与子智能体（`subAgents`）。提供流式 `run()` 与非流式 `complete()`。 | `Agent.ts` |
-| **执行编排** | `src/agent/core/` | **无状态状态机**：消费 Model 事件，驱动 Tool 执行，协调 `Model ↔ Tool` 循环，并将状态变化打包成 `AgentEvent` 事件流向上透传。不维护长期历史。 | `loop.ts`, `helper.ts`, `CONTEXT.md` |
-| **模型适配** | `src/agent/model/` | **模型生态解耦**：将不同厂商协议（OpenAI, Claude, Gemini）抽象为统一事件（`ModelEvent`）；负责从公共状态 `Message[]` 提炼 provider 专有请求；判定模型决策状态（继续、调用工具或结束）。 | `Model.ts`, `OpenAIModel.ts`, `ClaudeModel.ts`, `GeminiModel.ts` |
+| **智能体入口** | `src/agent/` | **对外统一声明与边界封装**：声明 Agent 身份（`name`）、目标与提示词（`instructions`）、绑定工具箱（`tools`）与子智能体（`subAgents`）。提供流式 `run()`、结构化 `generate()` 与文本便捷入口 `ask()`。 | `Agent.ts` |
+| **执行编排与核心状态** | `src/agent/core/` | **Agent 核心**：定义 `AgentMessage / AgentResult / Round / Action` 结构化状态，消费 Model 事件，驱动 Tool 执行，协调 `Model ↔ Tool` 循环，并将状态变化打包成 `AgentEvent` 事件流向上透传。不维护长期 session。 | `AgentMessage.ts`, `AgentResult.ts`, `loop.ts`, `helper.ts` |
+| **模型适配** | `src/agent/model/` | **模型生态解耦**：将不同厂商协议（OpenAI, Claude, Gemini）抽象为统一事件（`ModelEvent`）；负责从核心状态 `Message[]` 提炼 provider 专有请求；判定模型决策状态（继续、调用工具或结束）。 | `Model.ts`, `OpenAIModel.ts`, `ClaudeModel.ts`, `GeminiModel.ts` |
 | **能力扩展** | `src/agent/tools/` | **沙箱工具箱与控制器**：暴露强类型的工具定义、执行逻辑；管理工具注册；由 `ToolRunner` 处理并发调度、超时控制、中断（Kill/Pause）与局部模型回问能力。 | `Tool.ts`, `ToolManager.ts`, `ToolRunner.ts`, `ToolRegistry.ts` |
-| **会话历史** | `src/agent/chat/` | **公共状态树结构**：保存 GUI/Session 级别的长期聊天历史，支持 Plan、Round、Action 深度结构化数据，供前端渲染与模型再次提炼。 | `Message.ts`, `Chat.ts`, `History.ts`, `MessagesStorage.ts`, `round/` |
+| **会话历史** | `src/agent/chat/` | **聊天场景适配层**：保存 GUI/Session 级别的长期聊天历史、字符串发送入口与持久化；允许依赖 `agent/core`，但 `agent` 根入口与核心层不依赖 `chat`。 | `Chat.ts`, `History.ts`, `MessagesStorage.ts` |
 | **通用工具** | `src/agent/utils/` | **底层支持**：提供 Token 估算、JSON 安全解析、SSE 处理、错误封装与全链路日志 Trace。 | `errors.ts`, `trace.ts` |
 
 ---
@@ -129,11 +129,11 @@ graph TD
 
 ## 4. 关键设计细节
 
-### 4.1 深入“单状态源”设计 (`chat/round/`)
+### 4.1 深入“单状态源”设计 (`core/`)
 传统 Agent 通常仅将历史作为线性消息数组存储。而 AskSky 引入了高度结构化的**回复过程模型**：
 
-* `Message`：消息单元。对于 Assistant 角色，除了回复文本外，还包含一个 `Plan`。
-* `Plan`：计划模型。代表该回复内的多轮推理计划。
+* `Message`：消息单元。对于 Assistant 角色，挂载一个或多个 `Flow`。
+* `Flow`：执行单元。普通聊天只有一个 Flow；编程向导、模板任务等可以拆成多个顺序 Flow。
 * `Round`：执行轮次。代表在该回复中，主循环驱动的一轮 `Model ↔ Tool` 交互。它记录这一轮的模型输出（文本、Thinking）和所触发Action。
 * `Action`：推理动作。可以是 `thinking`（模型思考过程）、`tool`（工具调用意图及最终执行结果）。
 
@@ -175,7 +175,7 @@ graph TD
 1. **新建适配文件**：在 `src/agent/model/` 创建 `NewModel.ts` 继承自抽象基类 `Model`。
 2. **实现事件流**：实现 `stream()` 方法，将新模型的流式/非流式响应实时封装为统一的 `ModelEvent`（尤其是多 Tool Call、Thinking 的 Delta 增量解析）。
 3. **实现 Provider 请求映射**：
-   * 实现 `expandMessageToProviderMessages()`：将公共结构化的 `Message / Plan / Round / Action` 提炼映射为新模型需要的线性 Messages JSON 数组。
+   * 实现 `expandMessageToProviderMessages()`：将公共结构化的 `Message / Flow / Round / Action` 提炼映射为新模型需要的线性 Messages JSON 数组。
    * 实现 `expandToolAskToProviderMessages()`：映射工具内部回问（Tool Ask）的消息格式。
 4. **工具描述转换**：将 `ToolDefinition` 映射为对应模型所要求的 JSON Schema（例如把 prompt 格式化为 OpenAI/Gemini 特定的 parameters 字段）。
 5. **结束标志映射**：在新模型响应结束时，将其结束状态（Finish Reason）安全映射为标准状态 `final`、`tool` 或 `continue`。
@@ -200,20 +200,23 @@ graph TD
 src/agent/
 ├── Agent.ts               # Agent 基类及外部核心 API 入口
 ├── index.ts               # Agent 统一导出网关
-├── chat/                  # 会话历史与过程模型 (Single Source of Truth)
+├── chat/                  # 聊天场景适配、会话历史与持久化
 │   ├── Chat.ts            # 会话管理器
 │   ├── History.ts         # 长期历史定义
-│   ├── Message.ts         # 消息单元（挂载 Plan/Round 状态树）
+│   ├── Message.ts         # chat/session/UI 消息
 │   ├── MessagesStorage.ts    # Session 持久化与反序列化
-│   ├── index.ts           # chat 导出
-│   └── round/             # 执行轮次与动作细分
-│       ├── Action.ts      # 动作抽象 (thinking, tool...)
-│       ├── Plan.ts        # 回复推理计划模型
-│       └── Round.ts       # 执行轮次模型
-├── core/                  # 执行引擎与状态机编排
+│   └── Flow.ts            # chat 任务流容器
+├── core/                  # Agent 核心结构、执行引擎与状态机编排
+│   ├── AgentMessage.ts    # Agent 输入上下文消息
+│   ├── AgentResult.ts     # 单次 Agent 运行结果
+│   ├── Status.ts          # 运行状态类型
+│   ├── round/             # 执行轮次与动作细分
+│   │   ├── Action.ts      # 动作抽象 (thinking, tool...)
+│   │   ├── Round.ts       # 执行轮次模型
+│   │   └── Step.ts        # 预留扩展点
 │   ├── loop.ts            # 核心编排循环 (loop)
 │   ├── helper.ts          # 辅助函数（事件拼接、Patch 应用、Ask 构建）
-│   ├── CONTEXT.md         # 深入状态设计的思想白皮书
+│   ├── Context.ts         # LoopContext 预留位置
 │   └── README.md          # 编排层开发规范
 ├── model/                 # 模型适配层 (Provider Adapters)
 │   ├── Model.ts           # 模型适配抽象基类与事件契约

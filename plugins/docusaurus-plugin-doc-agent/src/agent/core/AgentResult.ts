@@ -1,47 +1,23 @@
-import type { AgentEvent } from '../../Agent';
-import { Action } from './Action';
+import { Step } from './Step';
 import { Round, type RoundJSON } from './Round';
+import type { AgentEvent, ClientStatus } from './type';
 
-export type ClientStatus = 'pending' | 'completed' | 'failed';
-
-export interface FlowJSON {
-    count: number;
-    expanded?: boolean;
-    input?: string;
-    kind?: 'flow';
-    label?: string;
+export interface AgentResultJSON {
+    kind?: 'agent_result';
     rounds: RoundJSON[];
     status: ClientStatus;
 }
 
-export interface FlowOptions {
-    input?: string;
-    label?: string;
-}
-
-export class Flow {
-    readonly kind = 'flow';
+export class AgentResult {
+    readonly kind = 'agent_result';
     status: ClientStatus = 'pending';
-    count = 0;
-    label = '';
-    input = '';
-    expanded = false;
     private readonly _rounds: Round[] = [];
-
-    constructor(options: FlowOptions = {}) {
-        this.input = options.input ?? '';
-        this.label = options.label ?? '';
-    }
 
     get rounds(): readonly Round[] {
         return this._rounds;
     }
 
-    get items(): readonly Round[] {
-        return this._rounds;
-    }
-
-    get text(): string {
+    get content(): string {
         return this._rounds
             .filter(round => round.type === 'final' || round.type === 'continue')
             .map(round => round.text)
@@ -49,33 +25,20 @@ export class Flow {
             .join('');
     }
 
-    formatLabel(): string {
-        if (this.label.length > 0) return this.label;
-        return `执行 ${this.count}`;
-    }
-
-    get currentRound(): Round | undefined {
-        return this._rounds[this._rounds.length - 1];
-    }
-
-    static fromJSON(json: FlowJSON): Flow {
-        const flow = new Flow();
-        flow.count = json.count ?? 0;
-        flow.expanded = json.expanded === true;
-        flow.input = json.input ?? '';
-        flow.label = json.label ?? '';
-        flow.status = json.status;
+    static fromJSON(json: AgentResultJSON): AgentResult {
+        const result = new AgentResult();
+        result.status = json.status;
         for (const round of json.rounds) {
-            flow._rounds.push(Round.fromJSON(round));
+            result._rounds.push(Round.fromJSON(round));
         }
-        return flow;
+        return result;
     }
 
     apply(event: AgentEvent): Round | null {
         if (event.type === 'agent_error') {
             const round = this.ensureRound();
-            const action = Action.fromAgentEvent(event) as Action;
-            round.add(action);
+            const step = Step.fromAgentEvent(event) as Step;
+            round.add(step);
             this.status = 'failed';
             this.failOpenRound();
             return round;
@@ -99,54 +62,49 @@ export class Flow {
             return round;
         }
 
-        const action = Action.fromAgentEvent(event);
-        if (action === null) return null;
+        const step = Step.fromAgentEvent(event);
+        if (step === null) return null;
 
         const round = event.type === 'model_event' ? this.ensureModelRound() : this.ensureRound();
-        if (action.type === 'tool') {
-            if (round.updateTool(action)) return round;
-            round.add(action);
+        if (step.type === 'tool') {
+            if (round.updateTool(step)) return round;
+            round.add(step);
             return round;
         }
         if (event.type === 'model_event' && event.event.type === 'action' && event.event.kind === 'update') {
-            if (round.updateLast(action)) return round;
+            if (round.updateLast(step)) return round;
         }
-        if (action.type === 'thinking' && round.appendToLast(action.type, action.text)) {
+        if (step.type === 'thinking' && round.appendToLast(step.type, step.text)) {
             return round;
         }
-        round.add(action);
+        round.add(step);
         return round;
     }
 
-    appendUserText(text: string): void {
-        const round = this.ensureRound();
-        round.appendText(text);
-        round.type = 'final';
-    }
-
-    finish(): void {
+    complete(): void {
         this.status = 'completed';
         this.completeOpenRound();
     }
 
-    toggle(): void {
-        this.expanded = !this.expanded;
+    fail(): void {
+        this.status = 'failed';
+        this.failOpenRound();
     }
 
-    toJSON(): FlowJSON {
+    toJSON(): AgentResultJSON {
         return {
             kind: this.kind,
             status: this.status,
-            count: this.count,
-            input: this.input,
-            label: this.label,
-            expanded: this.expanded,
             rounds: this._rounds.map(round => round.toJSON()),
         };
     }
 
+    private get currentRound(): Round | undefined {
+        return this._rounds[this._rounds.length - 1];
+    }
+
     private ensureRound(): Round {
-        const last = this._rounds[this._rounds.length - 1];
+        const last = this.currentRound;
         if (last !== undefined && last.status === 'pending') {
             return last;
         }
@@ -156,7 +114,7 @@ export class Flow {
     }
 
     private ensureModelRound(): Round {
-        const last = this._rounds[this._rounds.length - 1];
+        const last = this.currentRound;
         if (last !== undefined && last.status === 'pending' && last.type !== undefined) {
             last.complete();
         }
@@ -164,14 +122,14 @@ export class Flow {
     }
 
     private completeOpenRound(): void {
-        const last = this._rounds[this._rounds.length - 1];
+        const last = this.currentRound;
         if (last !== undefined) {
             last.complete();
         }
     }
 
     private failOpenRound(): void {
-        const last = this._rounds[this._rounds.length - 1];
+        const last = this.currentRound;
         if (last !== undefined) {
             last.fail();
         }

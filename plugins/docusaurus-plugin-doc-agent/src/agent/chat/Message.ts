@@ -1,8 +1,9 @@
-import { Flow, type FlowJSON } from './round/Flow';
+import { Flow, type FlowJSON } from './Flow';
 
 export type MessageRole = 'assistant' | 'user';
 
 export interface MessageJSON {
+    content?: string;
     custom?: string;
     error?: string;
     flows?: FlowJSON[];
@@ -15,14 +16,16 @@ export interface MessageJSON {
 export class Message {
     readonly flows: Flow[] = [];
     readonly role: MessageRole;
+    content = '';
     custom?: string;
     error?: string;
     isError = false;
     local = false;
     streaming = false;
 
-    private constructor(role: MessageRole, flows: Flow[] = []) {
+    private constructor(role: MessageRole, content = '', flows: Flow[] = []) {
         this.role = role;
+        this.content = content;
         this.flows = flows;
         this.flows.forEach((flow, index) => {
             if (flow.count === 0) {
@@ -32,31 +35,19 @@ export class Message {
         this.streaming = role === 'assistant';
     }
 
-    /**
-     * Message deliberately has no text/content field.
-     * User/local text is stored in Round.text so every textual payload stays inside Flow/Round/Action.
-     */
-    static user(text: string): Message {
-        const flow = new Flow();
-        if (text.length > 0) {
-            flow.appendUserText(text);
-        }
-        flow.finish();
-        return new Message('user', [flow]);
+    static user(content: string): Message {
+        return new Message('user', content);
     }
 
-    static assistant(flows: Flow[] = [new Flow()]): Message {
-        if (flows.length === 0) {
-            throw new Error('Assistant message requires at least one flow');
-        }
-        return new Message('assistant', flows);
+    static assistant(flows: Flow[] = []): Message {
+        return new Message('assistant', '', flows);
     }
 
     static fromJSON(json: MessageJSON): Message {
-        const flowsJson = json.flows ?? [];
         const message = new Message(
             json.role,
-            flowsJson.map(flow => Flow.fromJSON(flow)),
+            json.content ?? '',
+            (json.flows ?? []).map(flow => Flow.fromJSON(flow)),
         );
         message.custom = json.custom;
         message.error = json.error;
@@ -64,18 +55,6 @@ export class Message {
         message.local = json.local === true;
         message.streaming = json.streaming === true;
         return message;
-    }
-
-    toJSON(): MessageJSON {
-        return {
-            role: this.role,
-            ...(this.custom !== undefined ? { custom: this.custom } : {}),
-            ...(this.error !== undefined ? { error: this.error } : {}),
-            ...(this.flows.length > 0 ? { flows: this.flows.map(flow => flow.toJSON()) } : {}),
-            ...(this.isError ? { isError: true } : {}),
-            ...(this.local ? { local: true } : {}),
-            ...(this.streaming ? { streaming: true } : {}),
-        };
     }
 
     finish(): void {
@@ -86,5 +65,18 @@ export class Message {
         this.streaming = false;
         this.error = error;
         this.isError = true;
+    }
+
+    toJSON(): MessageJSON {
+        return {
+            role: this.role,
+            ...(this.content.length > 0 ? { content: this.content } : {}),
+            ...(this.custom !== undefined ? { custom: this.custom } : {}),
+            ...(this.error !== undefined ? { error: this.error } : {}),
+            ...(this.flows.length > 0 ? { flows: this.flows.map(flow => flow.toJSON()) } : {}),
+            ...(this.isError ? { isError: true } : {}),
+            ...(this.local ? { local: true } : {}),
+            ...(this.streaming ? { streaming: true } : {}),
+        };
     }
 }
