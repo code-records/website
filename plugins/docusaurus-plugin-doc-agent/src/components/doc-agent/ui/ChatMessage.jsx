@@ -7,6 +7,11 @@ function flattenRoundSteps(rounds) {
         .filter(step => step?.type === 'tool');
 }
 
+function hasRoundThinking(rounds) {
+    return (Array.isArray(rounds) ? rounds : [])
+        .some(round => Array.isArray(round?.steps) && round.steps.some(step => step?.type === 'thinking'));
+}
+
 function formatLabel(step) {
     return step?.label || step?.call?.name || '工具';
 }
@@ -23,6 +28,7 @@ function FlowItem({ flow, idx, onToggle, isLast, isCompleted, isError }) {
     const [localExpanded, setLocalExpanded] = useState(false);
     const scrollRef = React.useRef(null);
     const steps = flattenRoundSteps(flow?.result?.rounds);
+    const hasThinking = hasRoundThinking(flow?.result?.rounds);
 
     React.useEffect(() => {
         if (scrollRef.current) {
@@ -32,12 +38,15 @@ function FlowItem({ flow, idx, onToggle, isLast, isCompleted, isError }) {
 
     const expanded = onToggle ? flow.expanded : localExpanded;
     const noItems = steps.length === 0;
+    const hasAnalysis = hasThinking || steps.length > 0;
     const failed = isError || flow?.status === 'failed';
     const label = failed
         ? '分析异常'
         : isCompleted && isLast && noItems
             ? '分析完毕，已生成回答'
-            : (flow?.status === 'pending' ? '正在工作' : '分析完毕');
+            : (flow?.status === 'pending'
+                ? (hasAnalysis ? '正在分析' : '正在工作')
+                : '分析完毕');
 
     const handleClick = () => {
         if (onToggle) {

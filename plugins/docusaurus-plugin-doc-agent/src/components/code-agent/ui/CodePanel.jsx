@@ -28,7 +28,6 @@ export class CodePanel extends React.Component {
             model: currentModel,
             directoryHandle: null,
             workspaceFiles: [],
-            suggestions: [],
             attachments: [],
         };
         this.messagesAreaRef = React.createRef();
@@ -46,7 +45,6 @@ export class CodePanel extends React.Component {
 
     componentDidMount() {
         this.scrollToBottom();
-        this.pushSuggestions();
 
         // 尝试静默恢复昨日已授权的本地工作区
         queryFileSystemDirectoryHandle().then(handle => {
@@ -91,9 +89,7 @@ export class CodePanel extends React.Component {
                 }
                 return a.name.localeCompare(b.name);
             });
-            this.setState({ workspaceFiles: items }, () => {
-                this.pushSuggestions();
-            });
+            this.setState({ workspaceFiles: items });
         } catch (e) {
             console.error('[CodeAgent] 加载本地目录树异常:', e);
         }
@@ -118,25 +114,9 @@ export class CodePanel extends React.Component {
             await disposeFileSystemDirectoryHandle();
             this.setState({ directoryHandle: null, workspaceFiles: [] }, () => {
                 this.bindDirectoryHandle(null);
-                this.pushSuggestions();
             });
         } catch (err) {
             console.error('[CodeAgent] 断开授权连接异常:', err);
-        }
-    };
-
-    pushSuggestions = async () => {
-        try {
-            const text = await this.agent.suggestWorkspaceQuestions();
-            if (!text) {
-                this.setState({ suggestions: [] });
-                return;
-            }
-            const items = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
-            this.setState({ suggestions: items });
-        } catch (e) {
-            console.warn('[CodeAgent] 推荐问题获取失败:', e);
-            this.setState({ suggestions: [] });
         }
     };
 
@@ -170,7 +150,7 @@ export class CodePanel extends React.Component {
         if (!question || this.chat.isSending) return;
 
         if (this.inputRef.current) this.inputRef.current.style.height = 'auto';
-        this.setState({ inputValue: '', suggestions: [] });
+        this.setState({ inputValue: '' });
 
         this.scrollToBottom(true);
         await this.chat.send(question);
@@ -182,13 +162,11 @@ export class CodePanel extends React.Component {
 
     handleSuggestionClick = async (question) => {
         if (!question || this.chat.isSending) return;
-        this.setState({ suggestions: [] });
         this.scrollToBottom(true);
         await this.chat.send(question);
     };
 
     handleWelcomeFlowStart = () => {
-        this.setState({ suggestions: [] });
         this.scrollToBottom(true);
     };
 
@@ -203,7 +181,6 @@ export class CodePanel extends React.Component {
 
     handleClearHistory = () => {
         this.chat.clear();
-        this.pushSuggestions();
     };
 
     handleAddAttachment = () => {
@@ -252,7 +229,7 @@ export class CodePanel extends React.Component {
     };
 
     render() {
-        const { inputValue, model, directoryHandle, workspaceFiles, suggestions, attachments } = this.state;
+        const { inputValue, model, directoryHandle, workspaceFiles, attachments } = this.state;
         const isLoading = this.chat.isSending;
         const hasRealMessages = this.hasConversationMessages();
 
@@ -292,9 +269,11 @@ export class CodePanel extends React.Component {
                         modelOptions={this.agent.modelOptions}
                         isLoading={isLoading}
                         interactionSlot={
-                            suggestions.length > 0 && (
+                            !isLoading && (
                                 <SuggestMessage
-                                    suggestions={suggestions}
+                                    agent={this.agent}
+                                    directoryHandle={directoryHandle}
+                                    workspaceFiles={workspaceFiles}
                                     onSelectSuggestion={this.handleSuggestionClick}
                                 />
                             )

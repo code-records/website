@@ -20,7 +20,7 @@ function buildTimelineItems(message) {
 
         // Keep the timeline at flow/round level; steps stay nested under rounds.
         for (const round of flow.result?.rounds ?? []) {
-            const steps = round.steps
+            const visibleSteps = round.steps
                 .filter(step => step.type !== 'thinking')
                 .map(step => ({
                     kind: 'step',
@@ -33,21 +33,34 @@ function buildTimelineItems(message) {
                 }))
                 .filter(step => step.type === 'tool' ? step.label.length > 0 : step.text.length > 0);
 
+            const hasThinking = round.steps.some(step => step.type === 'thinking');
             const text = typeof round.text === 'string' ? round.text.trim() : '';
             if (text.length === 0) {
                 const previous = items[items.length - 1];
-                if (steps.length > 0 && previous?.kind === 'round') {
-                    previous.steps = previous.steps.concat(steps);
+                if (visibleSteps.length > 0 && previous?.kind === 'round') {
+                    previous.steps = previous.steps.concat(visibleSteps);
                     previous.label = formatStepsUsageLabel(previous.steps, round.status) || formatRoundLabel(round);
+                    previous.hasThinking = previous.hasThinking || hasThinking;
+                    continue;
+                }
+                if (hasThinking || visibleSteps.length > 0 || round.status === 'pending') {
+                    items.push({
+                        hasThinking,
+                        kind: 'round',
+                        label: formatStepsUsageLabel(visibleSteps, round.status) || formatRoundLabel(round),
+                        steps: visibleSteps,
+                        text: '',
+                    });
                 }
                 continue;
             }
 
-            const label = formatStepsUsageLabel(steps, round.status) || formatRoundLabel(round);
+            const label = formatStepsUsageLabel(visibleSteps, round.status) || formatRoundLabel(round);
             items.push({
+                hasThinking,
                 kind: 'round',
                 label,
-                steps,
+                steps: visibleSteps,
                 text,
             });
         }

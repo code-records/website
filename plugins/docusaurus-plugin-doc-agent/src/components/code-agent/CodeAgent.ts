@@ -1,7 +1,5 @@
 import {
     Agent,
-    AgentResult,
-    Context,
 } from '../../agent';
 import { BrowserFileTool } from '../../agent/tools/browser/BrowserFileTool';
 
@@ -139,9 +137,6 @@ export class CodeAgent extends Agent {
         return this.defaultModelId;
     }
 
-    /**
-     * 动态配置或注销本地工作区的 BrowserFileTool 物理代码读写工具
-     */
     setDirectoryHandle(handle: FileSystemDirectoryHandle | null): void {
         this.tools = this.tools.filter(tool => tool.name !== 'file');
         if (handle) {
@@ -149,38 +144,6 @@ export class CodeAgent extends Agent {
         }
     }
 
-    /**
-     * 根据授权获得的本地文件特征，动态由 AI 生成高准度的推荐问题
-     */
-    async suggestWorkspaceQuestions({ signal }: { signal?: AbortSignal } = {}): Promise<string | null> {
-        const dev = true;
-        if (dev) {
-            const response = { content: '依赖关系梳理\n检测代码问题\n给出改进建议\n直接创作一篇完整的故事' };
-            return dedupeSuggestionLines(response.content || '');
-        }
-
-        const fileTool = this.tools.find(t => t instanceof BrowserFileTool);
-        if (!fileTool) return null;
-
-        try {
-            const listResult = await fileTool.run({ operation: 'list', path: '.' });
-            const fileListStr = listResult.result || '';
-            if (!fileListStr) return null;
-
-            const runtimeModel = this.model;
-            const response = await runtimeModel.complete({
-                context: Context.from(`这是我当前项目的根目录文件列表：\n${fileListStr}`),
-                result: new AgentResult(),
-                signal,
-                system: this.config.suggestPrompt,
-                toolChoice: 'none',
-            });
-            return dedupeSuggestionLines(response.content || '');
-        } catch (e) {
-            console.error('[CodeAgent] AI 动态推荐问题生成发生异常:', e);
-            return null;
-        }
-    }
 }
 
 function buildCodeAgentSystemPrompt(config: CodeAgentConfig): string {
@@ -197,22 +160,6 @@ function formatPromptSection(title: string, items: string[]): string {
         .filter(Boolean)
         .join('\n\n');
     return content.length > 0 ? `${title}：\n${content}` : '';
-}
-
-function dedupeSuggestionLines(content: string): string | null {
-    const seen = new Set<string>();
-    const lines = content
-        .split(/\r?\n/)
-        .map(line => line.replace(/^\s*(?:[-*]|\d+[.)])\s*/, '').trim())
-        .filter(line => {
-            if (!line) return false;
-            if (seen.has(line)) return false;
-            seen.add(line);
-            return true;
-        })
-    // .slice(0, 3);
-
-    return lines.length > 0 ? lines.join('\n') : null;
 }
 
 export function createCodeAgentModel(config: CodeAgentConfig, model = config.defaultModel) {
