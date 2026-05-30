@@ -22,8 +22,6 @@ const DEFAULT_GEMINI_GENERATE_URL = 'https://generativelanguage.googleapis.com/v
 const DEFAULT_GEMINI_STREAM_URL = 'https://generativelanguage.googleapis.com/v1beta/models/{model}:streamGenerateContent?alt=sse';
 
 export class GeminiModel extends Model {
-    private readonly toolNamesById = new Map<string, string>();
-
     constructor({ url = DEFAULT_GEMINI_GENERATE_URL, streamUrl = DEFAULT_GEMINI_STREAM_URL, ...rest }: ModelConfig) {
         super({
             url: url || DEFAULT_GEMINI_GENERATE_URL,
@@ -62,7 +60,6 @@ export class GeminiModel extends Model {
 
             for (const call of parsed.toolCalls) {
                 toolCalls.push(call);
-                this.toolNamesById.set(call.id, call.name);
                 yield { type: 'action', action: { type: 'tool', call }, kind: 'add' };
             }
         }
@@ -205,9 +202,6 @@ export class GeminiModel extends Model {
         }
 
         const parsed = this.parseCandidates(response);
-        for (const call of parsed.toolCalls) {
-            this.toolNamesById.set(call.id, call.name);
-        }
         const actions = this.createActions(parsed.toolCalls);
 
         return {

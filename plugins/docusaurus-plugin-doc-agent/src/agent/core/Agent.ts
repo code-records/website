@@ -45,7 +45,6 @@ export abstract class Agent {
     abstract model: Model;
 
     tools: Tool[] = [];
-    subAgents: Agent[] = [];
 
     constructor(protected context: AgentContext = {}) { }
 
@@ -108,7 +107,6 @@ export abstract class Agent {
                 maxRounds: this.context.maxRounds,
                 model: this.model,
                 signal: prepared.signal,
-                subAgents: this.subAgents,
                 system: this.systemPrompt,
                 toolTimeoutMs: this.context.toolTimeoutMs,
                 tools: [...this.defaultTools(), ...this.tools],

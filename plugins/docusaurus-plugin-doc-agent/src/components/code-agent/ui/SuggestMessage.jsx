@@ -30,7 +30,6 @@ async function suggestWorkspaceQuestions(agent, { signal } = {}) {
             result: new AgentResult(),
             signal,
             system: agent.config.suggestPrompt,
-            toolChoice: 'none',
         });
         return dedupeSuggestionLines(response.content || '');
     } catch (e) {

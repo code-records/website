@@ -154,7 +154,6 @@ export class DocAgent extends Agent {
             result: new AgentResult(),
             signal,
             system: [SUGGEST_PROMPT, a2uiPromptText].filter(Boolean).join('\n\n'),
-            toolChoice: 'none',
         });
 
         const responseContent = response.content;

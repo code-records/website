@@ -21,7 +21,6 @@ export function createAskFactory({
                 context: Context.from(input),
                 result: new AgentResult(),
                 system: `${system}\n\nCurrent tool: ${toolName}`,
-                toolChoice: 'none',
                 signal,
             });
             return request.prompt.parse(response.content);

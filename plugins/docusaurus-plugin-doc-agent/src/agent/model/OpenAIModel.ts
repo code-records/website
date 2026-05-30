@@ -250,19 +250,6 @@ export class OpenAIModel extends Model {
         }
     }
 
-    private textContent(content: JsonValue | undefined, inputType = 'input_text'): JsonValue[] {
-        const text = String(content ?? '');
-        return text.length > 0 ? [{ text, type: inputType }] : [];
-    }
-
-    private readText(content: JsonValue | undefined): string {
-        if (typeof content === 'string') return content;
-        if (!Array.isArray(content)) return String(content ?? '');
-        return content
-            .map(part => isJsonObject(part) ? optionalString(part.text) : '')
-            .join('');
-    }
-
     private createActions(thinking: string, toolCalls: readonly ModelToolCall[]): ModelAction[] {
         return [
             ...(thinking.length > 0 ? [{ type: 'thinking' as const, content: thinking }] : []),

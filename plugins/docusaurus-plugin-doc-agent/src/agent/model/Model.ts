@@ -38,7 +38,6 @@ export interface ModelRequest {
     system?: string;
     signal?: AbortSignal;
     /** 子询问等场景可禁用工具，避免模型继续递归调用工具。 */
-    toolChoice?: 'auto' | 'none' | { name: string };
 }
 
 export type ModelResponseType = 'tool_calls' | 'continue' | 'final';

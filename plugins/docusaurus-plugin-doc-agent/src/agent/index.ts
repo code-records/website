@@ -13,7 +13,7 @@ export * from './model/GeminiModel';
 export * from './tools/CompressTool';
 // export * from './tools/ModeTool';
 // export * from './tools/PlanTool';
-export * from './tools/ScheduleTool';
+// export * from './tools/ScheduleTool';
 // export * from './tools/SubAgentTool';
 export * from './tools/tool/Tool';
 export * from './tools/tool/ToolManager';

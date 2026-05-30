@@ -2,7 +2,6 @@
 
 import { Context } from '../../core/Context';
 import type { ModelToolCall } from '../../model/Model';
-import type { ToolRunner } from './ToolRunner';
 
 export type JsonPrimitive = string | number | boolean | null;
 export type JsonValue = JsonPrimitive | JsonValue[] | { [key: string]: JsonValue };
@@ -64,7 +63,6 @@ export interface ToolRunContext {
     /** 当前 loop 中全部工具的只读视图，调度工具可观察其他工具状态。 */
     tools: ReadonlyMap<string, Tool>;
     /** 工具执行控制器，调度工具可用它串行/并行运行工具。 */
-    runner?: ToolRunner;
     signal?: AbortSignal;
 }
 

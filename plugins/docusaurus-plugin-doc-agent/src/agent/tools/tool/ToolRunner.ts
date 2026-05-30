@@ -1,24 +1,14 @@
 import type { Context } from '../../core/Context';
-import type { Model, ModelToolCall } from '../../model/Model';
+import type { ModelToolCall } from '../../model/Model';
 import { toError } from '../../utils/errors';
 import type { AskModel, JsonObject, ToolResult } from './Tool';
-import { applyContextPatch } from './contextPatch';
 import { ToolRegistry } from './ToolRegistry';
 import { TOOL_ERROR_CORE_PROMPT } from '../../core/prompt';
 
-export type ToolRunMode = 'parallel' | 'serial';
-export type ToolTimeoutAction = 'continue' | 'kill';
-
-export interface ToolRunPlanItem {
+interface ToolRunItem {
     input: JsonObject;
     name: string;
     timeoutMs?: number;
-}
-
-export interface ToolRunPlan {
-    items: ToolRunPlanItem[];
-    mode: ToolRunMode;
-    timeoutAction?: ToolTimeoutAction;
 }
 
 export interface ToolRunRecord {
@@ -27,7 +17,7 @@ export interface ToolRunRecord {
     name: string;
     result?: ToolResult;
     runId: string;
-    status: 'done' | 'error' | 'killed' | 'skipped' | 'timeout';
+    status: 'done' | 'error' | 'killed' | 'timeout';
 }
 
 export interface CompletedToolRunRecord extends ToolRunRecord {
@@ -38,7 +28,6 @@ export interface ToolRunnerOptions {
     createAsk?: (toolName: string) => AskModel;
     context: Context;
     defaultTimeoutMs?: number;
-    model: Model;
     registry: ToolRegistry;
     signal?: AbortSignal;
 }
@@ -48,7 +37,6 @@ export class ToolRunner {
     private context: Context;
     private readonly createAsk?: (toolName: string) => AskModel;
     private readonly defaultTimeoutMs: number;
-    private readonly model: Model;
     private readonly registry: ToolRegistry;
     private readonly signal?: AbortSignal;
 
@@ -56,14 +44,12 @@ export class ToolRunner {
         context,
         createAsk,
         defaultTimeoutMs = 30000,
-        model,
         registry,
         signal,
     }: ToolRunnerOptions) {
         this.context = context;
         this.createAsk = createAsk;
         this.defaultTimeoutMs = defaultTimeoutMs;
-        this.model = model;
         this.registry = registry;
         this.signal = signal;
     }
@@ -101,40 +87,6 @@ export class ToolRunner {
         };
     }
 
-    async runPlan(plan: ToolRunPlan): Promise<ToolRunRecord[]> {
-        const timeoutAction = plan.timeoutAction ?? 'kill';
-
-        if (plan.mode === 'serial') {
-            const records: ToolRunRecord[] = [];
-            for (let index = 0; index < plan.items.length; index++) {
-                const record = await this.runItem(plan.items[index]);
-                records.push(record);
-                this.applyRecordContextPatch(record);
-                if (timeoutAction === 'kill' && (record.status === 'timeout' || record.status === 'killed')) {
-                    for (const skipped of plan.items.slice(index + 1)) {
-                        records.push(this.createSkippedRecord(skipped, 'Skipped because an earlier scheduled tool was killed.'));
-                    }
-                    break;
-                }
-            }
-            return records;
-        }
-
-        const records = await Promise.all(plan.items.map(async (item) => {
-            const record = await this.runItem(item);
-            if (timeoutAction === 'kill' && (record.status === 'timeout' || record.status === 'killed')) {
-                this.killAll();
-            }
-            return record;
-        }));
-
-        for (const record of records) {
-            this.applyRecordContextPatch(record);
-        }
-
-        return records;
-    }
-
     kill(runId: string): boolean {
         const controller = this.controllers.get(runId);
         if (controller === undefined) {
@@ -145,7 +97,7 @@ export class ToolRunner {
         return true;
     }
 
-    private async runItem(item: ToolRunPlanItem, runId = createRunId(item.name)): Promise<ToolRunRecord> {
+    private async runItem(item: ToolRunItem, runId = createRunId(item.name)): Promise<ToolRunRecord> {
         const controller = new AbortController();
         const timeoutMs = item.timeoutMs ?? this.defaultTimeoutMs;
         this.controllers.set(runId, controller);
@@ -161,7 +113,6 @@ export class ToolRunner {
 
             const run = tool.run(item.input, {
                 context: this.context,
-                runner: this.createScopedRunner(this.context),
                 signal: controller.signal,
                 tools: this.registry.asReadonlyMap(),
             });
@@ -209,40 +160,6 @@ export class ToolRunner {
             this.signal?.removeEventListener('abort', abortFromParent);
             this.controllers.delete(runId);
         }
-    }
-
-    private killAll(): void {
-        for (const runId of Array.from(this.controllers.keys())) {
-            this.kill(runId);
-        }
-    }
-
-    private applyRecordContextPatch(record: ToolRunRecord): void {
-        const patch = record.result?.contextPatch;
-        if (patch !== undefined) {
-            this.context = applyContextPatch(this.context, patch);
-        }
-    }
-
-    private createScopedRunner(context: Context): ToolRunner {
-        return new ToolRunner({
-            context,
-            createAsk: this.createAsk,
-            defaultTimeoutMs: this.defaultTimeoutMs,
-            model: this.model,
-            registry: this.registry,
-            signal: this.signal,
-        });
-    }
-
-    private createSkippedRecord(item: ToolRunPlanItem, error: string): ToolRunRecord {
-        return {
-            error,
-            input: item.input,
-            name: item.name,
-            runId: createRunId(item.name),
-            status: 'skipped',
-        };
     }
 }
 

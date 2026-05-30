@@ -10,8 +10,5 @@ export type AgentEvent =
     | { type: 'tool_done'; agent: string; tool: string; callId: string; label: string; result: ToolResult; usage?: ToolUsage }
     | { type: 'tool_event'; agent: string; tool: string; callId: string; label: string; event: ToolEvent }
     | { type: 'context_patch'; agent: string; tool: string; patch: ContextPatch }
-    | { type: 'sub_agent_start'; agent: string; subAgent: string }
-    | { type: 'sub_agent_event'; agent: string; subAgent: string; event: AgentEvent }
-    | { type: 'sub_agent_done'; agent: string; subAgent: string; response?: ModelResponse }
     | { type: 'agent_done'; agent: string; response?: ModelResponse }
     | { type: 'agent_error'; agent: string; error: Error };

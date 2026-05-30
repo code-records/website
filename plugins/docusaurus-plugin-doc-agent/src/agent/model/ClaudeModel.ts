@@ -365,50 +365,6 @@ export class ClaudeModel extends Model {
         return result;
     }
 
-    private parseAssistantPayload(payload: JsonObject): { actions: ModelAction[]; content: string } {
-        if (Array.isArray(payload.tool_calls)) {
-            const actions = payload.tool_calls.map(value => {
-                const tool = requireJsonObject(value, 'Claude chat tool call');
-                const fn = requireJsonObject(tool.function, 'Claude chat tool function');
-                const call: ModelToolCall = {
-                    id: requireString(tool.id, 'Claude chat tool id'),
-                    input: safeParseJsonObject(optionalString(fn.arguments)),
-                    name: requireString(fn.name, 'Claude chat tool name'),
-                };
-                return { type: 'tool' as const, call };
-            });
-            return { actions, content: optionalString(payload.content) };
-        }
-
-        if (!Array.isArray(payload.content)) {
-            return { actions: [], content: optionalString(payload.content) };
-        }
-
-        let content = '';
-        const actions: ModelAction[] = [];
-        for (const blockValue of payload.content) {
-            const block = requireJsonObject(blockValue, 'Claude content block');
-            if (block.type === 'text') {
-                content += optionalString(block.text);
-            }
-            if (block.type === 'thinking') {
-                const thinking = optionalString(block.thinking, optionalString(block.text));
-                if (thinking.length > 0) actions.push({ type: 'thinking', content: thinking });
-            }
-            if (block.type === 'tool_use') {
-                actions.push({
-                    type: 'tool',
-                    call: {
-                        id: requireString(block.id, 'Claude tool use id'),
-                        input: isJsonObject(block.input) ? block.input : {},
-                        name: requireString(block.name, 'Claude tool use name'),
-                    },
-                });
-            }
-        }
-        return { actions, content };
-    }
-
     private ensureChatToolTracker(
         key: string,
         toolDelta: JsonObject,

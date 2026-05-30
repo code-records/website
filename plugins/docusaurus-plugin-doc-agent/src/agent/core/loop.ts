@@ -1,4 +1,3 @@
-import type { Agent } from './Agent';
 import type { Context } from './Context';
 import type { AgentResult } from './AgentResult';
 import type { Round } from './Round';
@@ -15,7 +14,6 @@ export interface LoopOptions {
     maxRounds?: number;
     model: Model;
     signal?: AbortSignal;
-    subAgents?: Agent[];
     system: string;
     toolTimeoutMs?: number;
     tools: Tool[];
@@ -38,7 +36,6 @@ export async function* loop(options: LoopOptions): AsyncGenerator<AgentEvent, vo
         maxRounds = 16,
         model,
         signal,
-        subAgents = [],
         system,
         toolTimeoutMs,
         tools,
@@ -52,9 +49,7 @@ export async function* loop(options: LoopOptions): AsyncGenerator<AgentEvent, vo
         context: runContext,
         createAsk,
         defaultTimeoutMs: toolTimeoutMs,
-        model,
         signal,
-        subAgents,
         tools,
     });
 
