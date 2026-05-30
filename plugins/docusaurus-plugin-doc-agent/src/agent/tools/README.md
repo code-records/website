@@ -50,7 +50,7 @@ tool/ToolRunner.ts
   工具执行控制器，负责 timeout、kill、串并行调度和 ask 注入。
 
 *.ts
-  内置工具或工具抽象，例如 CompressTool、ScheduleTool、FileTool。
+  内置工具，例如 CompressTool、ScheduleTool、ModeTool。
 ```
 
 `ToolManager` 组合 `ToolRegistry` 和 `ToolRunner`，避免 `core/loop` 直接装配工具系统细节。
@@ -254,30 +254,18 @@ ScheduleTool.ts
 SubAgentTool.ts
   子 agent 工具，把 Agent.subAgents 暴露为模型可调用能力。
 
-FileTool.ts
-  文件工具抽象基类，不默认访问本地文件系统。
+browser/BrowserFileTool.ts
+  浏览器文件工具，基于 File System Access API 和外部授权的目录句柄读写工作区。
 
 ModeTool.ts
   模式切换工具，只发 mode_switch 事件。
 
 WebSearchTool.ts
-  搜索工具，支持代理搜索或工具内部 askModel()。
+  搜索工具，通过代理 endpoint 获取结果并格式化输出。
 
 toolTrace.ts
   从 HistoryJSON 中提取既有工具调用输入。
 ```
-
-## FileTool
-
-`FileTool` 不默认拥有文件系统权限。
-
-业务 agent 需要继承它，并明确实现：
-
-```ts
-protected executeFileOperation(input, context): Promise<FileToolOutput>
-```
-
-文件根目录、权限、写入策略和路径规范都应该由业务层声明。
 
 ## 新增工具
 

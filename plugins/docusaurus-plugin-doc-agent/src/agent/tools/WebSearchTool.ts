@@ -3,7 +3,6 @@ import {
     type JsonObject,
     type JsonValue,
     type ToolUsage,
-    type ToolAskPrompt,
     type ToolInput,
     type ToolPromptSchema,
     type ToolResult,
@@ -13,15 +12,7 @@ import {
 export interface WebSearchToolOptions {
     formatResults?: (data: JsonValue, query: string) => string;
     maxResults?: number;
-}
-
-interface WebSearchAskInput extends JsonObject {
-    maxResults: number;
-    query: string;
-}
-
-interface WebSearchAskOutput extends JsonObject {
-    result: string;
+    proxyEndpoint?: string;
 }
 
 export class WebSearchTool extends Tool {
@@ -40,24 +31,17 @@ export class WebSearchTool extends Tool {
 
     protected readonly formatResults?: (data: JsonValue, query: string) => string;
     protected readonly maxResults: number;
-
-    private readonly searchPrompt: ToolAskPrompt<WebSearchAskInput, WebSearchAskOutput> = {
-        name: 'web_search.model',
-        build: input => [
-            `Search for: ${input.query}`,
-            `Return up to ${input.maxResults} useful results.`,
-            'Include titles, URLs when available, and short summaries.',
-        ].join('\n'),
-        parse: content => ({ result: content.trim() }),
-    };
+    private readonly proxyEndpoint: string;
 
     constructor({
         formatResults,
         maxResults = 5,
+        proxyEndpoint = '/agent/v1/search',
     }: WebSearchToolOptions = {}) {
         super();
         this.formatResults = formatResults;
         this.maxResults = maxResults;
+        this.proxyEndpoint = proxyEndpoint;
     }
 
     formatUsage(_input: ToolInput): ToolUsage {
@@ -77,25 +61,40 @@ export class WebSearchTool extends Tool {
         return this.executeSearch(query, context);
     }
 
-    protected async executeSearch(query: string, _context: ToolRunContext): Promise<ToolResult> {
-        const answer = await this.askModel({
-            input: {
-                maxResults: this.maxResults,
-                query,
-            },
-            prompt: this.searchPrompt,
-        });
+    protected async executeSearch(query: string, context: ToolRunContext): Promise<ToolResult> {
+        const url = `${this.proxyEndpoint}?q=${encodeURIComponent(query)}&limit=${this.maxResults}`;
 
-        return {
-            events: [{
-                data: {
-                    mode: 'model',
-                    query,
+        try {
+            const response = await fetch(url, { signal: context.signal });
+            if (!response.ok) {
+                const text = await response.text();
+                return { result: `[Search Error] ${response.status}: ${text.slice(0, 200)}` };
+            }
+
+            const data = await response.json() as JsonValue;
+            const resultCount = this.countResults(data);
+
+            return {
+                usage: {
+                    count: resultCount,
+                    name: '网站',
+                    unit: '个',
+                    verb: '搜索',
                 },
-                type: 'web_search',
-            }],
-            result: answer.result,
-        };
+                events: [{
+                    data: {
+                        mode: 'browser_proxy',
+                        query,
+                        resultCount,
+                    },
+                    type: 'web_search',
+                }],
+                result: this.formatSearchResults(data, query),
+            };
+        } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            return { result: `[Search Error] ${message}` };
+        }
     }
 
     protected formatSearchResults(data: JsonValue, query: string): string {

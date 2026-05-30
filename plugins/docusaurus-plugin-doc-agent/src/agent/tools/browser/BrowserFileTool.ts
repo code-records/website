@@ -1,13 +1,65 @@
-import { FileTool, type FileToolInput, type FileToolOutput } from '../FileTool';
-import type { ToolRunContext } from '../tool/Tool';
+import {
+    Tool,
+    type JsonObject,
+    type ToolInput,
+    type ToolLabelContext,
+    type ToolPromptSchema,
+    type ToolResult,
+    type ToolRunContext,
+    type ToolUsage,
+} from '../tool/Tool';
+
+export type BrowserFileOperation =
+    | 'delete'
+    | 'exists'
+    | 'list'
+    | 'read'
+    | 'stat'
+    | 'write';
+
+export interface BrowserFileInput {
+    content?: string;
+    operation: BrowserFileOperation;
+    path: string;
+}
+
+export interface BrowserFileOutput {
+    content?: string;
+    exists?: boolean;
+    operation: BrowserFileOperation;
+    path: string;
+    size?: number;
+}
 
 /**
  * 浏览器端 HTML5 原生文件系统工具。
  *
- * 继承自 FileTool，完全基于浏览器原生 File System Access API 实现。
+ * 完全基于浏览器原生 File System Access API 实现。
  * 依靠外部授权传入的 FileSystemDirectoryHandle 句柄，提供完全沙箱化的文件读取与写入服务。
  */
-export class BrowserFileTool extends FileTool {
+export class BrowserFileTool extends Tool {
+    name = 'file';
+    description = 'Access workspace files through the browser File System Access API.';
+    prompt: ToolPromptSchema = {
+        properties: {
+            content: {
+                description: 'Content to write when operation is write',
+                type: 'string',
+            },
+            operation: {
+                description: 'File operation',
+                enum: ['delete', 'exists', 'list', 'read', 'stat', 'write'],
+                type: 'string',
+            },
+            path: {
+                description: 'Workspace-relative file path',
+                type: 'string',
+            },
+        },
+        required: ['operation', 'path'],
+        type: 'object',
+    };
+
     /**
      * @param rootHandle 外部（如 App.jsx）通过 window.showDirectoryPicker() 授权获取的根目录句柄
      */
@@ -15,7 +67,46 @@ export class BrowserFileTool extends FileTool {
         super();
     }
 
-    protected async executeFileOperation(input: FileToolInput, _context: ToolRunContext): Promise<FileToolOutput> {
+    formatLabel(input: ToolInput, context: ToolLabelContext = { input }): string {
+        const parsed = parseBrowserFileInput(input);
+        if (parsed === null) return 'File operation';
+        return `${browserFileOperationTitle(parsed.operation)}: ${parsed.path || '.'}`;
+    }
+
+    formatUsage(input: ToolInput, context: ToolLabelContext = { input }): ToolUsage {
+        const parsed = parseBrowserFileInput(input);
+        if (parsed === null) {
+            return {
+                count: 1,
+                name: '文件操作',
+                unit: '次',
+                verb: '执行',
+            };
+        }
+        return browserFileOperationUsage(parsed);
+    }
+
+    protected async execute(input: ToolInput, context: ToolRunContext): Promise<ToolResult> {
+        const parsed = parseBrowserFileInput(input);
+        if (parsed === null) {
+            throw new Error(`Invalid browser file tool input: operation "${String(input.operation)}" is not recognized`);
+        }
+
+        this.checkAbort(context.signal);
+        await this.checkPause();
+
+        const output = await this.executeFileOperation(parsed);
+
+        return {
+            events: [{
+                data: browserFileOutputToJson(output),
+                type: 'file_operation',
+            }],
+            result: formatBrowserFileOutput(output),
+        };
+    }
+
+    private async executeFileOperation(input: BrowserFileInput): Promise<BrowserFileOutput> {
         const { operation, path: pathStr, content } = input;
 
         // 统一处理斜杠，避免跨系统路径解析差异
@@ -79,6 +170,12 @@ export class BrowserFileTool extends FileTool {
 
             default:
                 throw new Error(`[BrowserFileTool] 暂不支持操作: ${operation}`);
+        }
+    }
+
+    private checkAbort(signal?: AbortSignal): void {
+        if (signal?.aborted) {
+            throw new DOMException('Browser file tool aborted', 'AbortError');
         }
     }
 
@@ -229,4 +326,104 @@ export class BrowserFileTool extends FileTool {
         const file = await fileHandle.getFile();
         return { size: file.size };
     }
+}
+
+function browserFileOperationUsage(input: BrowserFileInput): ToolUsage {
+    const key = input.path || '.';
+    switch (input.operation) {
+        case 'list':
+            return {
+                key,
+                name: '文件夹',
+                unit: '个',
+                verb: '浏览',
+            };
+        case 'read':
+            return {
+                key,
+                name: '文件',
+                unit: '个',
+                verb: '浏览',
+            };
+        case 'write':
+            return {
+                key,
+                name: '文件',
+                unit: '个',
+                verb: '修改',
+            };
+        case 'delete':
+            return {
+                key,
+                name: '文件',
+                unit: '个',
+                verb: '删除',
+            };
+        case 'exists':
+        case 'stat':
+            return {
+                key,
+                name: '文件',
+                unit: '个',
+                verb: '检查',
+            };
+    }
+}
+
+function browserFileOperationTitle(operation: BrowserFileOperation): string {
+    switch (operation) {
+        case 'delete':
+            return 'Delete file';
+        case 'exists':
+            return 'Check file';
+        case 'list':
+            return 'List files';
+        case 'read':
+            return 'Read input';
+        case 'stat':
+            return 'Inspect file';
+        case 'write':
+            return 'Write file';
+    }
+}
+
+function parseBrowserFileInput(input: ToolInput): BrowserFileInput | null {
+    if (!isBrowserFileOperation(input.operation)) return null;
+    const path = typeof input.path === 'string' ? input.path : '';
+    const content = typeof input.content === 'string' ? input.content : undefined;
+    return {
+        ...(content !== undefined ? { content } : {}),
+        operation: input.operation,
+        path,
+    };
+}
+
+function isBrowserFileOperation(value: unknown): value is BrowserFileOperation {
+    return value === 'delete'
+        || value === 'exists'
+        || value === 'list'
+        || value === 'read'
+        || value === 'stat'
+        || value === 'write';
+}
+
+function formatBrowserFileOutput(output: BrowserFileOutput): string {
+    if (output.content !== undefined) {
+        return output.content;
+    }
+
+    const details = Object.entries(output)
+        .map(([key, value]) => `${key}: ${String(value)}`)
+        .join('\n');
+    return details.length > 0 ? details : `${output.operation} completed: ${output.path}`;
+}
+
+function browserFileOutputToJson(output: BrowserFileOutput): JsonObject {
+    return {
+        ...(output.content !== undefined ? { content: output.content } : {}),
+        ...(output.exists !== undefined ? { exists: output.exists } : {}),
+        operation: output.operation,
+        path: output.path,
+        ...(output.size !== undefined ? { size: output.size } : {}),
+    };
 }

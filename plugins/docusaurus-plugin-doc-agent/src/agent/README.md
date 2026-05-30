@@ -159,10 +159,10 @@ graph TD
 | 内置工具文件 | 对模型暴露的名称 | 职责与特性 |
 | :--- | :--- | :--- |
 | `CompressTool.ts` | `compress_context` | 自动上下文压缩。在上下文接近 Token 阈值时触发，自主利用 `askModel()` 生成历史摘要，并返回 `compact` 类型的 `ContextPatch`。 |
-| `WebSearchTool.ts` | `web_search` | 网络检索工具。支持返回检索进度事件，并可在检索数据庞大时内部启用 `askModel()` 提炼关键网页摘要后返回。 |
+| `WebSearchTool.ts` | `web_search` | 网络检索工具。通过代理 endpoint 执行搜索，返回检索事件与格式化结果。 |
 | `SubAgentTool.ts` | `run_sub_agent` | 子 Agent 路由工具。将父 Agent 的 `subAgents` 列表自动转换并对外暴露，使模型具备自主委派专门任务给子 Agent 的能力。 |
 | `ScheduleTool.ts` | `schedule_tools` | 串并行工具调度器。模型如果需要并行执行多个工具或指定超时时间，可调用此工具由 `ToolRunner` 统筹。 |
-| `FileTool.ts` | *(抽象基类)* | 文件读写接口定义。默认不直接访问本地文件，强制要求业务子类实现安全的根路径规范、沙箱隔离及冲突写入策略。 |
+| `browser/BrowserFileTool.ts` | `file` | 浏览器文件工具。基于 File System Access API 和外部授权的目录句柄完成沙箱化文件读写。 |
 | `PlanTool.ts` | `update_plan` | 进度追踪与状态标记工具。只在执行生命周期中发出 `plan_update` 消息，不介入底层逻辑。 |
 | `ModeTool.ts` | `switch_mode` | 运行时交互模式切换（如进入深度搜索、极速回答或代码诊断模式）。 |
 
@@ -231,13 +231,14 @@ src/agent/
 │   │   ├── ToolManager.ts # core 面向工具系统的网关门面
 │   │   ├── ToolRegistry.ts# 工具重复命名判定与定义注册表
 │   │   └── ToolRunner.ts  # 执行调度、超时、协作暂停与 Ask 注入器
+│   ├── browser/
+│   │   └── BrowserFileTool.ts # 浏览器文件读写工具
 │   ├── CompressTool.ts    # 自动上下文压缩工具
-│   ├── FileTool.ts        # 文件操作抽象基类
 │   ├── ModeTool.ts        # 运行时交互模式切换工具
 │   ├── PlanTool.ts        # 推理进度计划更新工具
 │   ├── ScheduleTool.ts    # 串并行多工具高级调度器
 │   ├── SubAgentTool.ts    # 子 Agent 包装调度工具
-│   ├── WebSearchTool.ts   # 网页搜索与提炼工具
+│   ├── WebSearchTool.ts   # 网页代理搜索工具
 │   ├── toolTrace.ts       # 执行回溯追踪工具
 │   ├── index.ts           # tools 导出
 │   └── README.md          # 工具扩展开发规范

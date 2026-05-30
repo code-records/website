@@ -30,7 +30,7 @@ graph TD
         SubAgent["SubAgentTool"]
         Schedule["ScheduleTool"]
         Compress["CompressTool"]
-        File["FileTool"]
+        File["BrowserFileTool"]
         Plan2["PlanTool"]
         Mode["ModeTool"]
         WebSearch["WebSearchTool"]

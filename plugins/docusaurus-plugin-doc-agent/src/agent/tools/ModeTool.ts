@@ -1,83 +1,83 @@
-import { Tool, type JsonObject, type ToolUsage, type ToolInput, type ToolPromptSchema, type ToolResult, type ToolRunContext } from './tool/Tool';
+// import { Tool, type JsonObject, type ToolUsage, type ToolInput, type ToolPromptSchema, type ToolResult, type ToolRunContext } from './tool/Tool';
 
-export interface ModeToolDefinition extends JsonObject {
-    description: string;
-    name: string;
-}
+// export interface ModeToolDefinition extends JsonObject {
+//     description: string;
+//     name: string;
+// }
 
-export interface ModeToolOptions {
-    modes: readonly ModeToolDefinition[];
-}
+// export interface ModeToolOptions {
+//     modes: readonly ModeToolDefinition[];
+// }
 
-export class ModeTool extends Tool {
-    name = 'switch_mode';
-    description: string;
-    prompt: ToolPromptSchema;
+// export class ModeTool extends Tool {
+//     name = 'switch_mode';
+//     description: string;
+//     prompt: ToolPromptSchema;
 
-    private readonly modes: ReadonlyMap<string, ModeToolDefinition>;
+//     private readonly modes: ReadonlyMap<string, ModeToolDefinition>;
 
-    constructor({ modes }: ModeToolOptions) {
-        super();
-        this.modes = new Map(modes.map(mode => [mode.name, mode]));
-        const modeNames = Array.from(this.modes.keys());
+//     constructor({ modes }: ModeToolOptions) {
+//         super();
+//         this.modes = new Map(modes.map(mode => [mode.name, mode]));
+//         const modeNames = Array.from(this.modes.keys());
 
-        this.description = [
-            'Request a working mode switch when the current tools or instructions are insufficient.',
-            `Available modes: ${modeNames.join(', ')}.`,
-        ].join(' ');
+//         this.description = [
+//             'Request a working mode switch when the current tools or instructions are insufficient.',
+//             `Available modes: ${modeNames.join(', ')}.`,
+//         ].join(' ');
 
-        this.prompt = {
-            properties: {
-                mode: {
-                    description: 'Target mode',
-                    enum: modeNames,
-                    type: 'string',
-                },
-                reason: {
-                    description: 'Why this mode is needed',
-                    type: 'string',
-                },
-            },
-            required: ['mode'],
-            type: 'object',
-        };
-    }
+//         this.prompt = {
+//             properties: {
+//                 mode: {
+//                     description: 'Target mode',
+//                     enum: modeNames,
+//                     type: 'string',
+//                 },
+//                 reason: {
+//                     description: 'Why this mode is needed',
+//                     type: 'string',
+//                 },
+//             },
+//             required: ['mode'],
+//             type: 'object',
+//         };
+//     }
 
-    formatUsage(input: ToolInput): ToolUsage {
-        const mode = typeof input.mode === 'string' ? input.mode : '';
-        return {
-            key: mode,
-            name: '模式',
-            unit: '个',
-            verb: '切换',
-        };
-    }
+//     formatUsage(input: ToolInput): ToolUsage {
+//         const mode = typeof input.mode === 'string' ? input.mode : '';
+//         return {
+//             key: mode,
+//             name: '模式',
+//             unit: '个',
+//             verb: '切换',
+//         };
+//     }
 
-    protected async execute(input: ToolInput, _context: ToolRunContext): Promise<ToolResult> {
-        const mode = typeof input.mode === 'string' ? input.mode : '';
-        const reason = typeof input.reason === 'string' ? input.reason : '';
-        const target = this.modes.get(mode);
+//     protected async execute(input: ToolInput, _context: ToolRunContext): Promise<ToolResult> {
+//         const mode = typeof input.mode === 'string' ? input.mode : '';
+//         const reason = typeof input.reason === 'string' ? input.reason : '';
+//         const target = this.modes.get(mode);
 
-        if (target === undefined) {
-            return {
-                result: `Mode switch failed: unknown mode "${mode}". Available modes: ${Array.from(this.modes.keys()).join(', ')}`,
-            };
-        }
+//         if (target === undefined) {
+//             return {
+//                 result: `Mode switch failed: unknown mode "${mode}". Available modes: ${Array.from(this.modes.keys()).join(', ')}`,
+//             };
+//         }
 
-        return {
-            events: [{
-                data: {
-                    description: target.description,
-                    mode,
-                    reason,
-                },
-                type: 'mode_switch',
-            }],
-            result: `Requested mode switch to "${mode}".`,
-        };
-    }
-}
+//         return {
+//             events: [{
+//                 data: {
+//                     description: target.description,
+//                     mode,
+//                     reason,
+//                 },
+//                 type: 'mode_switch',
+//             }],
+//             result: `Requested mode switch to "${mode}".`,
+//         };
+//     }
+// }
 
-export function createModeTool(options: ModeToolOptions): ModeTool {
-    return new ModeTool(options);
-}
+// export function createModeTool(options: ModeToolOptions): ModeTool {
+//     return new ModeTool(options);
+// }

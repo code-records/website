@@ -3,7 +3,7 @@ import type { Agent } from '../../core/Agent';
 import type { Model, ModelToolCall } from '../../model/Model';
 import { ToolError } from '../../utils/errors';
 import type { AskModel, Tool, ToolUsage, ToolDefinition, ToolResult } from './Tool';
-import { SubAgentTool } from '../SubAgentTool';
+// import { SubAgentTool } from '../SubAgentTool';
 import { ToolRegistry } from './ToolRegistry';
 import { ToolRunner, type CompletedToolRunRecord } from './ToolRunner';
 
@@ -37,7 +37,10 @@ export class ToolManager {
         this.defaultTimeoutMs = defaultTimeoutMs;
         this.model = model;
         const runtimeTools = subAgents.length > 0
-            ? [...tools, new SubAgentTool({ subAgents })]
+            ? [
+                ...tools,
+                //  new SubAgentTool({ subAgents })
+            ]
             : tools;
         this.registry = new ToolRegistry(runtimeTools);
         this.signal = signal;
